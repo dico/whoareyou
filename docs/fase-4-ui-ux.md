@@ -84,7 +84,7 @@
 | Contact search dialog | `js/components/dialogs.js` | Erstatter `window.prompt()` — søk med keyboard-nav |
 | Post list | `js/components/post-list.js` | Tidslinje med profil-/aktivitetsposter, edit/delete |
 | @-mention | `js/components/mention.js` | Textarea @-autocomplete for kontakt-tagging |
-| Image cropper | `js/components/image-cropper.js` | Pan + zoom + sirkulært viewport, canvas-basert |
+| Image cropper | `js/components/image-cropper.js` | Pan + zoom + firkantet viewport (avrundede hjørner), 450px area, "Last opp original"-knapp, i18n |
 | Photo viewer | `js/components/photo-viewer.js` | Bla gjennom bilder, set primary, delete, drag-and-drop |
 | Navbar search | `js/components/navbar.js` | Global kontaktsøk med keyboard-nav og `/`-snarvei |
 | Avatar | diverse | Profilbilde med initialer-fallback, hover-overlay |
@@ -98,7 +98,11 @@
 | Subtle link | `css/base.css` (.subtle-link) | Dempet lenke uten understrek — hover gir primærfarge. Brukes for sekundære navigasjonslenker (f.eks. "Se adresse") |
 | Media button | `css/base.css` (.post-media-btn) | Ikon-knapp uten border — subtil hover med bakgrunn. Brukes for bilde-upload o.l. i compose |
 | Contact fields | `js/components/contact-fields.js`, `css/components/card.css` | Kontaktfelt gruppert etter kategori (kontakt, nett, sosiale medier) med luft mellom grupper (ingen border). Nettsider vises som ikon + label/domene |
-| Contact chip | `css/components/timeline.css` (.contact-chip) | Pill med avatar + navn for tagging av kontakter i poster. Hvit bakgrunn, tynn border, avrundede ender, hover gir primærfarge. Brukes i post-tags |
+| Contact chip | `css/components/timeline.css` (.contact-chip) | Pill med avatar + navn for tagging av kontakter. Hvit bakgrunn, tynn border, avrundede ender, hover gir primærfarge. `.contact-chip-remove` for fjerning. Brukes i post-tags, livshendelser-dialog, timeline compose |
+| Mention link | `css/components/timeline.css` (.mention-link) | Klikkbar kontaktlenke i løpende tekst. Primærfarge + medium font-weight. Brukes i post-body (linkifyPost) og livshendelser-kort |
+| Life event card | `js/components/post-list.js`, `css/components/timeline.css` | Tidslinje-kort med ikon, type, dato, beskrivelse og "sammen med"-lenker. Per-type preposisjoner (med/fra/sammen med). Filtrerer bort profil-kontakten |
+| Settings card grid | `css/base.css` (.settings-grid, .settings-card) | Admin-navigasjon med fargerike ikoner i kort-grid. Hover-lift-effekt. Brukes på settings-siden for undersider |
+| Session item | `css/base.css` (.session-item) | Sesjonsliste med enhet-ikon, device-label, IP, tidspunkt. Markerer aktiv sesjon. Brukes i admin/security |
 
 ### i18n-arkitektur
 

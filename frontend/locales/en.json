@@ -13,6 +13,7 @@
     "systemAdmin": "System admin",
     "logout": "Log out",
     "companies": "Companies",
+    "profile": "Profile",
     "searchPlaceholder": "Search..."
   },
   "auth": {
@@ -106,6 +107,25 @@
     "contact": "Contact",
     "change": "Change",
     "deleteConfirm": "Remove this relationship?",
+    "familyTree": "Family tree",
+    "noFamilyTree": "No family relationships to display.",
+    "createAndLink": "Create new contact",
+    "createAndLinkDesc": "Create a new contact and add as a relationship.",
+    "backToSearch": "Back to search",
+    "otherParent": "Other parent",
+    "noOtherParent": "None / unknown",
+    "suggestions": "Relationship suggestions",
+    "suggestionsDesc": "Based on existing relationships, these connections may be missing. Accept to create them.",
+    "noSuggestions": "No suggestions — all relationships look complete!",
+    "suggestionsCount": "{count} suggestions found",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "reason": {
+      "siblings": "Children of the same parent are siblings",
+      "partnerChildren": "Partner's children may also be your children",
+      "grandparent": "Parent's parent is a grandparent",
+      "uncleAunt": "Parent's sibling is uncle/aunt"
+    },
     "types": {
       "parent": "Parent",
       "child": "Child",
@@ -198,6 +218,7 @@
     "existing": "Existing",
     "createNew": "Create new",
     "color": "Color",
+    "addGroup": "Add group",
     "selectAll": "Select all",
     "selectNone": "Select none",
     "selectLabel": "Select a label to view contacts",
@@ -222,6 +243,9 @@
     "inDays": "In {days} days",
     "turnsAge": "turns {age}"
   },
+  "profile": {
+    "title": "Profile"
+  },
   "settings": {
     "title": "Settings",
     "account": "Account",
@@ -233,14 +257,56 @@
     "unknown": "Unknown",
     "manageMembers": "Manage members",
     "systemAdmin": "System administration",
-    "systemAdminDesc": "You are a system administrator. You can manage all tenants.",
-    "manageTenants": "Manage tenants",
+    "systemAdminDesc": "Manage all tenants in the system.",
+    "manageTenants": "System admin",
+    "administration": "Administration",
+    "securityCardDesc": "Sessions, trusted networks, and access control.",
+    "labelsCardDesc": "Organize contacts with groups and labels.",
+    "addressesCardDesc": "Find and merge duplicate addresses.",
+    "relationshipsCardDesc": "Find missing family connections.",
+    "activeSessions": "Active sessions",
     "language": "Language",
     "editProfile": "Edit profile",
     "changePassword": "Change password",
     "currentPassword": "Current password",
     "newPassword": "New password (min 8 characters)",
-    "passwordChanged": "Password changed successfully."
+    "passwordChanged": "Password changed successfully.",
+    "security": "Security",
+    "sessionsDesc": "Active login sessions on your account.",
+    "thisDevice": "This device",
+    "unknownDevice": "Unknown device",
+    "revoke": "Revoke",
+    "revokeAllSessions": "Log out all other sessions",
+    "revokeAllConfirm": "This will log out all other devices. Continue?",
+    "noSessions": "No active sessions.",
+    "twoFactor": "Two-factor authentication",
+    "twoFactorDesc": "Add an extra layer of security with an authenticator app.",
+    "twoFactorEnabled": "2FA is enabled",
+    "twoFactorDisabled": "2FA is not enabled",
+    "enable2fa": "Enable 2FA",
+    "disable2fa": "Disable 2FA",
+    "scanQrCode": "Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.).",
+    "manualKey": "Or enter this key manually:",
+    "enterCode": "Enter the 6-digit code from your app",
+    "verify": "Verify",
+    "backupCodes": "Backup codes",
+    "backupCodesDesc": "Save these backup codes in a safe place. Each code can only be used once.",
+    "backupCodesSaved": "I have saved my backup codes",
+    "disable2faConfirm": "Enter your password to disable 2FA.",
+    "twoFactorRequired": "Enter the code from your authenticator app.",
+    "twoFactorSetupRequired": "Two-factor authentication must be set up to log in from this location.",
+    "passkeys": "Passkeys",
+    "passkeysDesc": "Sign in with fingerprint, face recognition, or security key. Faster and more secure than passwords.",
+    "addPasskey": "Add passkey",
+    "passkeyName": "Name this passkey",
+    "passkeyNamePlaceholder": "e.g. MacBook, iPhone...",
+    "noPasskeys": "No passkeys registered.",
+    "deletePasskey": "Remove passkey",
+    "deletePasskeyConfirm": "Remove this passkey?",
+    "passkeyRegistered": "Passkey registered!",
+    "signInWithPasskey": "Sign in with passkey",
+    "passkeyNotSupported": "Passkeys are not supported in this browser.",
+    "passkeyRequiresHttps": "Passkeys require HTTPS."
   },
   "admin": {
     "accessRequired": "Admin access required",
@@ -275,7 +341,17 @@
     "deactivateConfirm": "Deactivate {name}? They will no longer be able to log in.",
     "promoteToAdmin": "Promote to admin",
     "demoteToMember": "Demote to member",
-    "linkContact": "Link to contact"
+    "linkContact": "Link to contact",
+    "securitySettings": "Security",
+    "trustedIpRanges": "Trusted IP ranges",
+    "trustedIpDesc": "Users on trusted networks can skip two-factor authentication. Use CIDR notation (e.g. 192.168.1.0/24) separated by commas."
+  },
+  "interests": {
+    "title": "Interests",
+    "noInterests": "No interests yet",
+    "choose": "Choose interest...",
+    "newInterest": "New interest",
+    "addInterest": "Add interest"
   },
   "lifeEvents": {
     "title": "Life events",
@@ -298,7 +374,17 @@
     },
     "remindAnnually": "Remind me every year",
     "linkedContacts": "Related people",
-    "linkContact": "Link contact"
+    "linkContact": "Link contact",
+    "withPerson": {
+      "married": "with",
+      "engaged": "with",
+      "child_born": "with",
+      "moved": "together with",
+      "new_job": "together with",
+      "graduated": "together with",
+      "divorced": "from",
+      "other": "together with"
+    }
   },
   "companies": {
     "title": "Companies",
@@ -347,7 +433,8 @@
     "ok": "OK",
     "search": "Search...",
     "noResults": "No results",
-    "private": "Private"
+    "private": "Private",
+    "saved": "Saved"
   },
   "cropper": {
     "title": "Crop photo",

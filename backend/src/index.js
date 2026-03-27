@@ -26,16 +26,27 @@ app.set('trust proxy', 1);
 
 // Security
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: config.cors.origin === '*' ? true : config.cors.origin,
+  credentials: true,
+}));
 
 // Body parsing
 app.use(express.json());
 
-// Rate limiting on auth endpoints
-const authLimiter = rateLimit({
+// Rate limiting on login/register only (strict)
+const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many attempts, try again later' },
+  validate: { xForwardedForHeader: false },
+});
+
+// Rate limiting on all API endpoints (generous)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: { error: 'Too many requests, try again later' },
   validate: { xForwardedForHeader: false },
 });
 
@@ -64,8 +75,15 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Public routes
-app.use('/api/auth', authLimiter, authRoutes);
+// Auth routes — login/register have strict rate limit, rest uses general API limit
+app.post('/api/auth/login', loginLimiter);
+app.post('/api/auth/register', loginLimiter);
+app.post('/api/auth/2fa/verify', loginLimiter);
+app.post('/api/auth/passkey/login', loginLimiter);
+app.use('/api/auth', authRoutes);
+
+// General API rate limit
+app.use('/api', apiLimiter);
 
 // Protected routes (require auth + tenant scope)
 app.use('/api/contacts', authenticate, tenantScope, contactRoutes);
@@ -79,14 +97,27 @@ app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
 app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
 
-// Protected file serving — auth check via header OR query param
+// Protected file serving — auth check + tenant validation
 import path from 'path';
 app.use('/uploads/', (req, res, next) => {
   if (!req.headers.authorization && req.query.token) {
     req.headers.authorization = `Bearer ${req.query.token}`;
   }
   next();
-}, authenticate, express.static(path.join(process.cwd(), '..', 'uploads'), {
+}, authenticate, tenantScope, async (req, res, next) => {
+  // Validate that the requested file belongs to the user's tenant
+  const filePath = req.path; // e.g. /contacts/{uuid}/photo.webp or /posts/{uuid}/media.webp
+  const match = filePath.match(/^\/(contacts|posts)\/([a-f0-9-]+)\//);
+  if (match) {
+    const [, type, uuid] = match;
+    const table = type === 'contacts' ? 'contacts' : 'posts';
+    const record = await db(table).where({ uuid, tenant_id: req.tenantId }).first();
+    if (!record) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  }
+  next();
+}, express.static(path.join(process.cwd(), '..', 'uploads'), {
   maxAge: '1d',
   setHeaders: (res) => {
     res.set('Cache-Control', 'private, max-age=86400');
@@ -95,6 +126,12 @@ app.use('/uploads/', (req, res, next) => {
 
 // Error handler (must be last)
 app.use(errorHandler);
+
+// Session cleanup (hourly)
+import { cleanExpiredSessions } from './utils/session.js';
+setInterval(() => {
+  cleanExpiredSessions().catch(() => {});
+}, config.session.cleanupIntervalMs);
 
 // Start server
 app.listen(config.port, '0.0.0.0', () => {

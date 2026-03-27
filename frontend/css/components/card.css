@@ -196,6 +196,16 @@
   color: var(--color-primary);
 }
 
+.field-add-btns {
+  display: flex;
+  gap: 0;
+  margin-left: auto;
+}
+
+.field-add-btns .field-add-btn {
+  margin-left: 0;
+}
+
 .field-actions {
   display: none;
   gap: 0;

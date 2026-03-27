@@ -13,6 +13,7 @@
     "systemAdmin": "Systemadmin",
     "logout": "Logg ut",
     "companies": "Bedrifter",
+    "profile": "Profil",
     "searchPlaceholder": "Søk..."
   },
   "auth": {
@@ -106,6 +107,25 @@
     "contact": "Kontakt",
     "change": "Endre",
     "deleteConfirm": "Fjerne denne relasjonen?",
+    "familyTree": "Slektstre",
+    "noFamilyTree": "Ingen familierelasjoner å vise.",
+    "createAndLink": "Opprett ny kontakt",
+    "createAndLinkDesc": "Opprett en ny kontakt og legg til som relasjon.",
+    "backToSearch": "Tilbake til søk",
+    "otherParent": "Andre forelder",
+    "noOtherParent": "Ingen / ukjent",
+    "suggestions": "Relasjonsforslag",
+    "suggestionsDesc": "Basert på eksisterende relasjoner kan disse forbindelsene mangle. Godkjenn for å opprette.",
+    "noSuggestions": "Ingen forslag — alle relasjoner ser komplette ut!",
+    "suggestionsCount": "{count} forslag funnet",
+    "accept": "Godkjenn",
+    "dismiss": "Avvis",
+    "reason": {
+      "siblings": "Barn av samme forelder er søsken",
+      "partnerChildren": "Partners barn kan også være dine barn",
+      "grandparent": "Forelders forelder er besteforelder",
+      "uncleAunt": "Forelders søsken er onkel/tante"
+    },
     "types": {
       "parent": "Forelder",
       "child": "Barn",
@@ -198,6 +218,7 @@
     "existing": "Eksisterende",
     "createNew": "Opprett ny",
     "color": "Farge",
+    "addGroup": "Legg til gruppe",
     "selectAll": "Velg alle",
     "selectNone": "Velg ingen",
     "selectLabel": "Velg en merkelapp for å se kontakter",
@@ -222,6 +243,9 @@
     "inDays": "Om {days} dager",
     "turnsAge": "fyller {age}"
   },
+  "profile": {
+    "title": "Profil"
+  },
   "settings": {
     "title": "Innstillinger",
     "account": "Konto",
@@ -233,14 +257,56 @@
     "unknown": "Ukjent",
     "manageMembers": "Administrer medlemmer",
     "systemAdmin": "Systemadministrasjon",
-    "systemAdminDesc": "Du er systemadministrator. Du kan administrere alle husstander.",
-    "manageTenants": "Administrer husstander",
+    "systemAdminDesc": "Administrer alle husstander i systemet.",
+    "manageTenants": "Systemadmin",
+    "administration": "Administrasjon",
+    "securityCardDesc": "Sesjoner, klarerte nettverk og tilgangskontroll.",
+    "labelsCardDesc": "Organiser kontakter med grupper og etiketter.",
+    "addressesCardDesc": "Finn og slå sammen duplikatadresser.",
+    "relationshipsCardDesc": "Finn manglende familiekoblinger.",
+    "activeSessions": "Aktive sesjoner",
     "language": "Språk",
     "editProfile": "Rediger profil",
     "changePassword": "Bytt passord",
     "currentPassword": "Nåværende passord",
     "newPassword": "Nytt passord (min 8 tegn)",
-    "passwordChanged": "Passord endret."
+    "passwordChanged": "Passord endret.",
+    "security": "Sikkerhet",
+    "sessionsDesc": "Aktive påloggingsøkter på kontoen din.",
+    "thisDevice": "Denne enheten",
+    "unknownDevice": "Ukjent enhet",
+    "revoke": "Avslutt",
+    "revokeAllSessions": "Logg ut alle andre økter",
+    "revokeAllConfirm": "Dette logger ut alle andre enheter. Fortsette?",
+    "noSessions": "Ingen aktive økter.",
+    "twoFactor": "Tofaktorautentisering",
+    "twoFactorDesc": "Legg til et ekstra sikkerhetslag med en autentiseringsapp.",
+    "twoFactorEnabled": "2FA er aktivert",
+    "twoFactorDisabled": "2FA er ikke aktivert",
+    "enable2fa": "Aktiver 2FA",
+    "disable2fa": "Deaktiver 2FA",
+    "scanQrCode": "Skann denne QR-koden med autentiseringsappen din (Google Authenticator, Authy, osv.).",
+    "manualKey": "Eller skriv inn denne nøkkelen manuelt:",
+    "enterCode": "Skriv inn 6-sifret kode fra appen",
+    "verify": "Verifiser",
+    "backupCodes": "Reservekoder",
+    "backupCodesDesc": "Lagre disse reservekodene på et trygt sted. Hver kode kan bare brukes én gang.",
+    "backupCodesSaved": "Jeg har lagret reservekodene",
+    "disable2faConfirm": "Skriv inn passordet ditt for å deaktivere 2FA.",
+    "twoFactorRequired": "Skriv inn koden fra autentiseringsappen din.",
+    "twoFactorSetupRequired": "Tofaktorautentisering må settes opp for å logge inn fra denne plasseringen.",
+    "passkeys": "Passnøkler",
+    "passkeysDesc": "Logg inn med fingeravtrykk, ansiktsgjenkjenning eller sikkerhetsnøkkel. Raskere og sikrere enn passord.",
+    "addPasskey": "Legg til passnøkkel",
+    "passkeyName": "Gi passnøkkelen et navn",
+    "passkeyNamePlaceholder": "f.eks. MacBook, iPhone...",
+    "noPasskeys": "Ingen passnøkler registrert.",
+    "deletePasskey": "Fjern passnøkkel",
+    "deletePasskeyConfirm": "Fjerne denne passnøkkelen?",
+    "passkeyRegistered": "Passnøkkel registrert!",
+    "signInWithPasskey": "Logg inn med passnøkkel",
+    "passkeyNotSupported": "Passnøkler støttes ikke i denne nettleseren.",
+    "passkeyRequiresHttps": "Passnøkler krever HTTPS."
   },
   "admin": {
     "accessRequired": "Administratortilgang kreves",
@@ -275,7 +341,17 @@
     "deactivateConfirm": "Deaktivere {name}? De vil ikke lenger kunne logge inn.",
     "promoteToAdmin": "Forfrem til administrator",
     "demoteToMember": "Nedgrader til medlem",
-    "linkContact": "Koble til kontakt"
+    "linkContact": "Koble til kontakt",
+    "securitySettings": "Sikkerhet",
+    "trustedIpRanges": "Klarerte IP-adresser",
+    "trustedIpDesc": "Brukere på klarerte nettverk slipper tofaktorautentisering. Bruk CIDR-notasjon (f.eks. 192.168.1.0/24) separert med komma."
+  },
+  "interests": {
+    "title": "Interesser",
+    "noInterests": "Ingen interesser ennå",
+    "choose": "Velg interesse...",
+    "newInterest": "Ny interesse",
+    "addInterest": "Legg til interesse"
   },
   "lifeEvents": {
     "title": "Livshendelser",
@@ -298,7 +374,17 @@
     },
     "remindAnnually": "Påminn meg hvert år",
     "linkedContacts": "Relaterte personer",
-    "linkContact": "Koble kontakt"
+    "linkContact": "Koble kontakt",
+    "withPerson": {
+      "married": "med",
+      "engaged": "med",
+      "child_born": "med",
+      "moved": "sammen med",
+      "new_job": "sammen med",
+      "graduated": "sammen med",
+      "divorced": "fra",
+      "other": "sammen med"
+    }
   },
   "companies": {
     "title": "Bedrifter",
@@ -347,7 +433,8 @@
     "ok": "OK",
     "search": "Søk...",
     "noResults": "Ingen resultater",
-    "private": "Privat"
+    "private": "Privat",
+    "saved": "Lagret"
   },
   "cropper": {
     "title": "Beskjær bilde",

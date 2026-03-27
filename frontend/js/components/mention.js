@@ -87,8 +87,11 @@ export function attachMention(textarea, onTag) {
     }
   }
 
+  let dropdownContacts = [];
+
   function showDropdown(contacts) {
     closeMention();
+    dropdownContacts = contacts;
 
     dropdown = document.createElement('div');
     dropdown.className = 'mention-dropdown glass-card';
@@ -102,7 +105,7 @@ export function attachMention(textarea, onTag) {
     dropdown.style.zIndex = '2000';
 
     dropdown.innerHTML = contacts.map((c, i) => `
-      <div class="mention-item ${i === 0 ? 'active' : ''}" data-uuid="${c.uuid}" data-first="${c.first_name}" data-last="${c.last_name || ''}">
+      <div class="mention-item ${i === 0 ? 'active' : ''}" data-index="${i}">
         <span class="mention-avatar">${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>
         <span>${c.first_name} ${c.last_name || ''}</span>
       </div>
@@ -119,10 +122,12 @@ export function attachMention(textarea, onTag) {
   }
 
   function selectContact(item) {
+    const c = dropdownContacts[parseInt(item.dataset.index)];
     const contact = {
-      uuid: item.dataset.uuid,
-      first_name: item.dataset.first,
-      last_name: item.dataset.last,
+      uuid: c.uuid,
+      first_name: c.first_name,
+      last_name: c.last_name,
+      avatar: c.avatar || null,
     };
 
     // Replace @query with name in textarea (no @ prefix — displayed as link in post view)

@@ -63,11 +63,8 @@ export function renderNavbar() {
             <span class="user-avatar">${user ? (user.first_name[0] + user.last_name[0]) : '?'}</span>
           </button>
           <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-            <li class="dropdown-header">${user ? `${user.first_name} ${user.last_name}` : ''}</li>
-            <li class="dropdown-header text-muted small">${user?.tenant_name || ''}</li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="/settings" data-link><i class="bi bi-gear me-2"></i>${t('nav.settings')}</a></li>
-            ${user?.is_system_admin ? `<li><a class="dropdown-item" href="/admin/system" data-link><i class="bi bi-shield-lock me-2"></i>${t('nav.systemAdmin')}</a></li>` : ''}
+            <li><a class="dropdown-item" href="/profile" data-link><i class="bi bi-person-circle me-2"></i>${t('nav.profile')}</a></li>
+            ${user?.role === 'admin' || user?.is_system_admin ? `<li><a class="dropdown-item" href="/settings" data-link><i class="bi bi-gear me-2"></i>${t('settings.administration')}</a></li>` : ''}
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="#" id="btn-logout"><i class="bi bi-box-arrow-right me-2"></i>${t('nav.logout')}</a></li>
           </ul>
@@ -77,9 +74,14 @@ export function renderNavbar() {
   `;
 
   // Logout handler
-  nav.querySelector('#btn-logout')?.addEventListener('click', (e) => {
+  nav.querySelector('#btn-logout')?.addEventListener('click', async (e) => {
     e.preventDefault();
+    const refreshToken = localStorage.getItem('refreshToken');
+    try {
+      await api.post('/auth/logout', { refreshToken });
+    } catch {}
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     state.token = null;
     state.user = null;
     navigate('/login');

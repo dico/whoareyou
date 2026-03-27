@@ -31,6 +31,12 @@ export function renderLogin() {
           </div>
           <div id="login-error" class="alert alert-danger d-none"></div>
           <button type="submit" class="btn btn-primary w-100">${t('auth.login')}</button>
+          ${window.PublicKeyCredential && location.protocol === 'https:' ? `
+            <div class="auth-divider"><span>or</span></div>
+            <button type="button" class="btn btn-outline-secondary w-100" id="btn-passkey-login">
+              <i class="bi bi-fingerprint me-2"></i>${t('settings.signInWithPasskey')}
+            </button>
+          ` : ''}
         </form>
 
         <!-- Register form -->
@@ -91,7 +97,19 @@ export function renderLogin() {
         password: document.getElementById('login-password').value,
       });
 
+      if (data.requires_2fa) {
+        show2faPrompt(data.challengeToken, errorEl);
+        return;
+      }
+
+      if (data.requires_2fa_setup) {
+        errorEl.textContent = t('settings.twoFactorSetupRequired');
+        errorEl.classList.remove('d-none');
+        return;
+      }
+
       localStorage.setItem('token', data.token);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
       state.token = data.token;
       state.user = data.user;
       navigate('/');
@@ -100,6 +118,39 @@ export function renderLogin() {
       errorEl.classList.remove('d-none');
     }
   });
+
+  function show2faPrompt(challengeToken, errorEl) {
+    const form = document.getElementById('login-form');
+    form.innerHTML = `
+      <p class="text-center mb-3"><i class="bi bi-shield-lock" style="font-size:2rem;color:var(--color-primary)"></i></p>
+      <p class="small text-center mb-3">${t('settings.twoFactorRequired')}</p>
+      <input type="text" class="form-control mb-3" id="totp-code" placeholder="${t('settings.enterCode')}" maxlength="8" autofocus autocomplete="one-time-code">
+      <div id="login-error" class="alert alert-danger d-none"></div>
+      <button type="submit" class="btn btn-primary w-100">${t('settings.verify')}</button>
+    `;
+
+    const newErrorEl = document.getElementById('login-error');
+    setTimeout(() => document.getElementById('totp-code')?.focus(), 100);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      newErrorEl.classList.add('d-none');
+      const code = document.getElementById('totp-code').value.trim();
+      if (!code) return;
+
+      try {
+        const data = await api.post('/auth/2fa/verify', { challengeToken, code });
+        localStorage.setItem('token', data.token);
+        if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+        state.token = data.token;
+        state.user = data.user;
+        navigate('/');
+      } catch (err) {
+        newErrorEl.textContent = err.message;
+        newErrorEl.classList.remove('d-none');
+      }
+    });
+  }
 
   // Register
   document.getElementById('register-form').addEventListener('submit', async (e) => {
@@ -117,12 +168,36 @@ export function renderLogin() {
       });
 
       localStorage.setItem('token', data.token);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
       state.token = data.token;
       state.user = data.user;
       navigate('/');
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.classList.remove('d-none');
+    }
+  });
+
+  // Passkey login
+  document.getElementById('btn-passkey-login')?.addEventListener('click', async () => {
+    const errorEl = document.getElementById('login-error');
+    errorEl.classList.add('d-none');
+    try {
+      const options = await api.post('/auth/passkey/login-options', {});
+      const { startAuthentication } = SimpleWebAuthnBrowser;
+      const credential = await startAuthentication({ optionsJSON: options });
+
+      const data = await api.post('/auth/passkey/login', { credential, challenge: options.challenge });
+      localStorage.setItem('token', data.token);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+      state.token = data.token;
+      state.user = data.user;
+      navigate('/');
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove('d-none');
+      }
     }
   });
 }

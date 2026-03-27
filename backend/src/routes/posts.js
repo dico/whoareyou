@@ -149,6 +149,34 @@ router.get('/', async (req, res, next) => {
         )
         .orderBy('life_events.event_date', 'desc');
 
+      // Fetch linked contacts for life events
+      const eventRows = await db('life_events')
+        .whereIn('uuid', events.map(e => e.uuid))
+        .select('id', 'uuid');
+      const uuidToId = new Map(eventRows.map(r => [r.uuid, r.id]));
+      const idToUuid = new Map(eventRows.map(r => [r.id, r.uuid]));
+
+      const linkedByUuid = {};
+      const allIds = [...uuidToId.values()];
+      if (allIds.length) {
+        const linked = await db('life_event_contacts')
+          .join('contacts', 'life_event_contacts.contact_id', 'contacts.id')
+          .whereIn('life_event_contacts.life_event_id', allIds)
+          .select(
+            'life_event_contacts.life_event_id',
+            'contacts.uuid', 'contacts.first_name', 'contacts.last_name'
+          )
+          .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`));
+
+        for (const lc of linked) {
+          const eventUuid = idToUuid.get(lc.life_event_id);
+          if (!linkedByUuid[eventUuid]) linkedByUuid[eventUuid] = [];
+          linkedByUuid[eventUuid].push({
+            uuid: lc.uuid, first_name: lc.first_name, last_name: lc.last_name, avatar: lc.avatar || null,
+          });
+        }
+      }
+
       lifeEvents = events.map(e => ({
         type: 'life_event',
         uuid: e.uuid,
@@ -160,6 +188,7 @@ router.get('/', async (req, res, next) => {
         contact_uuid: e.contact_uuid,
         first_name: e.first_name,
         last_name: e.last_name,
+        linked_contacts: linkedByUuid[e.uuid] || [],
       }));
     }
 
@@ -346,7 +375,7 @@ async function getPostWithDetails(postId, tenantId) {
   let about = null;
   if (post.contact_id) {
     about = await db('contacts')
-      .where({ id: post.contact_id })
+      .where({ id: post.contact_id, tenant_id: tenantId })
       .select('uuid', 'first_name', 'last_name')
       .first();
   }

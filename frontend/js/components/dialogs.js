@@ -150,21 +150,22 @@ export function contactSearchDialog(options = {}) {
           })
         ).join('');
 
-        results.querySelectorAll('.contact-row').forEach((item) => {
-          item.addEventListener('click', () => selectItem(item));
+        results.querySelectorAll('.contact-row').forEach((item, i) => {
+          item.addEventListener('click', () => selectItem(contacts[i]));
         });
       } catch {
         results.innerHTML = '';
       }
     }
 
-    function selectItem(item) {
+    function selectItem(contact) {
       resolved = true;
       modal.hide();
       resolve({
-        uuid: item.dataset.uuid,
-        first_name: item.dataset.first,
-        last_name: item.dataset.last,
+        uuid: contact.uuid,
+        first_name: contact.first_name,
+        last_name: contact.last_name,
+        avatar: contact.avatar || null,
       });
     }
 

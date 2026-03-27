@@ -26,8 +26,10 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 | Database | MySQL (ekstern) |
 | App-server | Docker på Ubuntu |
 | Reverse proxy | Nginx (i container) + Nginx Proxy Manager (lokalt DNS via PiHole) |
+| Auth | bcrypt + JWT (15 min) + refresh tokens (30d) + TOTP 2FA |
 | Bildeprosessering | sharp (WebP, thumbnail, EXIF-stripping) |
 | Kart | Leaflet + OpenStreetMap, Nominatim geocoding |
+| i18n | JSON locale-filer (en + nb), t()-funksjon med fallback |
 | Dev-tools | FastAPI-bro for AI-assistert debugging (port 7601) |
 | CI/CD | GitHub → DockerHub/GHCR (ikke satt opp ennå) |
 
@@ -128,19 +130,46 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Notifications — fikset duplikat-bug (emoji-prefix mismatch), fjernet hardkodede emojis, i18n for bursdagsvarsler
 - [x] @-mention i edit-modus — `attachMention` på edit-textarea, tagging fungerer i redigering
 - [x] Klikkbare navn i poster — `linkifyPost` matcher taggede kontaktnavn i tekst og gjør dem til lenker
-- [x] Contact chips — post-tags med mini-avatar (pill-design), erstatter blå badges
+- [x] Contact chips — post-tags med mini-avatar (pill-design), erstatter blå badges overalt (poster, livshendelser, timeline compose)
 - [x] Del adresse — hus-ikon skjules når kontakten ikke har adresse
+- [x] Livshendelser i tidslinje — "Fikk barn med Navn", per-type preposisjoner (med/fra/sammen med), filtrerer bort profil-kontakt, skjuler linked for pensjonert/gikk bort
+- [x] Post-header layout — visibility-ikon og ellipsis-meny side ved side (flex)
+- [x] Avatar i alle kontakt-valg — mention, contactSearchDialog, tag-dialog og livshendelser sender avatar fra API
+
+- [x] Interesser/hobbyer — gjenbruker labels med category (group/interest), samlet i én seksjon med gruppe/interesse-ikoner
+
+- [x] Slektstre — SVG med profilbilder, hover-highlight, nivåbasert layout, klikkbare noder
+- [x] Opprett kontakt fra relasjon — ny kontakt + relasjon i én dialog, med andre-forelder-valg
+- [x] Relasjonsforslag — utleder manglende søsken, besteforeldre, onkel/tante, partner-barn automatisk
+- [x] Relasjonstyper begge retninger — forelder/barn, besteforelder/barnebarn, sjef/ansatt som separate valg
+- [x] PWA — manifest.json, app-ikoner (192+512), apple-touch-icon, standalone-modus, safe-area for notch
 
 ### Neste (prioritert)
 - [ ] **Eksport** — eksportere kontakter, poster, relasjoner som JSON/CSV
 
+#### Autentisering og sikkerhet (implementert)
+- [x] Sesjonsbasert auth — sessions-tabell, kort-levd JWT (15 min) + refresh token (30 dager), auto-refresh i frontend
+- [x] Sesjonsvisning i profil — se alle aktive pålogginger med enhet/IP, logge ut andre sesjoner
+- [x] To-faktor-autentisering (2FA) — TOTP med QR-kode, backup-koder, deaktivering med passord
+- [x] Trusted IP-ranges — per tenant, konfigurerbar i tenant admin UI + env var fallback
+- [x] 2FA-påkrevd eksternt — brukere uten 2FA får feilmelding ved ekstern pålogging (når trusted ranges er konfigurert)
+- [x] Settings redesign — profil + 2FA øverst, admin-kort med fargerike ikoner i grid, ryddig navbar-dropdown
+- [x] Security admin-side — `/admin/security` med sesjoner og trusted IP-ranges (flyttet fra settings)
+- [x] Rate limiting — alle API-endepunkter (300 req/15 min), auth strengere (20 req/15 min)
+- [x] CORS-begrensning — `CORS_ORIGIN` env var for produksjon
+- [x] Passord-endring revokerer alle andre sesjoner
+- [x] Session cleanup — automatisk opprydning av utløpte sesjoner hver time
+
+- [x] Passkey/WebAuthn — registrering i profil, passordfri innlogging, bypasser 2FA, browser-lib fra vendor
+- [x] Profil/Settings-splitt — `/profile` for personlig (konto, 2FA, passkeys), `/settings` for admin-kort
+
+#### Gjenstår (sikkerhet)
+- [ ] E-post ved ny pålogging — varsle bruker når ny enhet/lokasjon logger inn (krever SMTP-oppsett)
+
 ### Senere
-- [ ] Interesser/hobbyer — felt eller tags for interesser på kontakter
+- [ ] Slektstre forbedringer — pan/zoom, husstand-gruppering, velge hvilke relasjoner som vises, dybde-kontroll
 - [ ] Dokumenter — utvide upload-støtte til PDF/filer
 - [ ] Reminder-frekvens — månedlig, kvartalsvis, årlig
-- [ ] Slektstre-visualisering — SVG i modal
-- [ ] CI/CD — GitHub Actions → Docker image
-- [ ] Oppgaver — tasks knyttet til kontakter
 
 ### Vurderes
 - [ ] **Gaver og ønskelister** — events (f.eks. "Jul 2026"), gaver gitt/mottatt med retning (person→person, husstand→husstand, husstand→person), ønskelister per person, produktregister med historikk over hvem som fikk/ga produktet. Større feature som krever eget design

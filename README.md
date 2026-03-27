@@ -34,18 +34,25 @@ Inspired by the excellent [Monica](https://github.com/monicahq/monica), WhoareYo
 - **Image attachments** — add photos to timeline posts with grid gallery and lightbox viewer
 - **Reminders & notifications** — birthday auto-reminders, custom reminders, in-app notification bell with unread count
 - **Companies** — company directory with employees, job titles, and company detail pages
-- **Life events** — 10 event types with icons, annual anniversary reminders, timeline integration
+- **Life events** — 10 event types with icons, annual anniversary reminders, timeline integration with "together with" links
+- **Family tree** — SVG visualization with profile photos, hover-highlight, clickable nodes, relationship suggestions
+- **Interests** — reusable label system with group/interest categories
 - **Birthdays** — upcoming birthdays dashboard widget
 - **Address management** — address history (move in/out), household view, duplicate merge tool, share address with one click
-- **Global search** — search contacts, posts, and contact fields from the navbar
+- **Global search** — search contacts, posts, companies, and contact fields from the navbar
 - **User management** — invite, deactivate, promote/demote users within a tenant
+- **Session management** — view active login sessions, revoke individual or all other sessions
+- **Relationship suggestions** — auto-detect missing siblings, grandparents, uncle/aunt from existing data
+
+- **Two-factor authentication** — TOTP with QR code setup, backup codes, trusted IP ranges skip 2FA on local network
+- **Session-based auth** — short-lived JWT (15 min) with refresh tokens, automatic token renewal
+
+- **Passkeys** — passwordless login with fingerprint, face recognition, or security keys (WebAuthn)
 
 ### Planned
 
-- Tasks linked to contacts
-- Family tree visualization
-- Export functionality
-- Interests/hobbies on contacts
+- Export functionality (JSON/CSV)
+- Document attachments (PDF, files)
 
 ## Tech Stack
 
@@ -131,23 +138,37 @@ This project is built with [Claude Code](https://claude.ai/claude-code) (Anthrop
 
 The following security assessment was performed by Claude (AI) based on a review of the actual source code. This is **not** a professional penetration test — it is an automated review to give potential users transparency into the security posture of the application.
 
-*Last audited: 2026-03-27*
+*Last audited: 2026-03-27 (round 2 — full route-by-route review)*
 
 ### Summary
 
 | Area | Rating | Notes |
 |------|--------|-------|
-| Password Storage | Good | bcrypt with 12 salt rounds |
-| SQL Injection | Good | All queries use Knex parameterized statements, no unsafe raw SQL |
-| Tenant Isolation | Excellent | `tenant_id` enforced via middleware on every query, with visibility controls |
-| Input Validation | Good | Required field checks, email validation, input trimming, pagination limits |
-| File Uploads | Good | MIME type whitelist (images only), 10 MB limit, server-side re-encoding strips EXIF data |
-| Authentication | Good | JWT with configurable expiry, refresh tokens, active-user checks |
-| Security Headers | Good | Helmet.js enabled (CSP, X-Frame-Options, etc.) |
-| Rate Limiting | Moderate | Applied to auth endpoints (20 req/15 min) — not yet on other endpoints |
-| CORS | Moderate | Permissive in development — should be restricted for production |
-| HTTPS/TLS | Not included | App serves HTTP only — **you must use a reverse proxy with TLS** (e.g., Caddy, Traefik, Nginx Proxy Manager) |
+| Password Storage | **Excellent** | bcrypt with 12 salt rounds |
+| SQL Injection | **Excellent** | All queries use Knex parameterized statements, no raw SQL with user input |
+| Tenant Isolation | **Excellent** | `tenant_id` enforced via middleware + validated on every query. Cross-tenant label/type injection fixed. File access tenant-validated. |
+| Input Validation | **Good** | Required field checks, email validation, input trimming, pagination limits, language whitelist |
+| File Uploads | **Good** | MIME type whitelist (images only), size limit, sharp re-encoding strips EXIF. Files require auth + tenant validation. |
+| Authentication | **Excellent** | Short-lived JWT (15 min) + refresh tokens (30 days), session tracking in DB, 2FA (TOTP) |
+| Security Headers | **Good** | Helmet.js enabled (CSP, X-Frame-Options, etc.) |
+| Rate Limiting | **Good** | Auth: 20 req/15 min. All API: 300 req/15 min. |
+| CORS | **Good** | Configurable via `CORS_ORIGIN` env var. Default permissive in development. |
+| Session Management | **Good** | Active sessions visible in UI, revocable individually or all-at-once. Password change revokes all other sessions. Hourly cleanup of expired sessions. |
+| 2FA | **Good** | TOTP with QR setup, backup codes (SHA-256 hashed), trusted IP ranges to skip 2FA on local network. |
+| HTTPS/TLS | Not included | App serves HTTP only — **you must use a reverse proxy with TLS** |
 | Docker | Moderate | Alpine-based, minimal dependencies — runs as root (should be hardened for production) |
+
+### Issues Found and Fixed (this audit)
+
+| Severity | Issue | Fix |
+|----------|-------|-----|
+| ~~HIGH~~ Fixed | Label IDs in contact create/update not validated against tenant | Added tenant validation before inserting `contact_labels` |
+| ~~HIGH~~ Fixed | `/uploads/` file access not tenant-scoped (any auth user could access any tenant's files) | Added tenant validation by checking contact/post UUID ownership |
+| ~~MEDIUM~~ Fixed | `relationship_type_id` not validated against tenant (custom types from other tenants could be referenced) | Added tenant_id/null check on type lookup |
+| ~~MEDIUM~~ Fixed | `getPostWithDetails` fetched "about" contact without `tenant_id` filter | Added `tenant_id` to query |
+| ~~LOW~~ Fixed | Language endpoint accepted arbitrary strings | Added whitelist (`en`, `nb`) |
+| Low (accepted) | Access tokens valid until JWT expiry even after session revocation | Mitigated by 15-minute token TTL + auto-refresh |
+| Low (accepted) | CORS reflects origin when set to `*` with credentials | Should be explicitly set in production via `CORS_ORIGIN` |
 
 ### Recommendations for Self-Hosters
 

@@ -31,7 +31,7 @@ export async function renderPostList(containerId, contactUuid, onChanged) {
       return;
     }
 
-    el.innerHTML = data.posts.map((p) => p.type === 'life_event' ? renderLifeEventCard(p) : `
+    el.innerHTML = data.posts.map((p) => p.type === 'life_event' ? renderLifeEventCard(p, contactUuid) : `
       <div class="timeline-post glass-card" data-post-uuid="${p.uuid}">
         <div class="post-view">
           ${p.about ? `
@@ -305,7 +305,30 @@ export async function renderPostList(containerId, contactUuid, onChanged) {
   }
 }
 
-function renderLifeEventCard(e) {
+function renderLifeEventCard(e, currentContactUuid) {
+  // Build list of all involved people: event owner + linked contacts
+  const allPeople = [
+    { uuid: e.contact_uuid, first_name: e.first_name, last_name: e.last_name },
+    ...(e.linked_contacts || []),
+  ];
+  // Filter out the contact whose profile we're viewing
+  const visible = currentContactUuid
+    ? allPeople.filter(c => c.uuid !== currentContactUuid)
+    : allPeople;
+  // Deduplicate by uuid
+  const seen = new Set();
+  const unique = visible.filter(c => { if (seen.has(c.uuid)) return false; seen.add(c.uuid); return true; });
+
+  // Some event types don't make sense with "together with"
+  const noLinkedTypes = ['retired', 'passed_away'];
+  const showLinked = unique.length > 0 && !noLinkedTypes.includes(e.event_type);
+
+  const linkedNames = unique.map(c =>
+    `<a href="/contacts/${c.uuid}" data-link class="mention-link">${c.first_name} ${c.last_name || ''}</a>`
+  ).join(', ');
+
+  const preposition = t(`lifeEvents.withPerson.${e.event_type}`) || t('lifeEvents.withPerson.other');
+
   return `
     <div class="timeline-post glass-card life-event-card">
       <div class="life-event-card-inner">
@@ -313,8 +336,14 @@ function renderLifeEventCard(e) {
           <i class="${e.icon}"></i>
         </div>
         <div class="life-event-card-content">
-          <strong>${t('lifeEvents.types.' + e.event_type)}</strong>
-          <span class="post-date">${formatDate(e.post_date)}</span>
+          <div>
+            <strong>${t('lifeEvents.types.' + e.event_type)}</strong>
+            ${showLinked ? (unique.length === 1
+              ? `<span class="life-event-with">${preposition}</span> ${linkedNames}`
+              : `<span class="life-event-with">—</span> ${linkedNames}`
+            ) : ''}
+            <span class="post-date">${formatDate(e.post_date)}</span>
+          </div>
           ${e.description ? `<p class="text-muted small mb-0">${escapeHtml(e.description)}</p>` : ''}
         </div>
       </div>

@@ -5,14 +5,17 @@ import { renderContacts } from './pages/contacts.js';
 import { renderContactDetail } from './pages/contact-detail.js';
 import { renderTimeline } from './pages/timeline.js';
 import { renderMap, destroyMap } from './pages/map.js';
+import { renderProfile } from './pages/profile.js';
 import { renderSettings } from './pages/settings.js';
 import { renderTenantAdmin } from './pages/admin-tenant.js';
+import { renderSecurityAdmin } from './pages/admin-security.js';
 import { renderSystemAdmin } from './pages/admin-system.js';
 import { renderAddressDetail } from './pages/address-detail.js';
 import { renderAddressMerge } from './pages/admin-addresses.js';
 import { renderCompanies } from './pages/companies.js';
 import { renderCompanyDetail } from './pages/company-detail.js';
 import { renderLabelAdmin } from './pages/admin-labels.js';
+import { renderRelationshipSuggestions } from './pages/admin-relationships.js';
 import { renderNavbar } from './components/navbar.js';
 
 // Simple router
@@ -26,11 +29,14 @@ const routes = {
   '/companies': () => renderCompanies(),
   '/companies/:uuid': (params) => renderCompanyDetail(params.uuid),
   '/addresses/:id': (params) => renderAddressDetail(params.id),
+  '/profile': () => renderProfile(),
   '/settings': () => renderSettings(),
   '/admin/tenant': () => renderTenantAdmin(),
+  '/admin/security': () => renderSecurityAdmin(),
   '/admin/system': () => renderSystemAdmin(),
   '/admin/addresses': () => renderAddressMerge(),
   '/admin/labels': () => renderLabelAdmin(),
+  '/admin/relationships': () => renderRelationshipSuggestions(),
   '/login': () => renderLogin(),
 };
 
@@ -86,6 +92,7 @@ async function render() {
       state.token = null;
       state.user = null;
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
     }
   }
 

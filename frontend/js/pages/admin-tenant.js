@@ -28,6 +28,7 @@ export async function renderTenantAdmin() {
           <div class="loading">${t('admin.loadingMembers')}</div>
         </div>
       </div>
+
     </div>
 
     <!-- Invite modal -->

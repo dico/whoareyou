@@ -6,6 +6,7 @@ import { toggleVisibilityBtn } from '../utils/visibility.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { enableDropZone } from '../utils/drop-zone.js';
+import { authUrl } from '../utils/auth-url.js';
 
 export async function renderTimeline(contactUuid = null) {
   const content = document.getElementById('app-content');
@@ -206,21 +207,22 @@ export async function renderTimeline(contactUuid = null) {
       if (search) params.set('search', search);
       params.set('limit', '10');
       const data = await api.get(`/contacts?${params}`);
+      const filtered = data.contacts.filter((c) => !taggedContacts.find((t) => t.uuid === c.uuid));
 
-      results.innerHTML = data.contacts
-        .filter((c) => !taggedContacts.find((t) => t.uuid === c.uuid))
-        .map((c) => `
-          <button type="button" class="tag-result" data-uuid="${c.uuid}" data-name="${c.first_name} ${c.last_name || ''}">
+      results.innerHTML = filtered.map((c) => `
+          <button type="button" class="tag-result" data-uuid="${c.uuid}">
             ${c.first_name} ${c.last_name || ''}
           </button>
         `).join('') || `<p class="text-muted small">${t('common.noResults')}</p>`;
 
-      results.querySelectorAll('.tag-result').forEach((btn) => {
+      results.querySelectorAll('.tag-result').forEach((btn, i) => {
         btn.addEventListener('click', () => {
+          const c = filtered[i];
           taggedContacts.push({
-            uuid: btn.dataset.uuid,
-            first_name: btn.dataset.name.split(' ')[0],
-            last_name: btn.dataset.name.split(' ').slice(1).join(' '),
+            uuid: c.uuid,
+            first_name: c.first_name,
+            last_name: c.last_name,
+            avatar: c.avatar || null,
           });
           renderTags();
           bootstrap.Modal.getInstance(document.getElementById('tag-modal')).hide();
@@ -232,13 +234,19 @@ export async function renderTimeline(contactUuid = null) {
   function renderTags() {
     const el = document.getElementById('post-tags');
     el.innerHTML = taggedContacts.map((c) => `
-      <span class="badge bg-primary">
+      <span class="contact-chip" data-uuid="${c.uuid}">
+        <span class="contact-chip-avatar">
+          ${c.avatar
+            ? `<img src="${authUrl(c.avatar)}" alt="">`
+            : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`
+          }
+        </span>
         ${c.first_name} ${c.last_name || ''}
-        <button type="button" class="btn-close btn-close-white ms-1" data-uuid="${c.uuid}" style="font-size:0.5em"></button>
+        <button type="button" class="contact-chip-remove" data-uuid="${c.uuid}"><i class="bi bi-x"></i></button>
       </span>
     `).join('');
 
-    el.querySelectorAll('.btn-close').forEach((btn) => {
+    el.querySelectorAll('.contact-chip-remove').forEach((btn) => {
       btn.addEventListener('click', () => {
         taggedContacts = taggedContacts.filter((c) => c.uuid !== btn.dataset.uuid);
         renderTags();

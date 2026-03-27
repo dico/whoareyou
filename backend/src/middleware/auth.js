@@ -30,6 +30,8 @@ export async function authenticate(req, res, next) {
       email: user.email,
       role: user.role,
       isSystemAdmin: !!user.is_system_admin,
+      // Session ID from new-style tokens (null for pre-upgrade tokens)
+      sessionId: payload.sid || null,
     };
 
     next();

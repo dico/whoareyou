@@ -245,13 +245,16 @@ router.post('/', async (req, res, next) => {
       visibility: req.body.visibility === 'private' ? 'private' : 'shared',
     });
 
-    // Add labels if provided
+    // Add labels if provided (validate they belong to this tenant)
     if (req.body.labels?.length) {
-      const labelRows = req.body.labels.map((labelId) => ({
-        contact_id: id,
-        label_id: labelId,
-      }));
-      await db('contact_labels').insert(labelRows);
+      const validLabels = await db('labels')
+        .whereIn('id', req.body.labels)
+        .where({ tenant_id: req.tenantId })
+        .select('id');
+      const validIds = validLabels.map(l => l.id);
+      if (validIds.length) {
+        await db('contact_labels').insert(validIds.map(labelId => ({ contact_id: id, label_id: labelId })));
+      }
     }
 
     const contact = await db('contacts').where({ id }).first();
@@ -300,13 +303,20 @@ router.put('/:uuid', async (req, res, next) => {
       await db('contacts').where({ id: contact.id }).update(updates);
     }
 
-    // Update labels if provided
+    // Update labels if provided (validate they belong to this tenant)
     if (req.body.labels !== undefined) {
       await db('contact_labels').where({ contact_id: contact.id }).del();
       if (req.body.labels.length) {
-        await db('contact_labels').insert(
-          req.body.labels.map((labelId) => ({ contact_id: contact.id, label_id: labelId }))
-        );
+        const validLabels = await db('labels')
+          .whereIn('id', req.body.labels)
+          .where({ tenant_id: req.tenantId })
+          .select('id');
+        const validIds = validLabels.map(l => l.id);
+        if (validIds.length) {
+          await db('contact_labels').insert(
+            validIds.map((labelId) => ({ contact_id: contact.id, label_id: labelId }))
+          );
+        }
       }
     }
 

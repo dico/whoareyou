@@ -130,9 +130,10 @@ export async function renderContactDetail(uuid) {
             <div class="sidebar-card glass-card">
               <h4>
                 <i class="bi bi-diagram-3"></i> ${t('relationships.title')}
-                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-relationship" title="${t('relationships.add')}">
-                  <i class="bi bi-plus-lg"></i>
-                </button>
+                <span class="field-add-btns">
+                  <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-show-tree" title="${t('relationships.familyTree')}"><i class="bi bi-diagram-2"></i></button>
+                  <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-relationship" title="${t('relationships.add')}"><i class="bi bi-plus-lg"></i></button>
+                </span>
               </h4>
             ${contact.relationships.length ? `
               <div class="detail-relationships">
@@ -217,23 +218,25 @@ export async function renderContactDetail(uuid) {
               </div>
             </div>
 
-            <!-- Labels -->
+            <!-- Labels & Interests -->
             <div class="sidebar-card glass-card">
               <h4>
                 <i class="bi bi-tags"></i> ${t('labels.title')}
-                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-label" title="${t('common.add')}">
-                  <i class="bi bi-plus-lg"></i>
-                </button>
+                <span class="field-add-btns">
+                  <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-label" title="${t('labels.addGroup')}"><i class="bi bi-tag"></i></button>
+                  <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-interest" title="${t('interests.addInterest')}"><i class="bi bi-heart"></i></button>
+                </span>
               </h4>
               <div class="detail-labels" id="contact-labels">
                 ${contact.labels.length
                   ? contact.labels.map(l => `
-                    <span class="badge label-badge" style="background:${l.color}" data-label-id="${l.id}">
+                    <span class="badge label-badge" style="background:${l.category === 'interest' ? '#FF9500' : l.color}" data-label-id="${l.id}" title="${l.category === 'interest' ? t('interests.title') : t('labels.title')}">
+                      ${l.category === 'interest' ? '<i class="bi bi-heart-fill" style="font-size:0.55rem;margin-right:2px"></i>' : ''}
                       <a href="/contacts?label=${encodeURIComponent(l.name)}" data-link class="label-link">${escapeHtml(l.name)}</a>
                       <button type="button" class="btn-remove-label" data-label-id="${l.id}" title="${t('common.delete')}"><i class="bi bi-x"></i></button>
                     </span>
                   `).join(' ')
-                  : `<p class="text-muted small" id="labels-empty">${t('labels.noLabels')}</p>`
+                  : `<p class="text-muted small">${t('labels.noLabels')}</p>`
                 }
               </div>
               <div id="label-add-area" class="d-none mt-2">
@@ -253,8 +256,28 @@ export async function renderContactDetail(uuid) {
                 <div id="label-tab-new" class="d-none">
                   <div class="input-group input-group-sm">
                     <input type="text" class="form-control" id="new-label-name" placeholder="${t('labels.newLabel')}">
-                    <input type="color" class="form-control form-control-color" id="new-label-color" value="#007AFF" title="${t('labels.color')}">
                     <button type="button" class="btn btn-primary" id="btn-create-label">${t('common.add')}</button>
+                  </div>
+                </div>
+              </div>
+              <div id="interest-add-area" class="d-none mt-2">
+                <div class="label-add-tabs mb-2">
+                  <button type="button" class="btn btn-sm btn-outline-primary active" data-interest-tab="existing">
+                    <i class="bi bi-heart"></i> ${t('labels.existing')}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" data-interest-tab="new">
+                    <i class="bi bi-plus-circle"></i> ${t('labels.createNew')}
+                  </button>
+                </div>
+                <div id="interest-tab-existing">
+                  <select class="form-select form-select-sm" id="interest-select">
+                    <option value="" disabled selected>${t('interests.choose')}</option>
+                  </select>
+                </div>
+                <div id="interest-tab-new" class="d-none">
+                  <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" id="new-interest-name" placeholder="${t('interests.newInterest')}">
+                    <button type="button" class="btn btn-primary" id="btn-create-interest">${t('common.add')}</button>
                   </div>
                 </div>
               </div>
@@ -441,11 +464,12 @@ export async function renderContactDetail(uuid) {
 
     document.getElementById('btn-add-label')?.addEventListener('click', async () => {
       const area = document.getElementById('label-add-area');
+      document.getElementById('interest-add-area').classList.add('d-none'); // Close other
       area.classList.toggle('d-none');
       if (!area.classList.contains('d-none')) {
         // Load available labels into select
         try {
-          const { labels: allLabels } = await api.get('/labels');
+          const { labels: allLabels } = await api.get('/labels?category=group');
           const assignedIds = contact.labels.map(l => l.id);
           const available = allLabels.filter(l => !assignedIds.includes(l.id));
           const select = document.getElementById('label-select');
@@ -494,6 +518,58 @@ export async function renderContactDetail(uuid) {
       });
     });
 
+    // Interest tab switching
+    document.querySelectorAll('[data-interest-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-interest-tab]').forEach(b => {
+          b.classList.toggle('active', b === btn);
+          b.classList.toggle('btn-outline-primary', b === btn);
+          b.classList.toggle('btn-outline-secondary', b !== btn);
+        });
+        document.getElementById('interest-tab-existing').classList.toggle('d-none', btn.dataset.interestTab !== 'existing');
+        document.getElementById('interest-tab-new').classList.toggle('d-none', btn.dataset.interestTab !== 'new');
+      });
+    });
+
+    document.getElementById('btn-add-interest')?.addEventListener('click', async () => {
+      const area = document.getElementById('interest-add-area');
+      document.getElementById('label-add-area').classList.add('d-none'); // Close other
+      area.classList.toggle('d-none');
+      if (!area.classList.contains('d-none')) {
+        try {
+          const { labels: allInterests } = await api.get('/labels?category=interest');
+          const assignedIds = contact.labels.map(l => l.id);
+          const available = allInterests.filter(l => !assignedIds.includes(l.id));
+          const select = document.getElementById('interest-select');
+          select.innerHTML = `<option value="" disabled selected>${t('interests.choose')}</option>` +
+            available.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+        } catch {}
+      }
+    });
+
+    document.getElementById('interest-select')?.addEventListener('change', async (e) => {
+      if (!e.target.value) return;
+      try {
+        await api.post(`/labels/${e.target.value}/contacts`, { contact_uuid: uuid });
+        renderContactDetail(uuid);
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
+    });
+
+    document.getElementById('btn-create-interest')?.addEventListener('click', async () => {
+      const name = document.getElementById('new-interest-name').value.trim();
+      if (!name) return;
+      const color = document.getElementById('new-interest-color').value;
+      try {
+        const { label } = await api.post('/labels', { name, color, category: 'interest' });
+        await api.post(`/labels/${label.id}/contacts`, { contact_uuid: uuid });
+        renderContactDetail(uuid);
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
+    });
+
     // Reminders
     loadContactReminders(uuid);
 
@@ -534,8 +610,12 @@ export async function renderContactDetail(uuid) {
     });
 
     // Add relationship
+    document.getElementById('btn-show-tree')?.addEventListener('click', () => {
+      showFamilyTree(uuid);
+    });
+
     document.getElementById('btn-add-relationship')?.addEventListener('click', () => {
-      showAddRelationshipDialog(uuid, () => renderContactDetail(uuid));
+      showAddRelationshipDialog(uuid, contact.relationships, () => renderContactDetail(uuid));
     });
 
     // Share address with related contact
@@ -1030,11 +1110,18 @@ async function showLifeEventDialog(contactUuid, existingEvent, onDone) {
   function renderLinked() {
     const el = document.getElementById(`${id}-linked`);
     el.innerHTML = linkedContacts.map(c => `
-      <span class="badge bg-primary">${c.first_name} ${c.last_name || ''}
-        <button type="button" class="btn-close btn-close-white ms-1" data-uuid="${c.uuid}" style="font-size:0.5em"></button>
+      <span class="contact-chip" data-uuid="${c.uuid}">
+        <span class="contact-chip-avatar">
+          ${c.avatar
+            ? `<img src="${authUrl(c.avatar)}" alt="">`
+            : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`
+          }
+        </span>
+        ${c.first_name} ${c.last_name || ''}
+        <button type="button" class="contact-chip-remove" data-uuid="${c.uuid}"><i class="bi bi-x"></i></button>
       </span>
     `).join('');
-    el.querySelectorAll('.btn-close').forEach(btn => {
+    el.querySelectorAll('.contact-chip-remove').forEach(btn => {
       btn.addEventListener('click', () => {
         linkedContacts = linkedContacts.filter(c => c.uuid !== btn.dataset.uuid);
         renderLinked();
@@ -1058,9 +1145,10 @@ async function showLifeEventDialog(contactUuid, existingEvent, onDone) {
         linkResults.innerHTML = filtered.map(c =>
           contactRowHtml(c, { tag: 'div', meta: c.nickname ? `"${c.nickname}"` : '' })
         ).join('') || '';
-        linkResults.querySelectorAll('.contact-row').forEach(item => {
+        linkResults.querySelectorAll('.contact-row').forEach((item, i) => {
           item.addEventListener('click', () => {
-            linkedContacts.push({ uuid: item.dataset.uuid, first_name: item.dataset.first, last_name: item.dataset.last });
+            const c = filtered[i];
+            linkedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name, avatar: c.avatar || null });
             renderLinked();
             linkSearch.value = '';
             linkResults.innerHTML = '';
@@ -1199,6 +1287,261 @@ function renderGroupedRelationships(relationships, { hasAddress = false } = {}) 
     `).join('');
   }
   return html;
+}
+
+async function showFamilyTree(contactUuid) {
+  try {
+    const data = await api.get(`/relationships/tree/${contactUuid}`);
+    const { rootId, nodes, edges } = data;
+
+    if (nodes.length < 2) {
+      confirmDialog(t('relationships.noFamilyTree'), { title: t('relationships.familyTree'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      return;
+    }
+
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const levels = new Map();
+    const partners = new Map(); // id → partner id (spouse/partner on same level)
+
+    // BFS to assign levels + detect partners
+    levels.set(rootId, 0);
+    const bfsQ = [rootId];
+    const bfsVisited = new Set([rootId]);
+
+    while (bfsQ.length) {
+      const cid = bfsQ.shift();
+      const cLevel = levels.get(cid);
+      for (const e of edges) {
+        let otherId, relFromPerspective;
+        if (e.from === cid) {
+          otherId = e.to;
+          relFromPerspective = e.type; // "e.from IS [type] TO e.to" — what is the other person to me?
+        } else if (e.to === cid) {
+          otherId = e.from;
+          // Reverse: if edge says "from is parent of to", and I am "to", then "from" is my parent
+          relFromPerspective = e.type; // Same — e.type is what e.from is, so from "to"'s perspective, e.from IS e.type
+        } else continue;
+        if (bfsVisited.has(otherId)) continue;
+        bfsVisited.add(otherId);
+
+        // Determine level: what is otherId relative to cid?
+        // Edge says "e.from IS [type] of e.to"
+        // If cid === e.from: I am [type] of other → other is BELOW me if I'm parent, ABOVE if I'm child
+        // If cid === e.to: other is [type] of me → other is ABOVE me if parent, BELOW if child
+        let level = cLevel;
+        const parentTypes = ['parent', 'stepparent', 'godparent', 'grandparent'];
+        const childTypes = ['child', 'stepchild', 'godchild', 'grandchild'];
+        const partnerTypes = ['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant'];
+
+        if (cid === e.from) {
+          // Edge says "from IS [type] of to"
+          // "from is parent of to" → to is child → to goes DOWN (higher level)
+          if (parentTypes.includes(e.type)) level = cLevel - 1; // I'm parent → other is my child → below (was +1, try -1)
+          else if (childTypes.includes(e.type)) level = cLevel + 1; // I'm child → other is my parent → above (was -1, try +1)
+          else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
+        } else {
+          // Other IS [e.type] of me
+          if (parentTypes.includes(e.type)) level = cLevel + 1; // Other is parent → above me
+          else if (childTypes.includes(e.type)) level = cLevel - 1; // Other is child → below me
+          else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
+        }
+
+        if (e.type === 'sibling') level = cLevel; // Siblings same level
+
+        levels.set(otherId, level);
+        bfsQ.push(otherId);
+      }
+    }
+
+    // Group by level, place partners adjacent
+    const byLevel = new Map();
+    for (const [nid, level] of levels) {
+      if (!byLevel.has(level)) byLevel.set(level, []);
+      byLevel.get(level).push(nid);
+    }
+
+    // Sort each level: root first, then partners adjacent
+    for (const [level, ids] of byLevel) {
+      const ordered = [];
+      const placed = new Set();
+      // Place root first if on this level
+      if (ids.includes(rootId)) { ordered.push(rootId); placed.add(rootId); if (partners.has(rootId) && ids.includes(partners.get(rootId))) { ordered.push(partners.get(rootId)); placed.add(partners.get(rootId)); } }
+      for (const nid of ids) {
+        if (placed.has(nid)) continue;
+        ordered.push(nid);
+        placed.add(nid);
+        if (partners.has(nid) && ids.includes(partners.get(nid)) && !placed.has(partners.get(nid))) {
+          ordered.push(partners.get(nid));
+          placed.add(partners.get(nid));
+        }
+      }
+      byLevel.set(level, ordered);
+    }
+
+    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+    const nodeW = 130, nodeH = 64, avatarR = 16, gapX = 20, gapY = 70;
+    const maxPerRow = Math.max(...[...byLevel.values()].map(a => a.length));
+    const svgW = Math.max(400, maxPerRow * (nodeW + gapX) + gapX * 2);
+    const svgH = sortedLevels.length * (nodeH + gapY) + gapY;
+
+    const positions = new Map();
+    for (const level of sortedLevels) {
+      const ids = byLevel.get(level);
+      const rowW = ids.length * (nodeW + gapX) - gapX;
+      const startX = (svgW - rowW) / 2;
+      const y = (level - sortedLevels[0]) * (nodeH + gapY) + gapY / 2;
+      ids.forEach((nid, i) => { positions.set(nid, { x: startX + i * (nodeW + gapX), y }); });
+    }
+
+    // Build SVG
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block;margin:auto">`;
+    svg += `<defs>
+      <clipPath id="clip-circle" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath>
+    </defs>`;
+    svg += `<style>
+      .tree-edge { stroke: #d1d5db; stroke-width: 1.5; fill: none; transition: stroke 0.15s, stroke-width 0.15s; }
+      .tree-edge.highlight { stroke: #007AFF; stroke-width: 2.5; }
+      .tree-partner-edge { stroke: #f472b6; stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; transition: stroke 0.15s, stroke-width 0.15s; }
+      .tree-partner-edge.highlight { stroke: #007AFF; stroke-width: 2.5; }
+      .tree-node { cursor: pointer; }
+      .tree-node rect { fill: #fff; stroke: #e5e7eb; stroke-width: 1.5; rx: 10; transition: stroke 0.15s; }
+      .tree-node.root rect { stroke: #007AFF; stroke-width: 2; fill: #f0f7ff; }
+      .tree-node:hover rect { stroke: #007AFF; }
+      .tree-node.dim { opacity: 0.3; }
+      .tree-name { font-family: -apple-system, sans-serif; font-size: 11px; font-weight: 600; fill: #1f2937; }
+      .tree-age { font-family: -apple-system, sans-serif; font-size: 9px; fill: #9ca3af; }
+    </style>`;
+
+    // Draw edges — partner edges (dashed pink, horizontal) and parent-child (solid, curved)
+    const drawnPartners = new Set();
+    for (const e of edges) {
+      const from = positions.get(e.from);
+      const to = positions.get(e.to);
+      if (!from || !to) continue;
+
+      const isPartner = ['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant'].includes(e.type);
+      const fx = from.x + nodeW / 2, fy = from.y + nodeH / 2;
+      const tx = to.x + nodeW / 2, ty = to.y + nodeH / 2;
+
+      if (isPartner) {
+        const key = [Math.min(e.from, e.to), Math.max(e.from, e.to)].join('-');
+        if (!drawnPartners.has(key)) {
+          drawnPartners.add(key);
+          // Horizontal dashed line between partners
+          const y = Math.min(from.y, to.y) + nodeH / 2;
+          const lx = Math.min(from.x, to.x) + nodeW;
+          const rx = Math.max(from.x, to.x);
+          svg += `<line class="tree-partner-edge" data-from="${e.from}" data-to="${e.to}" x1="${lx}" y1="${y}" x2="${rx}" y2="${y}" />`;
+        }
+      } else {
+        // Curved parent-child line
+        const midY = (fy + ty) / 2;
+        svg += `<path class="tree-edge" data-from="${e.from}" data-to="${e.to}" d="M${fx},${fy < ty ? from.y + nodeH : from.y} C${fx},${midY} ${tx},${midY} ${tx},${ty < fy ? to.y + nodeH : to.y}" />`;
+      }
+    }
+
+    // Draw nodes
+    for (const [nid, pos] of positions) {
+      const node = nodeMap.get(nid);
+      if (!node) continue;
+      let name = `${node.first_name} ${(node.last_name || '').charAt(0)}.`.trim();
+      const maxChars = 12;
+      if (name.length > maxChars) name = name.substring(0, maxChars - 1) + '…';
+      const isRoot = node.is_root;
+      const hasAvatar = !!node.avatar;
+      const avatarSize = avatarR * 2;
+      const avatarX = 8;
+      const avatarY = (nodeH - avatarSize) / 2;
+      const textX = avatarX + avatarSize + 6;
+
+      svg += `<g class="tree-node ${isRoot ? 'root' : ''}" data-uuid="${node.uuid}" transform="translate(${pos.x},${pos.y})">`;
+      svg += `<rect width="${nodeW}" height="${nodeH}" />`;
+
+      // Avatar (always shown — image or initials)
+      if (hasAvatar) {
+        svg += `<image href="${authUrl(node.avatar)}" x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-circle)" preserveAspectRatio="xMidYMid slice" />`;
+      } else {
+        svg += `<circle cx="${avatarX + avatarR}" cy="${nodeH / 2}" r="${avatarR}" fill="#007AFF" />`;
+        svg += `<text x="${avatarX + avatarR}" y="${nodeH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="10" font-weight="600" font-family="-apple-system,sans-serif">${(node.first_name[0] || '') + (node.last_name?.[0] || '')}</text>`;
+      }
+
+      // Name + age (to the right of avatar)
+      svg += `<text class="tree-name" x="${textX}" y="${nodeH / 2 - 2}" text-anchor="start">${escapeHtml(name)}</text>`;
+      if (node.date_of_birth) {
+        const age = new Date().getFullYear() - new Date(node.date_of_birth).getFullYear();
+        svg += `<text class="tree-age" x="${textX}" y="${nodeH / 2 + 12}" text-anchor="start">${age} ${t('contacts.years')}</text>`;
+      }
+      svg += `</g>`;
+    }
+
+    svg += '</svg>';
+
+    const dlgId = 'tree-' + Date.now();
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal fade" id="${dlgId}" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title"><i class="bi bi-diagram-2 me-2"></i>${t('relationships.familyTree')}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="overflow:auto;max-height:70vh;text-align:center">
+              ${svg}
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    const modalEl = document.getElementById(dlgId);
+    const modal = new bootstrap.Modal(modalEl);
+
+    // Node interactions
+    const allNodes = modalEl.querySelectorAll('.tree-node');
+    const allEdges = modalEl.querySelectorAll('.tree-edge, .tree-partner-edge');
+
+    allNodes.forEach(node => {
+      // Click → navigate
+      node.addEventListener('click', () => {
+        modal.hide();
+        navigate(`/contacts/${node.dataset.uuid}`);
+      });
+
+      // Hover → highlight connected edges + dim others
+      const nodeId = [...positions.entries()].find(([id, pos]) => nodeMap.get(id)?.uuid === node.dataset.uuid)?.[0];
+
+      node.addEventListener('mouseenter', () => {
+        allEdges.forEach(edge => {
+          const from = parseInt(edge.dataset.from);
+          const to = parseInt(edge.dataset.to);
+          if (from === nodeId || to === nodeId) {
+            edge.classList.add('highlight');
+          }
+        });
+        allNodes.forEach(n => {
+          if (n !== node) {
+            // Check if connected
+            const otherId = [...positions.entries()].find(([id]) => nodeMap.get(id)?.uuid === n.dataset.uuid)?.[0];
+            const connected = [...allEdges].some(e => {
+              const f = parseInt(e.dataset.from), t = parseInt(e.dataset.to);
+              return (f === nodeId && t === otherId) || (t === nodeId && f === otherId);
+            });
+            if (!connected) n.classList.add('dim');
+          }
+        });
+      });
+
+      node.addEventListener('mouseleave', () => {
+        allEdges.forEach(e => e.classList.remove('highlight'));
+        allNodes.forEach(n => n.classList.remove('dim'));
+      });
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+    modal.show();
+  } catch (err) {
+    confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+  }
 }
 
 function escapeHtml(str) {
@@ -1488,7 +1831,7 @@ async function showEditRelationshipDialog(wrapper, onDone) {
   modal.show();
 }
 
-async function showAddRelationshipDialog(contactUuid, onDone) {
+async function showAddRelationshipDialog(contactUuid, existingRelationships, onDone) {
   let types;
   try {
     types = (await api.get('/relationships/types')).types;
@@ -1499,11 +1842,19 @@ async function showAddRelationshipDialog(contactUuid, onDone) {
 
   const catLabels = { family: t('relationships.categories.family'), social: t('relationships.categories.social'), professional: t('relationships.categories.professional') };
   const typeOptions = ['family', 'social', 'professional'].map(cat => {
-    const catTypes = types.filter(t => t.category === cat);
+    const catTypes = types.filter(tp => tp.category === cat);
     if (!catTypes.length) return '';
-    return `<optgroup label="${catLabels[cat]}">
-      ${catTypes.map(tp => `<option value="${tp.id}">${t('relationships.types.' + tp.name) !== 'relationships.types.' + tp.name ? t('relationships.types.' + tp.name) : tp.name}</option>`).join('')}
-    </optgroup>`;
+    const options = [];
+    for (const tp of catTypes) {
+      const label = t('relationships.types.' + tp.name) !== 'relationships.types.' + tp.name ? t('relationships.types.' + tp.name) : tp.name;
+      options.push(`<option value="${tp.id}">${label}</option>`);
+      // Add inverse as separate option if different (e.g. parent → child)
+      if (tp.inverse_name !== tp.name) {
+        const invLabel = t('relationships.types.' + tp.inverse_name) !== 'relationships.types.' + tp.inverse_name ? t('relationships.types.' + tp.inverse_name) : tp.inverse_name;
+        options.push(`<option value="${tp.id}:inverse">${invLabel}</option>`);
+      }
+    }
+    return `<optgroup label="${catLabels[cat]}">${options.join('')}</optgroup>`;
   }).join('');
 
   const id = 'rel-add-' + Date.now();
@@ -1519,6 +1870,34 @@ async function showAddRelationshipDialog(contactUuid, onDone) {
             <div id="${id}-search-area">
               <input type="text" class="form-control mb-2" id="${id}-search" placeholder="${t('relationships.searchContact')}" autofocus>
               <div id="${id}-results" class="contact-search-results"></div>
+              <button type="button" class="btn btn-outline-primary btn-sm mt-2 w-100" id="${id}-create-new">
+                <i class="bi bi-person-plus me-1"></i>${t('relationships.createAndLink')}
+              </button>
+            </div>
+            <div id="${id}-create-area" class="d-none">
+              <p class="text-muted small mb-2">${t('relationships.createAndLinkDesc')}</p>
+              <div class="row g-2 mb-2">
+                <div class="col">
+                  <div class="form-floating">
+                    <input type="text" class="form-control" id="${id}-new-first" required>
+                    <label>${t('auth.firstName')}</label>
+                  </div>
+                </div>
+                <div class="col">
+                  <div class="form-floating">
+                    <input type="text" class="form-control" id="${id}-new-last">
+                    <label>${t('auth.lastName')}</label>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">${t('relationships.type')}</label>
+                <select class="form-select form-select-sm" id="${id}-new-type">
+                  <option value="" disabled selected>${t('relationships.chooseType')}</option>
+                  ${typeOptions}
+                </select>
+              </div>
+              <button type="button" class="btn btn-link btn-sm p-0" id="${id}-back-to-search"><i class="bi bi-arrow-left me-1"></i>${t('relationships.backToSearch')}</button>
             </div>
             <div id="${id}-selected" class="d-none">
               <div class="d-flex align-items-center gap-2 mb-3">
@@ -1543,6 +1922,16 @@ async function showAddRelationshipDialog(contactUuid, onDone) {
                   <input type="date" class="form-control form-control-sm" id="${id}-end">
                 </div>
               </div>
+            </div>
+            <div id="${id}-other-parent" class="d-none mb-3">
+              <label class="form-label small">${t('relationships.otherParent')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+              <select class="form-select form-select-sm" id="${id}-other-parent-select">
+                <option value="">${t('relationships.noOtherParent')}</option>
+                ${(existingRelationships || [])
+                  .filter(r => ['spouse','partner','boyfriend_girlfriend','cohabitant','ex'].includes(r.relationship))
+                  .map(r => `<option value="${r.uuid}">${r.first_name} ${r.last_name || ''}</option>`)
+                  .join('')}
+              </select>
             </div>
           </div>
           <div class="modal-footer d-none" id="${id}-footer">
@@ -1611,22 +2000,108 @@ async function showAddRelationshipDialog(contactUuid, onDone) {
     searchInput.focus();
   });
 
+  // Show "other parent" when child-type selected
+  const childTypeValues = new Set();
+  for (const tp of types) {
+    if (['parent', 'stepparent', 'godparent'].includes(tp.name)) childTypeValues.add(`${tp.id}:inverse`);
+  }
+
+  function checkOtherParent(selectEl) {
+    const otherParent = document.getElementById(`${id}-other-parent`);
+    if (childTypeValues.has(selectEl.value)) {
+      otherParent.classList.remove('d-none');
+    } else {
+      otherParent.classList.add('d-none');
+    }
+  }
+
+  document.getElementById(`${id}-type`)?.addEventListener('change', (e) => checkOtherParent(e.target));
+  document.getElementById(`${id}-new-type`)?.addEventListener('change', (e) => checkOtherParent(e.target));
+
+  // Create new contact flow
+  document.getElementById(`${id}-create-new`).addEventListener('click', () => {
+    document.getElementById(`${id}-search-area`).classList.add('d-none');
+    document.getElementById(`${id}-create-area`).classList.remove('d-none');
+    document.getElementById(`${id}-footer`).classList.remove('d-none');
+    document.getElementById(`${id}-new-first`).focus();
+  });
+
+  document.getElementById(`${id}-back-to-search`).addEventListener('click', () => {
+    document.getElementById(`${id}-create-area`).classList.add('d-none');
+    document.getElementById(`${id}-search-area`).classList.remove('d-none');
+    document.getElementById(`${id}-footer`).classList.add('d-none');
+    searchInput.focus();
+  });
+
   // Submit
   document.getElementById(`${id}-submit`).addEventListener('click', async () => {
+    // If in create-new mode
+    const createArea = document.getElementById(`${id}-create-area`);
+    if (!createArea.classList.contains('d-none')) {
+      const firstName = document.getElementById(`${id}-new-first`).value.trim();
+      if (!firstName) { document.getElementById(`${id}-new-first`).focus(); return; }
+      const newTypeSelect = document.getElementById(`${id}-new-type`);
+      if (!newTypeSelect.value) { newTypeSelect.focus(); return; }
+      try {
+        // Create contact
+        const { contact } = await api.post('/contacts', {
+          first_name: firstName,
+          last_name: document.getElementById(`${id}-new-last`).value.trim() || undefined,
+        });
+        // Create relationship (handle inverse direction)
+        const newIsInverse = newTypeSelect.value.includes(':inverse');
+        const newTypeId = parseInt(newTypeSelect.value);
+        await api.post('/relationships', {
+          contact_uuid: newIsInverse ? contact.uuid : contactUuid,
+          related_contact_uuid: newIsInverse ? contactUuid : contact.uuid,
+          relationship_type_id: newTypeId,
+        });
+        // Also link to other parent if selected
+        const otherParentUuid = document.getElementById(`${id}-other-parent-select`)?.value;
+        if (otherParentUuid && childTypeValues.has(newTypeSelect.value)) {
+          try {
+            await api.post('/relationships', {
+              contact_uuid: contact.uuid,
+              related_contact_uuid: otherParentUuid,
+              relationship_type_id: newTypeId,
+            });
+          } catch {} // Ignore if already exists
+        }
+        modal.hide();
+        if (onDone) onDone();
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
+      return;
+    }
+
     if (!selectedContact) return;
     const typeSelect = document.getElementById(`${id}-type`);
     if (!typeSelect.value) { typeSelect.focus(); return; }
+    const isInverse = typeSelect.value.includes(':inverse');
     const typeId = parseInt(typeSelect.value);
     const startDate = document.getElementById(`${id}-start`).value || undefined;
     const endDate = document.getElementById(`${id}-end`).value || undefined;
     try {
+      const childUuid = isInverse ? contactUuid : selectedContact.uuid;
       await api.post('/relationships', {
-        contact_uuid: contactUuid,
-        related_contact_uuid: selectedContact.uuid,
+        contact_uuid: isInverse ? selectedContact.uuid : contactUuid,
+        related_contact_uuid: childUuid,
         relationship_type_id: typeId,
         start_date: startDate,
         end_date: endDate,
       });
+      // Also link to other parent if selected
+      const otherParentUuid = document.getElementById(`${id}-other-parent-select`)?.value;
+      if (otherParentUuid && childTypeValues.has(typeSelect.value)) {
+        try {
+          await api.post('/relationships', {
+            contact_uuid: childUuid,
+            related_contact_uuid: otherParentUuid,
+            relationship_type_id: typeId,
+          });
+        } catch {} // Ignore if already exists
+      }
       modal.hide();
       if (onDone) onDone();
     } catch (err) {
