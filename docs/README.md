@@ -53,7 +53,7 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 
 ### Gjort (dag 1 — 2026-03-27)
 - [x] Prosjektskjelett — Dockerfile, docker-compose, Nginx, Express, Knex
-- [x] 28 Knex-migrasjoner — 19 tabeller + 2 seeds + system admin + last_viewed_at + post contact_id + visibility + YouTube/TikTok + relationship types + relationship dates
+- [x] 29 Knex-migrasjoner — 19 tabeller + 2 seeds + system admin + last_viewed_at + post contact_id + visibility + YouTube/TikTok + relationship types + dates + kjæreste/samboer
 - [x] Deploy og verifisert — containere kjører
 - [x] Auth — register, login, JWT, refresh, system admin, tenant-bytte
 - [x] Kontakt-CRUD — list, get, create, update, soft delete, søk, filtrering, sortering
@@ -76,37 +76,91 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Relasjons-labels — renere styling (label + navn i stedet for badge)
 - [x] Visibility pill-toggle — shared/private som pill-switch i post-compose
 
+- [x] Adresse-side — `/addresses/:id` med nåværende og tidligere beboere, kart
+- [x] Adresse move-out/move-in — markere utflytting + angre, adressehistorikk
+- [x] "Same as" fikset — deler nå eksisterende adresse i stedet for å opprette duplikat
+- [x] Rediger adresse — redigere eksisterende adresse (modal), fjerne adressekobling, hover-actions
+- [x] Rediger relasjon — endre type/datoer (modal), slette relasjon, hover-actions
+- [x] Grupper/labels — CRUD API, assign/remove i sidebar, filter i kontaktliste, klikkbare labels
+- [x] i18n komplett — t()-funksjon, en.json + nb.json, språkvelger i settings, browser-deteksjon, locale-aware datoer
+- [x] Standardisert contact-row komponent — avatar + navn + meta, brukes overalt
+- [x] Kontaktkort-grid — individuelle kort med alder, visibility-badge, favoritt
+- [x] Dashboard — kommende bursdager (30 dager) i sidebar
+- [x] Kart — husker posisjon/zoom, søkefelt til høyre, adresse-lenker i popups
+- [x] Relasjonstyper — 19 typer inkl. kjæreste, samboer, steforelder, fadder, sviger
+- [x] Post-tags — hvit tekst på hover (WCAG)
+
+- [x] Brukerprofil — redigere navn/e-post, bytte passord, språkvelger i Settings
+- [x] Bilder i poster — image-knapp i compose, multi-upload, preview, grid-galleri, lightbox-viewer
+- [x] Standardisert lightbox — post-bilder og profilbilder bruker samme photo-viewer-design
+
+- [x] Adresse-merge — admin-side for å finne og slå sammen duplikater
+- [x] Adresse-deling — del adresse fra relasjonsliste (hus-ikon), legg til beboer fra adresseside
+- [x] Label-administrasjon — split-view for å flytte/kopiere kontakter mellom labels
+
+- [x] Påminnelser — CRUD, bursdags-auto-varsler, bjelle med unread-count, kontakt-påminnelser, e-post-placeholder
+- [x] Bildebeskyttelse — /uploads/ auth-beskyttet via Express + token query param, nginx proxy
+- [x] Drag-and-drop på poster — dra bilder fra nettleser/Facebook/filsystem + Ctrl+V paste
+- [x] Kontaktliste-preferanser — filter/sort huskes i localStorage
+
+- [x] Tenant member API — liste, invitere, deaktivere, rolle-endring, koble bruker til kontakt
+
+- [x] Globalt søk — kontakter + poster + kontaktfelt, grupperte resultater, klikk på post → scroll + highlight
+
+- [x] Bedrifter — CRUD, bedriftsside med ansatte/tidligere ansatte, sidebar på kontaktprofil, navbar + globalt søk
+
+- [x] Livshendelser — 10 event-typer med ikoner, sidebar + tidslinje-feed, type-velger-grid
+- [x] Tilbake-knapp — bruker history.back() på bedrift/adresse-sider (navigerer tilbake dit man kom fra)
+
+- [x] Merkedager — integrert som "påminn årlig" på livshendelser, genererer varsler på jubileum
+- [x] Livshendelser redigering — endre type/dato/beskrivelse, koble kontakter (inline søk), vises på tvers av profiler
+
+#### Design-runde (dag 2)
+- [x] Logo — SVG-logo (people-circle) i navbar, login-side og favicon
+- [x] Bildeknapp — `.post-media-btn` (ikon uten border) erstatter Bootstrap-knapp i compose
+- [x] Lenker uten understrek — global `.btn-link` override, ny `.subtle-link`-klasse for sekundære lenker
+- [x] Kontaktfelt-gruppering — felt sorteres i kategorier (kontakt, nett, SoMe) med luft mellom
+- [x] Nettsider — vises som ikon + label/domene (samme stil som SoMe-felt)
+- [x] Visibility-pill — matcher høyden på `.btn-sm` (konsistent compose-bar)
+- [x] Sidebar — ikke lenger sticky på kontaktprofil (scroller med innhold)
+- [x] Post dropdown z-index — `:has(.dropdown-menu.show)` løfter post over neste
+- [x] Cropper — firkantet viewport (ikke sirkulær), større area (450px), "Last opp original"-knapp, i18n
+- [x] Notifications — fikset duplikat-bug (emoji-prefix mismatch), fjernet hardkodede emojis, i18n for bursdagsvarsler
+- [x] @-mention i edit-modus — `attachMention` på edit-textarea, tagging fungerer i redigering
+- [x] Klikkbare navn i poster — `linkifyPost` matcher taggede kontaktnavn i tekst og gjør dem til lenker
+- [x] Contact chips — post-tags med mini-avatar (pill-design), erstatter blå badges
+- [x] Del adresse — hus-ikon skjules når kontakten ikke har adresse
+
 ### Neste (prioritert)
-- [ ] **Rediger adresse** — redigere eksisterende adresse på kontakt, slette adressekobling
-- [ ] **Rediger relasjon** — endre type, datoer, slette relasjon fra sidebar
-- [ ] **Grupper/labels** — frontend for å opprette, redigere og tildele labels
-- [ ] **Brukerprofil** — redigere eget navn, passord, språk i en egen side
-- [ ] **Tenant member API** — /api/auth/tenant/members for å liste, invitere, deaktivere brukere
+- [ ] **Eksport** — eksportere kontakter, poster, relasjoner som JSON/CSV
 
 ### Senere
-- [ ] Påminnelser og varslingssystem (bjelle-ikon)
-- [ ] Oppgaver knyttet til kontakter
-- [ ] Bilder i poster (post_media)
-- [ ] Slektstre-visualisering — SVG-rendret familiestruktur i modal
+- [ ] Interesser/hobbyer — felt eller tags for interesser på kontakter
+- [ ] Dokumenter — utvide upload-støtte til PDF/filer
+- [ ] Reminder-frekvens — månedlig, kvartalsvis, årlig
+- [ ] Slektstre-visualisering — SVG i modal
 - [ ] CI/CD — GitHub Actions → Docker image
-- [ ] Eksport-funksjoner
+- [ ] Oppgaver — tasks knyttet til kontakter
 
 ### Vurderes
+- [ ] **Gaver og ønskelister** — events (f.eks. "Jul 2026"), gaver gitt/mottatt med retning (person→person, husstand→husstand, husstand→person), ønskelister per person, produktregister med historikk over hvem som fikk/ga produktet. Større feature som krever eget design
 - [ ] Kjæledyr-registrering
 - [ ] Egendefinerte kjønn
 - [ ] Konfigurerbare seksjoner på kontaktkortet
-- [ ] Flere valutaer
 
 ### Planlagte konsepter
 
-#### Household / adresse-deling
-Vise hvem som bor på samme adresse i en egen seksjon på kontaktkortet ("Household"). Gjøre det enkelt å tildele samme adresse til flere kontakter — f.eks. velge "bor på samme adresse som [Person]" i stedet for å skrive inn adresse manuelt (unngå skrivefeil). Nyttig for å se nabolag og familieoversikt.
+#### ~~Household / adresse-deling~~ ✅ Implementert
+Household-seksjon, "same as"-snarvei, adresse-side med beboerhistorikk, move-out/move-in.
 
 #### Komplekse familieforhold
 Familierelasjoner kan være rotete — skilte foreldre, barn med flere partnere, bonus/ste-barn. Vi trenger å støtte dette uten å gjøre UI-et rotete. Mulig tilnærming: toggle/filter på relasjonskategorier (familie/sosialt/jobb), og et slektstre (SVG) i modal for å visualisere familiestruktur.
 
 #### Slektstre
 Rendere familiestruktur visuelt med SVG eller canvas i en modal. Åpnes fra et ikon ved siden av "Relationships"-headeren. Viser foreldre, barn, søsken, ektefelle — med klikkbare noder for å navigere.
+
+#### Label-administrasjon (tag management)
+Side for avansert tag-håndtering: se alle kontakter per tag, flytte kontakter mellom tags i en split-view (venstre: kilde-tag, høyre: mål-tag). Nyttig når grupper endrer seg over tid — f.eks. barnehage → skole, der de fleste men ikke alle skal flyttes til ny tag. Beholder historikk ved å ha begge tags.
 
 ## Feature-oversikt
 
@@ -117,7 +171,7 @@ Rendere familiestruktur visuelt med SVG eller canvas i en modal. Åpnes fra et i
 | Profilbilder | **Implementert** | Flere bilder, crop, viewer, drag-and-drop, set primary |
 | Hvordan vi møttes | **Implementert** | Felt + visning i sidebar |
 | Favoritter | **Implementert** | Markering + filtrering |
-| Grupper/labels | Delvis (backend) | Tildele labels, frontend mangler |
+| Grupper/labels | **Implementert** | CRUD API, assign/remove i sidebar, filter i kontaktliste, klikkbare |
 | Søk og filtrering | **Implementert** | Navn, favoritter, sortering, paginering |
 | Synlighet | **Implementert** | Privat/delt per kontakt, toggle ved opprettelse/redigering |
 
@@ -127,7 +181,7 @@ Rendere familiestruktur visuelt med SVG eller canvas i en modal. Åpnes fra et i
 | Opprette poster | **Implementert** | Profil-poster + aktivitets-poster |
 | Tagge kontakter | **Implementert** | @-mention + manuell tagging |
 | Redigere poster | **Implementert** | Inline edit med tag-håndtering, bytte about-kontakt |
-| Bilder i poster | Planlagt | post_media-tabell finnes, frontend mangler |
+| Bilder i poster | **Implementert** | Multi-upload i compose, grid-galleri, sharp-prosessering |
 | Global tidslinje | **Implementert** | Dashboard med sidebar |
 | Per-kontakt tidslinje | **Implementert** | Facebook-lignende profil |
 | Sist kontaktet | **Implementert** | Auto-oppdatert fra poster |

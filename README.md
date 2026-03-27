@@ -28,14 +28,24 @@ Inspired by the excellent [Monica](https://github.com/monicahq/monica), WhoareYo
 | **Internationalization** | English and Norwegian Bokmal out of the box, easy to add more languages |
 | **Monica Import** | Migration script for contacts, relationships, labels, addresses, photos, and notes |
 
+### Also Included
+
+- **Labels/groups** — create, assign, filter, and manage labels with a split-view transfer tool
+- **Image attachments** — add photos to timeline posts with grid gallery and lightbox viewer
+- **Reminders & notifications** — birthday auto-reminders, custom reminders, in-app notification bell with unread count
+- **Companies** — company directory with employees, job titles, and company detail pages
+- **Life events** — 10 event types with icons, annual anniversary reminders, timeline integration
+- **Birthdays** — upcoming birthdays dashboard widget
+- **Address management** — address history (move in/out), household view, duplicate merge tool, share address with one click
+- **Global search** — search contacts, posts, and contact fields from the navbar
+- **User management** — invite, deactivate, promote/demote users within a tenant
+
 ### Planned
 
-- Labels/groups management UI
-- Image attachments in timeline posts
-- Reminders and notifications
 - Tasks linked to contacts
 - Family tree visualization
 - Export functionality
+- Interests/hobbies on contacts
 
 ## Tech Stack
 

@@ -8,6 +8,11 @@ import { renderMap, destroyMap } from './pages/map.js';
 import { renderSettings } from './pages/settings.js';
 import { renderTenantAdmin } from './pages/admin-tenant.js';
 import { renderSystemAdmin } from './pages/admin-system.js';
+import { renderAddressDetail } from './pages/address-detail.js';
+import { renderAddressMerge } from './pages/admin-addresses.js';
+import { renderCompanies } from './pages/companies.js';
+import { renderCompanyDetail } from './pages/company-detail.js';
+import { renderLabelAdmin } from './pages/admin-labels.js';
 import { renderNavbar } from './components/navbar.js';
 
 // Simple router
@@ -18,9 +23,14 @@ const routes = {
   '/contacts/:uuid': (params) => renderContactDetail(params.uuid),
   '/contacts/:uuid/posts': (params) => renderTimeline(params.uuid),
   '/map': () => renderMap(),
+  '/companies': () => renderCompanies(),
+  '/companies/:uuid': (params) => renderCompanyDetail(params.uuid),
+  '/addresses/:id': (params) => renderAddressDetail(params.id),
   '/settings': () => renderSettings(),
   '/admin/tenant': () => renderTenantAdmin(),
   '/admin/system': () => renderSystemAdmin(),
+  '/admin/addresses': () => renderAddressMerge(),
+  '/admin/labels': () => renderLabelAdmin(),
   '/login': () => renderLogin(),
 };
 

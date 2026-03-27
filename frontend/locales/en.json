@@ -12,7 +12,8 @@
     "settings": "Settings",
     "systemAdmin": "System admin",
     "logout": "Log out",
-    "searchPlaceholder": "Search contacts..."
+    "companies": "Companies",
+    "searchPlaceholder": "Search..."
   },
   "auth": {
     "login": "Log in",
@@ -54,7 +55,8 @@
     "deleteContact": "Delete contact",
     "editContact": "Edit contact",
     "addToFavorites": "Add to favorites",
-    "removeFromFavorites": "Remove from favorites"
+    "removeFromFavorites": "Remove from favorites",
+    "years": "years"
   },
   "posts": {
     "title": "Posts",
@@ -69,7 +71,8 @@
     "makeShared": "Make shared",
     "makePrivate": "Make private",
     "tag": "Tag",
-    "tagContact": "Tag contact"
+    "tagContact": "Tag contact",
+    "addMedia": "Add images"
   },
   "visibility": {
     "shared": "Shared",
@@ -102,6 +105,7 @@
     "searchContact": "Search contact...",
     "contact": "Contact",
     "change": "Change",
+    "deleteConfirm": "Remove this relationship?",
     "types": {
       "parent": "Parent",
       "child": "Child",
@@ -117,6 +121,8 @@
       "godparent": "Godparent",
       "godchild": "Godchild",
       "partner": "Partner",
+      "boyfriend_girlfriend": "Boyfriend/Girlfriend",
+      "cohabitant": "Cohabitant",
       "in-law": "In-law",
       "friend": "Friend",
       "neighbor": "Neighbor",
@@ -146,7 +152,28 @@
     "label": "Label (Home, Work...)",
     "defaultLabel": "Home",
     "previous": "Previous",
-    "noResults": "No addresses found"
+    "noResults": "No addresses found",
+    "removeConfirm": "Remove this address completely? History will be lost.",
+    "moveOut": "Moved out",
+    "moveOutConfirm": "Mark as moved out? The address will be kept as history.",
+    "viewAddress": "View address",
+    "currentResidents": "Current residents",
+    "previousResidents": "Previous residents",
+    "noCurrentResidents": "No current residents",
+    "since": "Since",
+    "moveBackIn": "Undo move-out",
+    "mergeDuplicates": "Merge duplicate addresses",
+    "noDuplicates": "No duplicate addresses found",
+    "duplicatesFound": "{count} duplicate groups found",
+    "merge": "Merge",
+    "mergeAll": "Merge all",
+    "mergeAllConfirm": "Merge all {count} duplicate groups? This keeps the best address and moves all contacts.",
+    "mergeComplete": "{count} groups merged successfully.",
+    "shareAddress": "Share address",
+    "noAddressToShare": "This contact has no addresses to share.",
+    "addressShared": "Address shared with {name}.",
+    "chooseAddress": "Choose address",
+    "addResident": "Add resident"
   },
   "household": {
     "title": "Household"
@@ -163,14 +190,37 @@
     "profilePhoto": "Profile photo"
   },
   "labels": {
-    "title": "Labels"
+    "title": "Labels",
+    "noLabels": "No labels yet",
+    "choose": "Choose label...",
+    "newLabel": "New label name",
+    "manage": "Manage labels",
+    "existing": "Existing",
+    "createNew": "Create new",
+    "color": "Color",
+    "selectAll": "Select all",
+    "selectNone": "Select none",
+    "selectLabel": "Select a label to view contacts",
+    "noContacts": "No contacts with this label",
+    "moveRight": "Move selected to right label",
+    "moveLeft": "Move selected to left label",
+    "copyRight": "Copy selected to right label",
+    "copyLeft": "Copy selected to left label",
+    "move": "Move",
+    "copy": "Copy"
   },
   "sidebar": {
     "howWeMet": "How we met",
     "notes": "Notes",
     "recentlyViewed": "Recently viewed",
     "recentlyAdded": "Recently added",
-    "noContactsViewed": "No contacts viewed yet"
+    "noContactsViewed": "No contacts viewed yet",
+    "upcomingBirthdays": "Upcoming birthdays",
+    "noBirthdays": "No birthdays in the next 30 days",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "inDays": "In {days} days",
+    "turnsAge": "turns {age}"
   },
   "settings": {
     "title": "Settings",
@@ -185,7 +235,12 @@
     "systemAdmin": "System administration",
     "systemAdminDesc": "You are a system administrator. You can manage all tenants.",
     "manageTenants": "Manage tenants",
-    "language": "Language"
+    "language": "Language",
+    "editProfile": "Edit profile",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password (min 8 characters)",
+    "passwordChanged": "Password changed successfully."
   },
   "admin": {
     "accessRequired": "Admin access required",
@@ -204,7 +259,82 @@
     "invite": "Invite",
     "comingSoon": "Coming soon",
     "plannedFeatures": "Planned features",
-    "memberListNote": "Full member list requires a dedicated API endpoint (planned)."
+    "memberListNote": "Full member list requires a dedicated API endpoint (planned).",
+    "emailConfig": "Email notifications",
+    "emailConfigDesc": "Configure SMTP to enable email reminders and notifications.",
+    "emailStatus": "Status",
+    "notConfigured": "Not configured",
+    "emailConfigNote": "Email notification support is planned. Once configured, birthday reminders and custom reminders will be delivered via email.",
+    "inviteMember": "Invite member",
+    "tempPassword": "Temporary password",
+    "roleMember": "Member",
+    "roleAdmin": "Admin",
+    "inactive": "Inactive",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "deactivateConfirm": "Deactivate {name}? They will no longer be able to log in.",
+    "promoteToAdmin": "Promote to admin",
+    "demoteToMember": "Demote to member",
+    "linkContact": "Link to contact"
+  },
+  "lifeEvents": {
+    "title": "Life events",
+    "add": "Add life event",
+    "noEvents": "No life events yet",
+    "eventType": "Event type",
+    "date": "Date",
+    "description": "Description (optional)",
+    "types": {
+      "married": "Married",
+      "engaged": "Engaged",
+      "child_born": "Child born",
+      "moved": "Moved",
+      "new_job": "New job",
+      "retired": "Retired",
+      "graduated": "Graduated",
+      "passed_away": "Passed away",
+      "divorced": "Divorced",
+      "other": "Other"
+    },
+    "remindAnnually": "Remind me every year",
+    "linkedContacts": "Related people",
+    "linkContact": "Link contact"
+  },
+  "companies": {
+    "title": "Companies",
+    "newCompany": "New company",
+    "name": "Company name",
+    "industry": "Industry",
+    "website": "Website",
+    "phone": "Phone",
+    "email": "Email",
+    "noCompanies": "No companies yet",
+    "employees": "Employees",
+    "noEmployees": "No employees",
+    "previousEmployees": "Previous employees",
+    "addEmployee": "Add employee",
+    "endEmployment": "End employment",
+    "deleteConfirm": "Delete {name}? All employee links will be removed.",
+    "jobTitle": "Job title",
+    "jobTitlePlaceholder": "e.g. Developer, Manager...",
+    "info": "Company info"
+  },
+  "reminders": {
+    "title": "Reminders",
+    "placeholder": "What to remember...",
+    "recurring": "Yearly",
+    "noReminders": "No reminders",
+    "complete": "Mark as done"
+  },
+  "notifications": {
+    "markAllRead": "Mark all read",
+    "empty": "No notifications",
+    "birthday": "Wish {name} happy birthday!",
+    "anniversary": "{name} — {event} ({years} years)",
+    "justNow": "Just now",
+    "minutesAgo": "{n}m ago",
+    "hoursAgo": "{n}h ago",
+    "daysAgo": "{n}d ago"
   },
   "common": {
     "save": "Save",
@@ -218,6 +348,11 @@
     "search": "Search...",
     "noResults": "No results",
     "private": "Private"
+  },
+  "cropper": {
+    "title": "Crop photo",
+    "save": "Crop & save",
+    "skipCrop": "Upload original"
   },
   "fieldTypes": {
     "phone": "Phone",

@@ -4,12 +4,14 @@
  * Returns a cropped blob via callback.
  *
  * @param {File|Blob|string} source - File, Blob, or image URL
- * @param {object} options - { aspectRatio, viewportSize }
+ * @param {object} options - { viewportSize }
  * @returns {Promise<Blob|null>} - Cropped image blob, or null if cancelled
  */
+import { t } from '../utils/i18n.js';
+
 export function showCropper(source, options = {}) {
   const {
-    viewportSize = 250,
+    viewportSize = 320,
   } = options;
 
   return new Promise((resolve) => {
@@ -18,9 +20,9 @@ export function showCropper(source, options = {}) {
     const html = `
       <div class="modal fade" id="${id}" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content" style="background:var(--color-surface);border-radius:var(--radius-lg);overflow:hidden">
+          <div class="modal-content glass-card">
             <div class="modal-header">
-              <h5 class="modal-title">Crop photo</h5>
+              <h5 class="modal-title">${t('cropper.title')}</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-0">
@@ -35,8 +37,9 @@ export function showCropper(source, options = {}) {
               </div>
             </div>
             <div class="modal-footer">
-              <button type="button" class="edit-action" data-bs-dismiss="modal">Cancel</button>
-              <button type="button" class="edit-action edit-action-primary" id="${id}-save">Save</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="${id}-skip">${t('cropper.skipCrop')}</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="button" class="btn btn-primary btn-sm" id="${id}-save">${t('cropper.save')}</button>
             </div>
           </div>
         </div>
@@ -73,10 +76,13 @@ export function showCropper(source, options = {}) {
 
     img.onload = () => {
       const areaWidth = area.clientWidth || 400;
-      const areaHeight = 350;
+      const areaHeight = 450;
 
+      // Set canvas pixel dimensions to match display size (prevents stretching)
       canvas.width = areaWidth;
       canvas.height = areaHeight;
+      canvas.style.width = areaWidth + 'px';
+      canvas.style.height = areaHeight + 'px';
 
       // Fit image to canvas initially
       const fitScale = Math.max(viewportSize / img.width, viewportSize / img.height);
@@ -175,6 +181,25 @@ export function showCropper(source, options = {}) {
     });
 
     canvas.addEventListener('touchend', () => { dragging = false; });
+
+    // Skip crop — upload original
+    document.getElementById(`${id}-skip`).addEventListener('click', async () => {
+      let blob;
+      if (source instanceof Blob) {
+        blob = source;
+      } else if (source instanceof File) {
+        blob = source;
+      } else {
+        // URL source — convert via canvas at full resolution
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = img.naturalWidth;
+        tmpCanvas.height = img.naturalHeight;
+        tmpCanvas.getContext('2d').drawImage(img, 0, 0);
+        blob = await new Promise(r => tmpCanvas.toBlob(r, 'image/jpeg', 0.9));
+      }
+      modal.hide();
+      resolve(blob);
+    });
 
     // Save — crop and return blob
     document.getElementById(`${id}-save`).addEventListener('click', () => {

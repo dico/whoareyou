@@ -9,7 +9,8 @@ export function renderLogin() {
     <div class="auth-container">
       <div class="auth-card glass-card">
         <div class="auth-header">
-          <h1><i class="bi bi-people-fill"></i> ${t('app.name')}</h1>
+          <img src="/img/logo-v3-people-circle.svg" alt="WhoareYou" class="auth-logo">
+          <h1>${t('app.name')}</h1>
           <p>${t('app.tagline')}</p>
         </div>
 

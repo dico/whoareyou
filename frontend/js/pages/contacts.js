@@ -1,14 +1,23 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { toggleVisibilityBtn } from '../utils/visibility.js';
-import { t } from '../utils/i18n.js';
+import { t, formatDate } from '../utils/i18n.js';
+import { authUrl } from '../utils/auth-url.js';
 
 let currentSearch = '';
-let currentFilter = 'all';
-let currentSort = 'first_name';
-let currentOrder = 'asc';
+let currentFilter = localStorage.getItem('contacts.filter') || 'all';
+let currentLabel = localStorage.getItem('contacts.label') || '';
+let currentSort = localStorage.getItem('contacts.sort') || 'first_name';
+let currentOrder = localStorage.getItem('contacts.order') || 'asc';
 
 export async function renderContacts() {
+  // Check URL params for label filter
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('label')) {
+    currentLabel = urlParams.get('label');
+    localStorage.setItem('contacts.label', currentLabel);
+  }
+
   const content = document.getElementById('app-content');
 
   content.innerHTML = `
@@ -32,11 +41,14 @@ export async function renderContacts() {
           </button>
         </div>
         <select class="form-select form-select-sm sort-select" id="sort-select">
-          <option value="first_name:asc" ${currentSort === 'first_name' ? 'selected' : ''}>${t('contacts.sortNameAZ')}</option>
-          <option value="first_name:desc">${t('contacts.sortNameZA')}</option>
+          <option value="first_name:asc" ${currentSort === 'first_name' && currentOrder === 'asc' ? 'selected' : ''}>${t('contacts.sortNameAZ')}</option>
+          <option value="first_name:desc" ${currentSort === 'first_name' && currentOrder === 'desc' ? 'selected' : ''}>${t('contacts.sortNameZA')}</option>
           <option value="created:desc" ${currentSort === 'created' ? 'selected' : ''}>${t('contacts.sortNewest')}</option>
           <option value="last_viewed:desc" ${currentSort === 'last_viewed' ? 'selected' : ''}>${t('contacts.sortRecentlyViewed')}</option>
           <option value="last_contacted:desc" ${currentSort === 'last_contacted' ? 'selected' : ''}>${t('contacts.sortLastContacted')}</option>
+        </select>
+        <select class="form-select form-select-sm sort-select" id="label-filter">
+          <option value="">${t('labels.title')}</option>
         </select>
       </div>
 
@@ -81,11 +93,11 @@ export async function renderContacts() {
                 <textarea class="form-control" id="new-how-met" placeholder="${t('contacts.howWeMet')}" style="height:80px"></textarea>
                 <label>${t('contacts.howWeMet')}</label>
               </div>
-              <div class="visibility-toggle mb-3">
-                <button type="button" class="btn btn-sm visibility-btn" id="new-visibility-btn" data-visibility="shared">
-                  <i class="bi bi-people-fill"></i> ${t('visibility.shared')}
-                </button>
-                <span class="visibility-hint text-muted small">${t('visibility.sharedHint')}</span>
+              <div class="mb-3">
+                <div class="visibility-pill" id="new-visibility-btn" data-visibility="shared">
+                  <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
+                  <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
+                </div>
               </div>
               <div id="add-contact-error" class="alert alert-danger d-none"></div>
             </div>
@@ -98,6 +110,14 @@ export async function renderContacts() {
       </div>
     </div>
   `;
+
+  // Load labels for filter
+  try {
+    const { labels } = await api.get('/labels');
+    const labelFilter = document.getElementById('label-filter');
+    labelFilter.innerHTML = `<option value="">${t('labels.title')}</option>` +
+      labels.map(l => `<option value="${l.name}" ${currentLabel === l.name ? 'selected' : ''}>${l.name} (${l.contact_count})</option>`).join('');
+  } catch {}
 
   // Load contacts
   await loadContacts();
@@ -116,6 +136,7 @@ export async function renderContacts() {
   content.querySelectorAll('.filter-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       currentFilter = tab.dataset.filter;
+      localStorage.setItem('contacts.filter', currentFilter);
       content.querySelectorAll('.filter-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       loadContacts();
@@ -127,6 +148,18 @@ export async function renderContacts() {
     const [sort, order] = e.target.value.split(':');
     currentSort = sort;
     currentOrder = order;
+    localStorage.setItem('contacts.sort', currentSort);
+    localStorage.setItem('contacts.order', currentOrder);
+    loadContacts();
+  });
+
+  // Label filter
+  document.getElementById('label-filter').addEventListener('change', (e) => {
+    currentLabel = e.target.value;
+    localStorage.setItem('contacts.label', currentLabel);
+    // Update URL to reflect label filter
+    const url = currentLabel ? `/contacts?label=${encodeURIComponent(currentLabel)}` : '/contacts';
+    window.history.replaceState({}, '', url);
     loadContacts();
   });
 
@@ -136,9 +169,13 @@ export async function renderContacts() {
     modal.show();
   });
 
-  // Visibility toggle
+  // Visibility pill toggle
   document.getElementById('new-visibility-btn').addEventListener('click', (e) => {
-    toggleVisibilityBtn(e.currentTarget);
+    const pill = e.currentTarget;
+    const clicked = e.target.closest('.visibility-pill-option');
+    if (!clicked) return;
+    pill.dataset.visibility = clicked.dataset.val;
+    pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
   });
 
   // Add contact form
@@ -175,6 +212,7 @@ async function loadContacts() {
     const params = new URLSearchParams();
     if (currentSearch) params.set('search', currentSearch);
     if (currentFilter === 'favorites') params.set('favorite', 'true');
+    if (currentLabel) params.set('label', currentLabel);
     if (currentSort) params.set('sort', currentSort);
     if (currentOrder) params.set('order', currentOrder);
 
@@ -192,10 +230,10 @@ async function loadContacts() {
     }
 
     listEl.innerHTML = data.contacts.map((c) => `
-      <a href="/contacts/${c.uuid}" data-link class="contact-list-row">
+      <a href="/contacts/${c.uuid}" data-link class="contact-card">
         <div class="contact-avatar">
           ${c.avatar
-            ? `<img src="${c.avatar}" alt="">`
+            ? `<img src="${authUrl(c.avatar)}" alt="">`
             : `<span>${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>`
           }
         </div>
@@ -204,18 +242,32 @@ async function loadContacts() {
             ${c.first_name} ${c.last_name || ''}
             ${c.nickname ? `<span class="contact-nickname">"${c.nickname}"</span>` : ''}
           </div>
-          ${c.last_contacted_at
-            ? `<div class="contact-meta">${t('contacts.lastContact', { date: new Date(c.last_contacted_at).toLocaleDateString() })}</div>`
-            : ''
+          ${c.date_of_birth
+            ? `<div class="contact-meta"><i class="bi bi-cake2"></i> ${calcAge(c.date_of_birth)}</div>`
+            : c.last_contacted_at
+              ? `<div class="contact-meta">${t('contacts.lastContact', { date: formatDate(c.last_contacted_at) })}</div>`
+              : ''
           }
         </div>
-        <div class="contact-actions">
-          ${c.visibility === 'private' ? `<i class="bi bi-lock-fill text-muted" title="${t('common.private')}"></i>` : ''}
+        <div class="contact-badges">
           ${c.is_favorite ? '<i class="bi bi-star-fill text-warning"></i>' : ''}
+          ${c.visibility === 'private'
+            ? `<span class="badge bg-secondary badge-sm"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>`
+            : `<span class="badge bg-light text-muted badge-sm"><i class="bi bi-people-fill"></i></span>`
+          }
         </div>
       </a>
     `).join('');
   } catch (err) {
     listEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
   }
+}
+
+function calcAge(dateStr) {
+  const birth = new Date(dateStr);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return `${age} ${t('contacts.years')}`;
 }

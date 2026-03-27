@@ -1,3 +1,5 @@
+import { authUrl } from '../utils/auth-url.js';
+
 /**
  * Standardized contact row — used in sidebar, search dropdowns, relationship lists, dialogs.
  *
@@ -15,7 +17,7 @@ export function contactRowHtml(contact, options = {}) {
 
   const initials = (contact.first_name?.[0] || '') + (contact.last_name?.[0] || '');
   const avatarHtml = contact.avatar
-    ? `<img src="${contact.avatar}" alt="">`
+    ? `<img src="${authUrl(contact.avatar)}" alt="">`
     : `<span>${initials}</span>`;
 
   const href = tag === 'a' ? ` href="/contacts/${contact.uuid}" data-link` : '';

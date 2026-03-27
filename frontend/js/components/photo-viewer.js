@@ -1,6 +1,7 @@
 import { api } from '../api/client.js';
 import { confirmDialog } from './dialogs.js';
 import { showCropper } from './image-cropper.js';
+import { authUrl } from '../utils/auth-url.js';
 
 /**
  * Show a photo viewer/manager modal for a contact.
@@ -22,7 +23,7 @@ export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged) 
           <!-- Viewer -->
           <div id="${id}-viewer" class="photo-viewer">
             ${photos.length ? `
-              <img id="${id}-img" src="${photos[currentIndex].file_path}" alt="">
+              <img id="${id}-img" src="${authUrl(photos[currentIndex].file_path)}" alt="">
               ${photos.length > 1 ? `
                 <button class="photo-viewer-nav photo-viewer-prev" id="${id}-prev"><i class="bi bi-chevron-left"></i></button>
                 <button class="photo-viewer-nav photo-viewer-next" id="${id}-next"><i class="bi bi-chevron-right"></i></button>
@@ -77,7 +78,7 @@ export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged) 
     const caption = document.getElementById(`${id}-caption`);
     const primaryBtn = document.getElementById(`${id}-set-primary`);
     if (img && photos[currentIndex]) {
-      img.src = photos[currentIndex].file_path;
+      img.src = authUrl(photos[currentIndex].file_path);
       const photo = photos[currentIndex];
       const isPrimary = photo.is_primary;
       caption.textContent = `${currentIndex + 1} of ${photos.length}${isPrimary ? '  ·  Profile photo' : ''}`;

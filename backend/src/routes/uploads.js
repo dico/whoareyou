@@ -122,4 +122,48 @@ router.delete('/contacts/:uuid/photos/:photoId', async (req, res, next) => {
   }
 });
 
+// POST /api/posts/:uuid/media — upload media to a post
+router.post('/posts/:uuid/media', upload.array('media', 10), async (req, res, next) => {
+  try {
+    if (!req.files?.length) throw new AppError('No files uploaded', 400);
+
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const [{ maxSort }] = await db('post_media')
+      .where({ post_id: post.id })
+      .max('sort_order as maxSort');
+
+    const results = [];
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      const timestamp = Date.now();
+      const { filePath, thumbnailPath } = await processImage(
+        file.path,
+        `posts/${post.uuid}`,
+        `media_${timestamp}_${i}`
+      );
+
+      const [mediaId] = await db('post_media').insert({
+        post_id: post.id,
+        tenant_id: req.tenantId,
+        file_path: filePath,
+        thumbnail_path: thumbnailPath,
+        file_type: 'image/webp',
+        file_size: file.size,
+        sort_order: (maxSort || 0) + i + 1,
+      });
+
+      results.push({ id: mediaId, file_path: filePath, thumbnail_path: thumbnailPath });
+    }
+
+    res.status(201).json({ media: results });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

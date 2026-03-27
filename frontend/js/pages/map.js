@@ -26,13 +26,23 @@ export async function renderMap() {
     await loadLeaflet();
   }
 
-  // Initialize map
-  map = L.map('map-container').setView([59.9, 10.75], 10); // Default: Oslo area
+  // Restore saved position or use default
+  const saved = JSON.parse(localStorage.getItem('map.view') || 'null');
+  const center = saved ? [saved.lat, saved.lng] : [59.9, 10.75];
+  const zoom = saved ? saved.zoom : 10;
+
+  map = L.map('map-container').setView(center, zoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
   }).addTo(map);
+
+  // Save position on move/zoom
+  map.on('moveend', () => {
+    const c = map.getCenter();
+    localStorage.setItem('map.view', JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() }));
+  });
 
   // Load addresses
   await loadMarkers();
@@ -73,6 +83,7 @@ async function loadMarkers() {
           <span class="text-muted">${[addr.postal_code, addr.city].filter(Boolean).join(' ')}</span>
           <hr style="margin:4px 0">
           ${names}
+          ${addr.address_id ? `<hr style="margin:4px 0"><a href="/addresses/${addr.address_id}" class="map-contact-link map-address-link" data-address-id="${addr.address_id}"><i class="bi bi-house-door"></i> ${t('addresses.viewAddress')}</a>` : ''}
         </div>
       `;
 
@@ -81,8 +92,8 @@ async function loadMarkers() {
         .bindPopup(popup);
     }
 
-    // Fit map to markers
-    if (bounds.length) {
+    // Fit map to markers (only if no saved position)
+    if (bounds.length && !localStorage.getItem('map.view')) {
       map.fitBounds(bounds, { padding: [30, 30] });
     }
 
@@ -91,9 +102,12 @@ async function loadMarkers() {
       document.querySelectorAll('.map-contact-link').forEach((link) => {
         link.addEventListener('click', (e) => {
           e.preventDefault();
-          const uuid = link.dataset.uuid;
           document.getElementById('app-content')?.classList.remove('map-fullwidth');
-          navigate(`/contacts/${uuid}`);
+          if (link.dataset.addressId) {
+            navigate(`/addresses/${link.dataset.addressId}`);
+          } else {
+            navigate(`/contacts/${link.dataset.uuid}`);
+          }
         });
       });
     });

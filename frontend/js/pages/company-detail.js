@@ -1,0 +1,280 @@
+import { api } from '../api/client.js';
+import { navigate } from '../app.js';
+import { t, formatDate } from '../utils/i18n.js';
+import { contactRowHtml } from '../components/contact-row.js';
+import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
+
+export async function renderCompanyDetail(uuid) {
+  const content = document.getElementById('app-content');
+  content.innerHTML = `<div class="page-container"><div class="loading">${t('app.loading')}</div></div>`;
+
+  try {
+    const { company, currentEmployees, previousEmployees } = await api.get(`/companies/${uuid}`);
+
+    content.innerHTML = `
+      <div class="page-container">
+        <div class="page-header">
+          <button class="btn btn-link btn-back" id="btn-back"><i class="bi bi-arrow-left"></i></button>
+          <h2><i class="bi bi-building"></i> ${escapeHtml(company.name)}</h2>
+          <div class="dropdown">
+            <button class="btn btn-link" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+              <li><a class="dropdown-item" href="#" id="btn-edit-company"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item text-danger" href="#" id="btn-delete-company"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="profile-layout">
+          <div class="profile-main">
+            <!-- Current employees -->
+            <div class="detail-card glass-card">
+              <h4>
+                <i class="bi bi-people"></i> ${t('companies.employees')}
+                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-employee" title="${t('common.add')}">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </h4>
+              ${currentEmployees.length ? `
+                <div class="address-residents">
+                  ${currentEmployees.map(e => `
+                    <div class="relationship-row-wrapper" data-link-id="${e.link_id}">
+                      ${contactRowHtml(e, { meta: [e.title, e.start_date ? `${t('addresses.since')} ${formatDate(e.start_date)}` : ''].filter(Boolean).join(' — ') })}
+                      <div class="relationship-actions">
+                        <button type="button" class="btn btn-link btn-sm btn-end-employment" data-link-id="${e.link_id}" title="${t('companies.endEmployment')}"><i class="bi bi-box-arrow-right"></i></button>
+                        <button type="button" class="btn btn-link btn-sm text-danger btn-remove-employee" data-link-id="${e.link_id}" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : `<p class="text-muted small">${t('companies.noEmployees')}</p>`}
+            </div>
+
+            ${previousEmployees.length ? `
+            <div class="detail-card glass-card">
+              <h4><i class="bi bi-clock-history"></i> ${t('companies.previousEmployees')}</h4>
+              <div class="address-residents">
+                ${previousEmployees.map(e =>
+                  contactRowHtml(e, { meta: [e.title, [e.start_date ? formatDate(e.start_date) : '', e.end_date ? formatDate(e.end_date) : ''].filter(Boolean).join(' — ')].filter(Boolean).join(' — ') })
+                ).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+
+          <!-- Sidebar -->
+          <div class="profile-sidebar">
+            <div class="sidebar-card glass-card">
+              <h4><i class="bi bi-building"></i> ${t('companies.info')}</h4>
+              ${company.industry ? `<div class="settings-row"><span class="settings-label">${t('companies.industry')}</span><span>${escapeHtml(company.industry)}</span></div>` : ''}
+              ${company.website ? `<div class="settings-row"><span class="settings-label">${t('companies.website')}</span><a href="${company.website.startsWith('http') ? company.website : 'https://' + company.website}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></div>` : ''}
+              ${company.phone ? `<div class="settings-row"><span class="settings-label">${t('companies.phone')}</span><a href="tel:${company.phone}">${escapeHtml(company.phone)}</a></div>` : ''}
+              ${company.email ? `<div class="settings-row"><span class="settings-label">${t('companies.email')}</span><a href="mailto:${company.email}">${escapeHtml(company.email)}</a></div>` : ''}
+              ${company.notes ? `<p class="text-muted small mt-2">${escapeHtml(company.notes)}</p>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-back').addEventListener('click', () => window.history.back());
+
+    // Add employee
+    document.getElementById('btn-add-employee').addEventListener('click', () => {
+      showAddEmployeeDialog(uuid, () => renderCompanyDetail(uuid));
+    });
+
+    // End employment
+    document.querySelectorAll('.btn-end-employment').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api.put(`/companies/employees/${btn.dataset.linkId}`, { end_date: new Date().toISOString().split('T')[0] });
+        renderCompanyDetail(uuid);
+      });
+    });
+
+    // Remove employee
+    document.querySelectorAll('.btn-remove-employee').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api.delete(`/companies/employees/${btn.dataset.linkId}`);
+        renderCompanyDetail(uuid);
+      });
+    });
+
+    // Edit company
+    document.getElementById('btn-edit-company').addEventListener('click', async (e) => {
+      e.preventDefault();
+      showEditCompanyDialog(uuid, company, () => renderCompanyDetail(uuid));
+    });
+
+    // Delete company
+    document.getElementById('btn-delete-company').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (await confirmDialog(t('companies.deleteConfirm', { name: company.name }), { title: t('common.delete'), confirmText: t('common.delete') })) {
+        await api.delete(`/companies/${uuid}`);
+        navigate('/companies');
+      }
+    });
+
+  } catch (err) {
+    content.innerHTML = `<div class="page-container"><div class="alert alert-danger">${err.message}</div></div>`;
+  }
+}
+
+async function showAddEmployeeDialog(companyUuid, onDone) {
+  const id = 'add-emp-' + Date.now();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${id}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('companies.addEmployee')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="${id}-search-area">
+              <input type="text" class="form-control mb-2" id="${id}-search" placeholder="${t('relationships.searchContact')}" autofocus>
+              <div id="${id}-results" class="contact-search-results"></div>
+            </div>
+            <div id="${id}-selected" class="d-none">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="text-muted small">${t('relationships.contact')}:</span>
+                <strong id="${id}-name"></strong>
+                <button type="button" class="btn btn-link btn-sm p-0" id="${id}-clear"><i class="bi bi-x-lg"></i></button>
+              </div>
+              <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="${id}-title" placeholder="${t('companies.jobTitlePlaceholder')}">
+                <label>${t('companies.jobTitle')}</label>
+              </div>
+              <div class="form-floating">
+                <input type="date" class="form-control" id="${id}-start">
+                <label>${t('relationships.since')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer d-none" id="${id}-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+            <button type="button" class="btn btn-primary btn-sm" id="${id}-submit">${t('companies.addEmployee')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modalEl = document.getElementById(id);
+  const modal = new bootstrap.Modal(modalEl);
+  const searchInput = document.getElementById(`${id}-search`);
+  const resultsEl = document.getElementById(`${id}-results`);
+  let selectedContact = null;
+
+  modalEl.addEventListener('shown.bs.modal', () => searchInput.focus());
+
+  // Search
+  let timeout;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(timeout);
+    const q = searchInput.value.trim();
+    if (q.length < 1) { resultsEl.innerHTML = ''; return; }
+    timeout = setTimeout(async () => {
+      try {
+        const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=8`);
+        resultsEl.innerHTML = data.contacts.map((c, i) =>
+          contactRowHtml(c, { tag: 'div', active: i === 0, meta: c.nickname ? `"${c.nickname}"` : '' })
+        ).join('') || `<p class="text-muted small p-2">${t('common.noResults')}</p>`;
+
+        resultsEl.querySelectorAll('.contact-row').forEach(item => {
+          item.addEventListener('click', () => {
+            selectedContact = { uuid: item.dataset.uuid, first_name: item.dataset.first, last_name: item.dataset.last };
+            document.getElementById(`${id}-name`).textContent = `${selectedContact.first_name} ${selectedContact.last_name}`;
+            document.getElementById(`${id}-selected`).classList.remove('d-none');
+            document.getElementById(`${id}-footer`).classList.remove('d-none');
+            document.getElementById(`${id}-search-area`).classList.add('d-none');
+            document.getElementById(`${id}-title`).focus();
+          });
+        });
+      } catch {}
+    }, 200);
+  });
+
+  // Clear
+  document.getElementById(`${id}-clear`).addEventListener('click', () => {
+    selectedContact = null;
+    document.getElementById(`${id}-selected`).classList.add('d-none');
+    document.getElementById(`${id}-footer`).classList.add('d-none');
+    document.getElementById(`${id}-search-area`).classList.remove('d-none');
+    searchInput.value = '';
+    resultsEl.innerHTML = '';
+    searchInput.focus();
+  });
+
+  // Submit
+  document.getElementById(`${id}-submit`).addEventListener('click', async () => {
+    if (!selectedContact) return;
+    try {
+      await api.post(`/companies/${companyUuid}/employees`, {
+        contact_uuid: selectedContact.uuid,
+        title: document.getElementById(`${id}-title`).value.trim() || undefined,
+        start_date: document.getElementById(`${id}-start`).value || undefined,
+      });
+      modal.hide();
+      if (onDone) onDone();
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+    }
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+}
+
+function showEditCompanyDialog(uuid, company, onDone) {
+  const id = 'edit-co-' + Date.now();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${id}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('common.edit')} — ${escapeHtml(company.name)}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="${id}-form">
+            <div class="modal-body">
+              <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-name" value="${escapeAttr(company.name)}" required><label>${t('companies.name')}</label></div>
+              <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-industry" value="${escapeAttr(company.industry || '')}"><label>${t('companies.industry')}</label></div>
+              <div class="form-floating mb-2"><input type="url" class="form-control" id="${id}-website" value="${escapeAttr(company.website || '')}"><label>${t('companies.website')}</label></div>
+              <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-phone" value="${escapeAttr(company.phone || '')}"><label>${t('companies.phone')}</label></div>
+              <div class="form-floating mb-2"><input type="email" class="form-control" id="${id}-email" value="${escapeAttr(company.email || '')}"><label>${t('companies.email')}</label></div>
+              <div class="form-floating mb-2"><textarea class="form-control" id="${id}-notes" style="height:80px">${escapeHtml(company.notes || '')}</textarea><label>${t('contacts.notes')}</label></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="submit" class="btn btn-primary btn-sm">${t('common.save')}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `);
+  const modalEl = document.getElementById(id);
+  const modal = new bootstrap.Modal(modalEl);
+
+  document.getElementById(`${id}-form`).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await api.put(`/companies/${uuid}`, {
+      name: document.getElementById(`${id}-name`).value,
+      industry: document.getElementById(`${id}-industry`).value || null,
+      website: document.getElementById(`${id}-website`).value || null,
+      phone: document.getElementById(`${id}-phone`).value || null,
+      email: document.getElementById(`${id}-email`).value || null,
+      notes: document.getElementById(`${id}-notes`).value || null,
+    });
+    modal.hide();
+    if (onDone) onDone();
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+}
+
+function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function escapeAttr(str) { return (str || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }

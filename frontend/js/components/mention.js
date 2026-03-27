@@ -125,7 +125,7 @@ export function attachMention(textarea, onTag) {
       last_name: item.dataset.last,
     };
 
-    // Replace @query with name in textarea
+    // Replace @query with name in textarea (no @ prefix — displayed as link in post view)
     const name = `${contact.first_name} ${contact.last_name || ''}`.trim();
     const before = textarea.value.substring(0, mentionStart);
     const after = textarea.value.substring(textarea.selectionStart);

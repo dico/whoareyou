@@ -153,6 +153,58 @@ router.get('/me', authenticate, async (req, res, next) => {
   }
 });
 
+// PUT /api/auth/profile — update user profile
+router.put('/profile', authenticate, async (req, res, next) => {
+  try {
+    const updates = {};
+    if (req.body.first_name !== undefined) updates.first_name = req.body.first_name.trim();
+    if (req.body.last_name !== undefined) updates.last_name = req.body.last_name.trim();
+    if (req.body.email !== undefined) {
+      const email = validateEmail(req.body.email);
+      const existing = await db('users').where({ email }).whereNot({ id: req.user.id }).first();
+      if (existing) throw new AppError('Email already in use', 409);
+      updates.email = email;
+    }
+
+    if (Object.keys(updates).length) {
+      await db('users').where({ id: req.user.id }).update(updates);
+    }
+
+    const user = await db('users')
+      .join('tenants', 'users.tenant_id', 'tenants.id')
+      .where('users.id', req.user.id)
+      .select('users.uuid', 'users.email', 'users.first_name', 'users.last_name',
+        'users.role', 'users.is_system_admin', 'users.language',
+        'tenants.name as tenant_name', 'tenants.uuid as tenant_uuid')
+      .first();
+
+    res.json({ user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/change-password — change password
+router.post('/change-password', authenticate, async (req, res, next) => {
+  try {
+    validateRequired(['current_password', 'new_password'], req.body);
+    validatePassword(req.body.new_password);
+
+    const user = await db('users').where({ id: req.user.id }).first();
+    const valid = await bcrypt.compare(req.body.current_password, user.password_hash);
+    if (!valid) {
+      throw new AppError('Current password is incorrect', 401);
+    }
+
+    const passwordHash = await bcrypt.hash(req.body.new_password, SALT_ROUNDS);
+    await db('users').where({ id: req.user.id }).update({ password_hash: passwordHash });
+
+    res.json({ message: 'Password changed' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /api/auth/language — update user language
 router.patch('/language', authenticate, async (req, res, next) => {
   try {
@@ -223,6 +275,122 @@ router.post('/switch-tenant', authenticate, async (req, res, next) => {
         name: tenant.name,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Tenant member management ──
+
+// GET /api/auth/members — list members in current tenant
+router.get('/members', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
+      throw new AppError('Admin access required', 403);
+    }
+
+    const members = await db('users')
+      .where({ 'users.tenant_id': req.user.tenantId })
+      .leftJoin('contacts', 'users.linked_contact_id', 'contacts.id')
+      .select(
+        'users.uuid', 'users.email', 'users.first_name', 'users.last_name',
+        'users.role', 'users.is_active', 'users.is_system_admin',
+        'users.last_login_at', 'users.created_at',
+        'contacts.uuid as linked_contact_uuid',
+        'contacts.first_name as linked_contact_first_name',
+        'contacts.last_name as linked_contact_last_name'
+      )
+      .orderBy('users.first_name');
+
+    res.json({ members });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/invite — invite new member to tenant
+router.post('/invite', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
+      throw new AppError('Admin access required', 403);
+    }
+
+    validateRequired(['email', 'password', 'first_name', 'last_name'], req.body);
+    const email = validateEmail(req.body.email);
+    validatePassword(req.body.password);
+
+    const existing = await db('users').where({ email }).first();
+    if (existing) throw new AppError('Email already registered', 409);
+
+    const passwordHash = await bcrypt.hash(req.body.password, SALT_ROUNDS);
+    const userUuid = uuidv4();
+
+    const [userId] = await db('users').insert({
+      uuid: userUuid,
+      tenant_id: req.user.tenantId,
+      email,
+      password_hash: passwordHash,
+      first_name: req.body.first_name.trim(),
+      last_name: req.body.last_name.trim(),
+      role: req.body.role === 'admin' ? 'admin' : 'member',
+      language: req.body.language || 'en',
+    });
+
+    const user = await db('users').where({ id: userId }).first();
+
+    res.status(201).json({
+      member: {
+        uuid: user.uuid,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/auth/members/:uuid — update member (role, active, linked contact)
+router.put('/members/:uuid', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
+      throw new AppError('Admin access required', 403);
+    }
+
+    const member = await db('users')
+      .where({ uuid: req.params.uuid, tenant_id: req.user.tenantId })
+      .first();
+    if (!member) throw new AppError('Member not found', 404);
+
+    // Don't allow deactivating yourself
+    if (member.id === req.user.id && req.body.is_active === false) {
+      throw new AppError('Cannot deactivate yourself', 400);
+    }
+
+    const updates = {};
+    if (req.body.role !== undefined) updates.role = req.body.role === 'admin' ? 'admin' : 'member';
+    if (req.body.is_active !== undefined) updates.is_active = !!req.body.is_active;
+
+    // Link to contact
+    if (req.body.linked_contact_uuid !== undefined) {
+      if (req.body.linked_contact_uuid === null) {
+        updates.linked_contact_id = null;
+      } else {
+        const contact = await db('contacts')
+          .where({ uuid: req.body.linked_contact_uuid, tenant_id: req.user.tenantId })
+          .whereNull('deleted_at')
+          .first();
+        if (contact) updates.linked_contact_id = contact.id;
+      }
+    }
+
+    if (Object.keys(updates).length) {
+      await db('users').where({ id: member.id }).update(updates);
+    }
+
+    res.json({ message: 'Member updated' });
   } catch (err) {
     next(err);
   }

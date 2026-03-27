@@ -23,10 +23,13 @@ router.get('/', async (req, res, next) => {
 
     // Search
     if (search) {
+      const like = `%${search}%`;
       query = query.where(function () {
-        this.where('contacts.first_name', 'like', `%${search}%`)
-          .orWhere('contacts.last_name', 'like', `%${search}%`)
-          .orWhere('contacts.nickname', 'like', `%${search}%`);
+        this.where('contacts.first_name', 'like', like)
+          .orWhere('contacts.last_name', 'like', like)
+          .orWhere('contacts.nickname', 'like', like)
+          .orWhere('contacts.how_we_met', 'like', like)
+          .orWhere('contacts.notes', 'like', like);
       });
     }
 
@@ -122,16 +125,18 @@ router.get('/:uuid', async (req, res, next) => {
       db('labels')
         .join('contact_labels', 'labels.id', 'contact_labels.label_id')
         .where('contact_labels.contact_id', contact.id)
-        .select('labels.id', 'labels.name', 'labels.color'),
+        .select('labels.id', 'labels.name', 'labels.color', 'labels.category'),
 
       db('relationships')
         .join('contacts as related', 'relationships.related_contact_id', 'related.id')
         .join('relationship_types', 'relationships.relationship_type_id', 'relationship_types.id')
         .where({ 'relationships.contact_id': contact.id, 'relationships.tenant_id': req.tenantId })
         .select(
+          'relationships.id as relationship_id',
           'related.uuid', 'related.first_name', 'related.last_name',
-          'relationship_types.name as relationship', 'relationship_types.category',
-          'relationships.notes',
+          'relationship_types.name as relationship', 'relationship_types.id as relationship_type_id',
+          'relationship_types.category',
+          'relationships.notes', 'relationships.start_date', 'relationships.end_date',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = related.id AND cp.is_primary = true LIMIT 1) as avatar`)
         )
         // Also get inverse relationships (where this contact is the "related" one)
@@ -141,9 +146,11 @@ router.get('/:uuid', async (req, res, next) => {
             .join('relationship_types', 'relationships.relationship_type_id', 'relationship_types.id')
             .where({ 'relationships.related_contact_id': contact.id, 'relationships.tenant_id': req.tenantId })
             .select(
+              'relationships.id as relationship_id',
               'origin.uuid', 'origin.first_name', 'origin.last_name',
-              'relationship_types.inverse_name as relationship', 'relationship_types.category',
-              'relationships.notes',
+              'relationship_types.inverse_name as relationship', 'relationship_types.id as relationship_type_id',
+              'relationship_types.category',
+              'relationships.notes', 'relationships.start_date', 'relationships.end_date',
               db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = origin.id AND cp.is_primary = true LIMIT 1) as avatar`)
             );
         }),
@@ -178,9 +185,10 @@ router.get('/:uuid', async (req, res, next) => {
         .whereNull('contact_addresses.moved_out_at')
         .select(
           'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
-          'addresses.street', 'contact_addresses.label'
+          'addresses.id as address_id', 'addresses.street', 'contact_addresses.label',
+          db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
         )
-        .groupBy('contacts.id', 'addresses.street', 'contact_addresses.label');
+        .groupBy('contacts.id', 'addresses.id', 'addresses.street', 'contact_addresses.label');
     }
 
     res.json({
@@ -202,6 +210,14 @@ router.get('/:uuid', async (req, res, next) => {
         relationships,
         addresses,
         household,
+        companies: await db('contact_companies')
+          .join('companies', 'contact_companies.company_id', 'companies.id')
+          .where({ 'contact_companies.contact_id': contact.id, 'contact_companies.tenant_id': req.tenantId })
+          .select(
+            'contact_companies.id as link_id', 'contact_companies.title', 'contact_companies.start_date', 'contact_companies.end_date',
+            'companies.uuid as company_uuid', 'companies.name as company_name'
+          )
+          .orderByRaw('contact_companies.end_date IS NOT NULL, contact_companies.start_date DESC'),
       },
     });
   } catch (err) {
@@ -334,6 +350,119 @@ router.delete('/:uuid', async (req, res, next) => {
     await db('contacts').where({ id: contact.id }).update({ deleted_at: db.fn.now() });
 
     res.json({ message: 'Contact deleted' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/contacts/search/global — search across contacts, posts, and fields
+router.get('/search/global', async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) {
+      return res.json({ contacts: [], posts: [], companies: [] });
+    }
+
+    const like = `%${q}%`;
+
+    // Search contacts (name, nickname, notes, how_we_met)
+    const contacts = await db('contacts')
+      .where('contacts.tenant_id', req.tenantId)
+      .whereNull('contacts.deleted_at')
+      .where(function () {
+        this.where('contacts.visibility', 'shared').orWhere('contacts.created_by', req.user.id);
+      })
+      .where(function () {
+        this.where('contacts.first_name', 'like', like)
+          .orWhere('contacts.last_name', 'like', like)
+          .orWhere('contacts.nickname', 'like', like)
+          .orWhere('contacts.how_we_met', 'like', like)
+          .orWhere('contacts.notes', 'like', like)
+          .orWhereIn('contacts.id',
+            db('contact_fields').where('value', 'like', like).select('contact_id')
+          );
+      })
+      .select(
+        'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.nickname',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
+      )
+      .limit(10);
+
+    // Search posts
+    const posts = await db('posts')
+      .where('posts.tenant_id', req.tenantId)
+      .whereNull('posts.deleted_at')
+      .where(function () {
+        this.where('posts.visibility', 'shared').orWhere('posts.created_by', req.user.id);
+      })
+      .where('posts.body', 'like', like)
+      .select('posts.uuid', 'posts.body', 'posts.post_date', 'posts.contact_id')
+      .orderBy('posts.post_date', 'desc')
+      .limit(5);
+
+    // Get about-contact for posts
+    const postContactIds = posts.map(p => p.contact_id).filter(Boolean);
+    let postContacts = new Map();
+    if (postContactIds.length) {
+      const pcs = await db('contacts').whereIn('id', postContactIds).select('id', 'uuid', 'first_name', 'last_name');
+      for (const pc of pcs) postContacts.set(pc.id, pc);
+    }
+
+    const postResults = posts.map(p => {
+      const about = p.contact_id ? postContacts.get(p.contact_id) : null;
+      return {
+        uuid: p.uuid,
+        body: p.body.length > 120 ? p.body.substring(0, 120) + '...' : p.body,
+        post_date: p.post_date,
+        about: about ? { uuid: about.uuid, first_name: about.first_name, last_name: about.last_name } : null,
+      };
+    });
+
+    // Search companies
+    const companies = await db('companies')
+      .where('companies.tenant_id', req.tenantId)
+      .where(function () {
+        this.where('companies.name', 'like', like)
+          .orWhere('companies.industry', 'like', like);
+      })
+      .select('companies.uuid', 'companies.name', 'companies.industry')
+      .limit(5);
+
+    res.json({ contacts, posts: postResults, companies });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/contacts/upcoming-birthdays — next 30 days of birthdays
+router.get('/upcoming-birthdays/list', async (req, res, next) => {
+  try {
+    const contacts = await db('contacts')
+      .where('contacts.tenant_id', req.tenantId)
+      .whereNull('contacts.deleted_at')
+      .whereNotNull('contacts.date_of_birth')
+      .where(function () {
+        this.where('contacts.visibility', 'shared').orWhere('contacts.created_by', req.user.id);
+      })
+      .select(
+        'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.date_of_birth',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
+      );
+
+    const today = new Date();
+    const upcoming = contacts
+      .map(c => {
+        const dob = new Date(c.date_of_birth);
+        const nextBirthday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+        if (nextBirthday < today) nextBirthday.setFullYear(today.getFullYear() + 1);
+        const daysUntil = Math.ceil((nextBirthday - today) / (1000 * 60 * 60 * 24));
+        const age = nextBirthday.getFullYear() - dob.getFullYear();
+        return { ...c, days_until: daysUntil, turning_age: age };
+      })
+      .filter(c => c.days_until <= 30)
+      .sort((a, b) => a.days_until - b.days_until);
+
+    res.json({ contacts: upcoming });
   } catch (err) {
     next(err);
   }

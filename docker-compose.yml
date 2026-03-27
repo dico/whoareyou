@@ -10,6 +10,8 @@ services:
       # Bind mounts for hot-reload during development
       - ./frontend:/app/frontend
       - ./backend/src:/app/backend/src
+      # Nginx config (for development hot-reload)
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
       # Persistent uploads
       - ./uploads:/app/uploads
       # Temp: Monica photos for migration (can be removed after import)

@@ -64,6 +64,31 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// PUT /api/relationships/:id — update relationship
+router.put('/:id', async (req, res, next) => {
+  try {
+    const rel = await db('relationships')
+      .where({ id: req.params.id, tenant_id: req.tenantId })
+      .first();
+
+    if (!rel) throw new AppError('Relationship not found', 404);
+
+    const updates = {};
+    if (req.body.relationship_type_id !== undefined) updates.relationship_type_id = req.body.relationship_type_id;
+    if (req.body.notes !== undefined) updates.notes = req.body.notes || null;
+    if (req.body.start_date !== undefined) updates.start_date = req.body.start_date || null;
+    if (req.body.end_date !== undefined) updates.end_date = req.body.end_date || null;
+
+    if (Object.keys(updates).length) {
+      await db('relationships').where({ id: rel.id }).update(updates);
+    }
+
+    res.json({ message: 'Relationship updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/relationships/:id
 router.delete('/:id', async (req, res, next) => {
   try {

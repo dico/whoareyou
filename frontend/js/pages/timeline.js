@@ -5,6 +5,7 @@ import { attachMention } from '../components/mention.js';
 import { toggleVisibilityBtn } from '../utils/visibility.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
+import { enableDropZone } from '../utils/drop-zone.js';
 
 export async function renderTimeline(contactUuid = null) {
   const content = document.getElementById('app-content');
@@ -26,6 +27,7 @@ export async function renderTimeline(contactUuid = null) {
         <div id="new-post-area" class="d-none">
           <form id="new-post-form" class="glass-card post-compose">
             <textarea id="post-body" class="form-control" placeholder="${t('posts.placeholder')}" rows="3" required></textarea>
+            <div id="post-media-preview" class="post-media-preview d-none"></div>
             <div class="post-compose-bar">
               <div class="visibility-pill" id="post-visibility-btn" data-visibility="shared">
                 <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
@@ -33,6 +35,10 @@ export async function renderTimeline(contactUuid = null) {
               </div>
               <div class="post-compose-actions">
                 <div class="post-tags" id="post-tags"></div>
+                <label class="post-media-btn" id="btn-add-media" title="${t('posts.addMedia')}">
+                  <i class="bi bi-image"></i>
+                  <input type="file" id="post-media-input" multiple accept="image/*" hidden>
+                </label>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-tag-contact">
                   <i class="bi bi-person-plus"></i> ${t('posts.tag')}
                 </button>
@@ -59,6 +65,12 @@ export async function renderTimeline(contactUuid = null) {
         <div class="sidebar-card glass-card">
           <h4><i class="bi bi-person-plus"></i> ${t('sidebar.recentlyAdded')}</h4>
           <div id="recently-added" class="sidebar-contact-list">
+            <div class="loading small">${t('app.loading')}</div>
+          </div>
+        </div>
+        <div class="sidebar-card glass-card">
+          <h4><i class="bi bi-cake2"></i> ${t('sidebar.upcomingBirthdays')}</h4>
+          <div id="upcoming-birthdays" class="sidebar-contact-list">
             <div class="loading small">${t('app.loading')}</div>
           </div>
         </div>
@@ -101,7 +113,7 @@ export async function renderTimeline(contactUuid = null) {
   // Load data
   const loads = [reloadPosts()];
   if (isDashboard) {
-    loads.push(loadRecentlyViewed(), loadRecentlyAdded());
+    loads.push(loadRecentlyViewed(), loadRecentlyAdded(), loadUpcomingBirthdays());
   }
   await Promise.all(loads);
 
@@ -126,6 +138,44 @@ export async function renderTimeline(contactUuid = null) {
     pill.dataset.visibility = clicked.dataset.val;
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
   });
+
+  // Media file handling
+  let pendingMedia = [];
+  document.getElementById('post-media-input').addEventListener('change', (e) => {
+    for (const file of e.target.files) {
+      if (file.type.startsWith('image/')) pendingMedia.push(file);
+    }
+    renderMediaPreview();
+    e.target.value = '';
+  });
+
+  function renderMediaPreview() {
+    const el = document.getElementById('post-media-preview');
+    if (!pendingMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
+    el.classList.remove('d-none');
+    el.innerHTML = pendingMedia.map((f, i) => `
+      <div class="media-preview-item">
+        <img src="${URL.createObjectURL(f)}" alt="">
+        <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+      </div>
+    `).join('');
+    el.querySelectorAll('.media-preview-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pendingMedia.splice(parseInt(btn.dataset.index), 1);
+        renderMediaPreview();
+      });
+    });
+  }
+
+  // Drop zone on compose form (drag images from browser/filesystem, or paste)
+  const composeForm = document.getElementById('new-post-form');
+  if (composeForm) {
+    enableDropZone(composeForm, (files) => {
+      pendingMedia.push(...files);
+      renderMediaPreview();
+      document.getElementById('new-post-area').classList.remove('d-none');
+    });
+  }
 
   // @-mention in compose textarea
   attachMention(document.getElementById('post-body'), (contact) => {
@@ -203,13 +253,22 @@ export async function renderTimeline(contactUuid = null) {
     errorEl.classList.add('d-none');
 
     try {
-      await api.post('/posts', {
+      const { post } = await api.post('/posts', {
         body: document.getElementById('post-body').value,
         contact_uuids: taggedContacts.map((c) => c.uuid),
         visibility: document.getElementById('post-visibility-btn').dataset.visibility,
       });
 
+      // Upload media if any
+      if (pendingMedia.length && post?.uuid) {
+        const formData = new FormData();
+        for (const file of pendingMedia) formData.append('media', file);
+        await api.upload(`/posts/${post.uuid}/media`, formData);
+      }
+
       document.getElementById('post-body').value = '';
+      pendingMedia = [];
+      renderMediaPreview();
       if (!contactUuid) taggedContacts = [];
       renderTags();
       document.getElementById('new-post-area').classList.add('d-none');
@@ -250,6 +309,31 @@ async function loadRecentlyAdded() {
     el.innerHTML = data.contacts.map((c) =>
       contactRowHtml(c, { meta: formatDateShort(c.created_at) })
     ).join('');
+  } catch {
+    el.innerHTML = '';
+  }
+}
+
+async function loadUpcomingBirthdays() {
+  const el = document.getElementById('upcoming-birthdays');
+  if (!el) return;
+
+  try {
+    const data = await api.get('/contacts/upcoming-birthdays/list');
+
+    if (data.contacts.length === 0) {
+      el.innerHTML = `<p class="text-muted small">${t('sidebar.noBirthdays')}</p>`;
+      return;
+    }
+
+    el.innerHTML = data.contacts.map((c) => {
+      const meta = c.days_until === 0
+        ? `<strong>${t('sidebar.today')}</strong> — ${t('sidebar.turnsAge', { age: c.turning_age })}`
+        : c.days_until === 1
+          ? `${t('sidebar.tomorrow')} — ${t('sidebar.turnsAge', { age: c.turning_age })}`
+          : `${t('sidebar.inDays', { days: c.days_until })} — ${t('sidebar.turnsAge', { age: c.turning_age })}`;
+      return contactRowHtml(c, { meta });
+    }).join('');
   } catch {
     el.innerHTML = '';
   }

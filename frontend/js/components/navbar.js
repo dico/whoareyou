@@ -12,7 +12,7 @@ export function renderNavbar() {
   nav.innerHTML = `
     <div class="navbar-inner">
       <a href="/" data-link class="navbar-brand">
-        <i class="bi bi-people-fill"></i>
+        <img src="/img/logo-v3-people-circle.svg" alt="WhoareYou" class="navbar-logo">
         <span>WhoareYou</span>
       </a>
 
@@ -35,12 +35,28 @@ export function renderNavbar() {
           <i class="bi bi-geo-alt"></i>
           <span>${t('nav.map')}</span>
         </a>
+        <a href="/companies" data-link class="nav-link">
+          <i class="bi bi-building"></i>
+          <span>${t('nav.companies')}</span>
+        </a>
       </div>
 
       <div class="navbar-end">
-        <button class="nav-link" id="btn-notifications" title="${t('nav.notifications')}">
-          <i class="bi bi-bell"></i>
-        </button>
+        <div class="dropdown">
+          <button class="nav-link notification-bell" id="btn-notifications" data-bs-toggle="dropdown" title="${t('nav.notifications')}">
+            <i class="bi bi-bell"></i>
+            <span class="notification-badge d-none" id="notification-count"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end notification-dropdown" id="notification-dropdown">
+            <div class="notification-header">
+              <strong>${t('nav.notifications')}</strong>
+              <button class="btn btn-link btn-sm" id="btn-mark-all-read">${t('notifications.markAllRead')}</button>
+            </div>
+            <div id="notification-list" class="notification-list">
+              <div class="loading small p-3">${t('app.loading')}</div>
+            </div>
+          </div>
+        </div>
 
         <div class="dropdown">
           <button class="nav-link nav-user" data-bs-toggle="dropdown">
@@ -68,6 +84,84 @@ export function renderNavbar() {
     state.user = null;
     navigate('/login');
   });
+
+  // Notifications
+  loadNotifications();
+
+  // Generate notifications on load (checks for today's birthdays/reminders)
+  api.post('/notifications/generate', {}).catch(() => {});
+
+  document.getElementById('btn-notifications')?.addEventListener('show.bs.dropdown', () => {
+    loadNotifications();
+  });
+
+  document.getElementById('btn-mark-all-read')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await api.post('/notifications/mark-read', {});
+    loadNotifications();
+  });
+
+  async function loadNotifications() {
+    try {
+      const { notifications, unread_count } = await api.get('/notifications?limit=15');
+      const badge = document.getElementById('notification-count');
+      const list = document.getElementById('notification-list');
+
+      if (unread_count > 0) {
+        badge.textContent = unread_count > 9 ? '9+' : unread_count;
+        badge.classList.remove('d-none');
+      } else {
+        badge.classList.add('d-none');
+      }
+
+      if (!notifications.length) {
+        list.innerHTML = `<div class="p-3 text-muted small text-center">${t('notifications.empty')}</div>`;
+        return;
+      }
+
+      list.innerHTML = notifications.map(n => {
+        const icon = n.type === 'birthday' ? 'cake2' : n.type === 'anniversary' ? 'calendar-heart' : n.type === 'reminder' ? 'bell' : 'info-circle';
+        let title = n.title;
+        if (n.type === 'birthday') {
+          title = t('notifications.birthday', { name: n.title });
+        } else if (n.type === 'anniversary') {
+          const parts = (n.body || '').split('|');
+          const eventType = parts[1] || '';
+          const years = parts[2] || '';
+          title = t('notifications.anniversary', { name: n.title, event: t('lifeEvents.types.' + eventType), years });
+        }
+        return `
+        <a href="${n.link || '#'}" data-link class="notification-item ${n.is_read ? 'read' : ''}" data-id="${n.id}">
+          <div class="notification-icon">
+            <i class="bi bi-${icon}"></i>
+          </div>
+          <div class="notification-content">
+            <div class="notification-title">${title}</div>
+            <div class="notification-time">${formatTimeAgo(n.created_at)}</div>
+          </div>
+          ${!n.is_read ? '<span class="notification-dot"></span>' : ''}
+        </a>`;
+      }).join('');
+
+      // Mark as read on click
+      list.querySelectorAll('.notification-item:not(.read)').forEach(item => {
+        item.addEventListener('click', () => {
+          api.post('/notifications/mark-read', { ids: [parseInt(item.dataset.id)] }).catch(() => {});
+        });
+      });
+    } catch {}
+  }
+
+  function formatTimeAgo(dateStr) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return t('notifications.justNow');
+    if (mins < 60) return t('notifications.minutesAgo', { n: mins });
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t('notifications.hoursAgo', { n: hours });
+    const days = Math.floor(hours / 24);
+    return t('notifications.daysAgo', { n: days });
+  }
 
   // Search
   const searchInput = document.getElementById('navbar-search');
@@ -129,21 +223,61 @@ export function renderNavbar() {
 
   async function loadSearchResults(q) {
     try {
-      const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=8`);
+      const data = await api.get(`/contacts/search/global?q=${encodeURIComponent(q)}`);
 
-      if (data.contacts.length === 0) {
+      if (!data.contacts.length && !data.posts.length && !data.companies?.length) {
         searchResults.innerHTML = `<div class="navbar-search-empty">${t('common.noResults')}</div>`;
         searchResults.classList.remove('d-none');
         return;
       }
 
-      searchResults.innerHTML = data.contacts.map((c, i) =>
-        contactRowHtml(c, {
-          tag: 'a',
-          active: i === 0,
-          meta: c.nickname ? `"${c.nickname}"` : '',
-        })
-      ).join('');
+      let html = '';
+
+      // Contacts
+      if (data.contacts.length) {
+        html += `<div class="search-section-label">${t('nav.contacts')}</div>`;
+        html += data.contacts.map((c, i) =>
+          contactRowHtml(c, {
+            tag: 'a',
+            active: i === 0,
+            meta: c.nickname ? `"${c.nickname}"` : '',
+          })
+        ).join('');
+      }
+
+      // Posts
+      if (data.posts.length) {
+        html += `<div class="search-section-label">${t('nav.timeline')}</div>`;
+        html += data.posts.map(p => `
+          <a class="contact-row search-post-result" href="${p.about ? `/contacts/${p.about.uuid}?post=${p.uuid}` : `/timeline?post=${p.uuid}`}" data-link data-post-uuid="${p.uuid}">
+            <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
+              <i class="bi bi-journal-text" style="font-size:0.8rem"></i>
+            </div>
+            <div class="contact-row-info">
+              <div class="contact-row-name">${escapeSearchHtml(p.body)}</div>
+              <div class="contact-row-meta">${p.about ? p.about.first_name + ' ' + (p.about.last_name || '') : ''}</div>
+            </div>
+          </a>
+        `).join('');
+      }
+
+      // Companies
+      if (data.companies?.length) {
+        html += `<div class="search-section-label">${t('nav.companies')}</div>`;
+        html += data.companies.map(c => `
+          <a class="contact-row" href="/companies/${c.uuid}" data-link>
+            <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
+              <i class="bi bi-building" style="font-size:0.8rem"></i>
+            </div>
+            <div class="contact-row-info">
+              <div class="contact-row-name">${escapeSearchHtml(c.name)}</div>
+              ${c.industry ? `<div class="contact-row-meta">${escapeSearchHtml(c.industry)}</div>` : ''}
+            </div>
+          </a>
+        `).join('');
+      }
+
+      searchResults.innerHTML = html;
       searchResults.classList.remove('d-none');
 
       searchResults.querySelectorAll('.contact-row').forEach((item) => {
@@ -151,11 +285,21 @@ export function renderNavbar() {
           e.preventDefault();
           searchInput.value = '';
           searchResults.classList.add('d-none');
-          navigate(`/contacts/${item.dataset.uuid}`);
+          if (item.dataset.uuid) {
+            navigate(`/contacts/${item.dataset.uuid}`);
+          } else if (item.getAttribute('href')) {
+            navigate(item.getAttribute('href'));
+          }
         });
       });
     } catch {
       searchResults.classList.add('d-none');
     }
+  }
+
+  function escapeSearchHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 }

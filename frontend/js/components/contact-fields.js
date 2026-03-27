@@ -33,7 +33,7 @@ export async function renderContactFields(containerId, contactUuid, fields) {
     </h4>
     ${fields.length ? `
       <div class="detail-fields" id="fields-list">
-        ${fields.map(f => renderFieldRow(f)).join('')}
+        ${renderGroupedFields(fields)}
       </div>
     ` : `
       <div class="detail-fields" id="fields-list">
@@ -71,13 +71,16 @@ export async function renderContactFields(containerId, contactUuid, fields) {
         label: label || undefined,
       });
 
-      // Add to list
+      // Re-render grouped list with new field
       const list = el.querySelector('#fields-list');
-      const empty = list.querySelector('#fields-empty');
-      if (empty) empty.remove();
-
-      list.insertAdjacentHTML('beforeend', renderFieldRow(field));
-      attachFieldHandlers(list.lastElementChild, contactUuid);
+      const existing = list.querySelectorAll('.detail-field:not(.editing)');
+      const allFields = [];
+      existing.forEach(row => {
+        allFields.push({ id: row.dataset.fieldId, type: row.dataset.type, value: row.dataset.value, label: row.dataset.label, icon: row.querySelector('i')?.className });
+      });
+      allFields.push(field);
+      list.innerHTML = renderGroupedFields(allFields);
+      list.querySelectorAll('.detail-field').forEach(row => attachFieldHandlers(row, contactUuid));
 
       // Reset form
       form.querySelector('.field-value-input').value = '';
@@ -100,19 +103,52 @@ export async function renderContactFields(containerId, contactUuid, fields) {
 }
 
 const SOCIAL_TYPES = ['facebook', 'instagram', 'linkedin', 'x', 'snapchat', 'youtube', 'tiktok'];
+const CONTACT_TYPES = ['phone', 'email'];
+const WEB_TYPES = ['website'];
+
+// Group fields by category for display
+function groupFields(fields) {
+  const groups = [];
+  const contact = fields.filter(f => CONTACT_TYPES.includes(f.type));
+  const web = fields.filter(f => WEB_TYPES.includes(f.type));
+  const social = fields.filter(f => SOCIAL_TYPES.includes(f.type));
+  const other = fields.filter(f => !CONTACT_TYPES.includes(f.type) && !WEB_TYPES.includes(f.type) && !SOCIAL_TYPES.includes(f.type));
+
+  if (contact.length) groups.push({ fields: contact });
+  if (web.length) groups.push({ fields: web });
+  if (social.length) groups.push({ fields: social });
+  if (other.length) groups.push({ fields: other });
+  return groups;
+}
+
+function renderGroupedFields(fields) {
+  const groups = groupFields(fields);
+  return groups.map((group, i) => `
+    <div class="field-group${i > 0 ? ' field-group-separated' : ''}">
+      ${group.fields.map(f => renderFieldRow(f)).join('')}
+    </div>
+  `).join('');
+}
 
 function renderFieldRow(f) {
   const isSocial = SOCIAL_TYPES.includes(f.type);
+  const isWebsite = f.type === 'website';
   const displayValue = isSocial ? formatSocialValue(f.value, f.type) : f.value;
   const href = buildFieldHref(f);
 
+  // For websites: show label if available, otherwise show domain
+  const websiteDisplay = isWebsite
+    ? (f.label || extractDomain(f.value))
+    : null;
+
   return `
-    <div class="detail-field ${isSocial ? 'field-social' : ''}" data-field-id="${f.id}" data-type="${f.type || ''}" data-value="${escapeAttr(f.value)}" data-label="${escapeAttr(f.label || '')}">
+    <div class="detail-field ${isSocial || isWebsite ? 'field-social' : ''}" data-field-id="${f.id}" data-type="${f.type || ''}" data-value="${escapeAttr(f.value)}" data-label="${escapeAttr(f.label || '')}">
       <a href="${href}" target="_blank" rel="noopener" class="field-link" title="${escapeAttr(f.value)}">
         <i class="${f.icon || 'bi bi-info-circle'}"></i>
         ${isSocial ? `<span class="field-social-name">${escapeHtml(displayValue)}</span>` : ''}
+        ${isWebsite ? `<span class="field-social-name">${escapeHtml(websiteDisplay)}</span>` : ''}
       </a>
-      ${!isSocial ? `
+      ${!isSocial && !isWebsite ? `
       <div class="field-content">
         <a href="${href}" target="_blank" rel="noopener">${escapeHtml(f.value)}</a>
         ${f.label ? `<span class="text-muted small">${escapeHtml(f.label)}</span>` : ''}
@@ -211,6 +247,15 @@ function attachFieldHandlers(row, contactUuid) {
       row.classList.remove('d-none');
     });
   });
+}
+
+function extractDomain(url) {
+  try {
+    const u = new URL(url.startsWith('http') ? url : 'https://' + url);
+    return u.hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
 
 function formatSocialValue(value, type) {

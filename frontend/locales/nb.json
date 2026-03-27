@@ -12,7 +12,8 @@
     "settings": "Innstillinger",
     "systemAdmin": "Systemadmin",
     "logout": "Logg ut",
-    "searchPlaceholder": "Søk kontakter..."
+    "companies": "Bedrifter",
+    "searchPlaceholder": "Søk..."
   },
   "auth": {
     "login": "Logg inn",
@@ -54,7 +55,8 @@
     "deleteContact": "Slett kontakt",
     "editContact": "Rediger kontakt",
     "addToFavorites": "Legg til favoritter",
-    "removeFromFavorites": "Fjern fra favoritter"
+    "removeFromFavorites": "Fjern fra favoritter",
+    "years": "år"
   },
   "posts": {
     "title": "Innlegg",
@@ -69,7 +71,8 @@
     "makeShared": "Gjør delt",
     "makePrivate": "Gjør privat",
     "tag": "Tagg",
-    "tagContact": "Tagg kontakt"
+    "tagContact": "Tagg kontakt",
+    "addMedia": "Legg til bilder"
   },
   "visibility": {
     "shared": "Delt",
@@ -102,6 +105,7 @@
     "searchContact": "Søk kontakt...",
     "contact": "Kontakt",
     "change": "Endre",
+    "deleteConfirm": "Fjerne denne relasjonen?",
     "types": {
       "parent": "Forelder",
       "child": "Barn",
@@ -117,6 +121,8 @@
       "godparent": "Fadder",
       "godchild": "Gudbarn",
       "partner": "Partner",
+      "boyfriend_girlfriend": "Kjæreste",
+      "cohabitant": "Samboer",
       "in-law": "Sviger",
       "friend": "Venn",
       "neighbor": "Nabo",
@@ -146,7 +152,28 @@
     "label": "Etikett (Hjem, Jobb...)",
     "defaultLabel": "Hjem",
     "previous": "Tidligere",
-    "noResults": "Ingen adresser funnet"
+    "noResults": "Ingen adresser funnet",
+    "removeConfirm": "Fjerne denne adressen helt? Historikk vil gå tapt.",
+    "moveOut": "Flyttet ut",
+    "moveOutConfirm": "Markere som flyttet ut? Adressen beholdes som historikk.",
+    "viewAddress": "Se adresse",
+    "currentResidents": "Nåværende beboere",
+    "previousResidents": "Tidligere beboere",
+    "noCurrentResidents": "Ingen nåværende beboere",
+    "since": "Siden",
+    "moveBackIn": "Angre utflytting",
+    "mergeDuplicates": "Slå sammen duplikate adresser",
+    "noDuplicates": "Ingen duplikate adresser funnet",
+    "duplicatesFound": "{count} duplikatgrupper funnet",
+    "merge": "Slå sammen",
+    "mergeAll": "Slå sammen alle",
+    "mergeAllConfirm": "Slå sammen alle {count} duplikatgrupper? Beholder beste adresse og flytter alle kontakter.",
+    "mergeComplete": "{count} grupper slått sammen.",
+    "shareAddress": "Del adresse",
+    "noAddressToShare": "Denne kontakten har ingen adresser å dele.",
+    "addressShared": "Adresse delt med {name}.",
+    "chooseAddress": "Velg adresse",
+    "addResident": "Legg til beboer"
   },
   "household": {
     "title": "Husstand"
@@ -163,14 +190,37 @@
     "profilePhoto": "Profilbilde"
   },
   "labels": {
-    "title": "Merkelapper"
+    "title": "Merkelapper",
+    "noLabels": "Ingen merkelapper ennå",
+    "choose": "Velg merkelapp...",
+    "newLabel": "Ny merkelapp",
+    "manage": "Administrer merkelapper",
+    "existing": "Eksisterende",
+    "createNew": "Opprett ny",
+    "color": "Farge",
+    "selectAll": "Velg alle",
+    "selectNone": "Velg ingen",
+    "selectLabel": "Velg en merkelapp for å se kontakter",
+    "noContacts": "Ingen kontakter med denne merkelappen",
+    "moveRight": "Flytt valgte til høyre",
+    "moveLeft": "Flytt valgte til venstre",
+    "copyRight": "Kopier valgte til høyre",
+    "copyLeft": "Kopier valgte til venstre",
+    "move": "Flytt",
+    "copy": "Kopier"
   },
   "sidebar": {
     "howWeMet": "Hvordan vi møttes",
     "notes": "Notater",
     "recentlyViewed": "Nylig vist",
     "recentlyAdded": "Nylig lagt til",
-    "noContactsViewed": "Ingen kontakter vist ennå"
+    "noContactsViewed": "Ingen kontakter vist ennå",
+    "upcomingBirthdays": "Kommende bursdager",
+    "noBirthdays": "Ingen bursdager de neste 30 dagene",
+    "today": "I dag",
+    "tomorrow": "I morgen",
+    "inDays": "Om {days} dager",
+    "turnsAge": "fyller {age}"
   },
   "settings": {
     "title": "Innstillinger",
@@ -185,7 +235,12 @@
     "systemAdmin": "Systemadministrasjon",
     "systemAdminDesc": "Du er systemadministrator. Du kan administrere alle husstander.",
     "manageTenants": "Administrer husstander",
-    "language": "Språk"
+    "language": "Språk",
+    "editProfile": "Rediger profil",
+    "changePassword": "Bytt passord",
+    "currentPassword": "Nåværende passord",
+    "newPassword": "Nytt passord (min 8 tegn)",
+    "passwordChanged": "Passord endret."
   },
   "admin": {
     "accessRequired": "Administratortilgang kreves",
@@ -204,7 +259,82 @@
     "invite": "Inviter",
     "comingSoon": "Kommer snart",
     "plannedFeatures": "Planlagte funksjoner",
-    "memberListNote": "Full medlemsliste krever et eget API-endepunkt (planlagt)."
+    "memberListNote": "Full medlemsliste krever et eget API-endepunkt (planlagt).",
+    "emailConfig": "E-postvarsler",
+    "emailConfigDesc": "Konfigurer SMTP for å aktivere e-postpåminnelser og varsler.",
+    "emailStatus": "Status",
+    "notConfigured": "Ikke konfigurert",
+    "emailConfigNote": "Støtte for e-postvarsler er planlagt. Når konfigurert, vil bursdagspåminnelser og egne påminnelser leveres via e-post.",
+    "inviteMember": "Inviter medlem",
+    "tempPassword": "Midlertidig passord",
+    "roleMember": "Medlem",
+    "roleAdmin": "Administrator",
+    "inactive": "Inaktiv",
+    "deactivate": "Deaktiver",
+    "activate": "Aktiver",
+    "deactivateConfirm": "Deaktivere {name}? De vil ikke lenger kunne logge inn.",
+    "promoteToAdmin": "Forfrem til administrator",
+    "demoteToMember": "Nedgrader til medlem",
+    "linkContact": "Koble til kontakt"
+  },
+  "lifeEvents": {
+    "title": "Livshendelser",
+    "add": "Legg til livshendelse",
+    "noEvents": "Ingen livshendelser ennå",
+    "eventType": "Hendelsestype",
+    "date": "Dato",
+    "description": "Beskrivelse (valgfri)",
+    "types": {
+      "married": "Gift",
+      "engaged": "Forlovet",
+      "child_born": "Fikk barn",
+      "moved": "Flyttet",
+      "new_job": "Ny jobb",
+      "retired": "Pensjonert",
+      "graduated": "Utdannet",
+      "passed_away": "Gikk bort",
+      "divorced": "Skilt",
+      "other": "Annet"
+    },
+    "remindAnnually": "Påminn meg hvert år",
+    "linkedContacts": "Relaterte personer",
+    "linkContact": "Koble kontakt"
+  },
+  "companies": {
+    "title": "Bedrifter",
+    "newCompany": "Ny bedrift",
+    "name": "Bedriftsnavn",
+    "industry": "Bransje",
+    "website": "Nettside",
+    "phone": "Telefon",
+    "email": "E-post",
+    "noCompanies": "Ingen bedrifter ennå",
+    "employees": "Ansatte",
+    "noEmployees": "Ingen ansatte",
+    "previousEmployees": "Tidligere ansatte",
+    "addEmployee": "Legg til ansatt",
+    "endEmployment": "Avslutt ansettelse",
+    "deleteConfirm": "Slette {name}? Alle ansatt-koblinger fjernes.",
+    "jobTitle": "Stillingstittel",
+    "jobTitlePlaceholder": "f.eks. Utvikler, Leder...",
+    "info": "Bedriftsinfo"
+  },
+  "reminders": {
+    "title": "Påminnelser",
+    "placeholder": "Hva skal huskes...",
+    "recurring": "Årlig",
+    "noReminders": "Ingen påminnelser",
+    "complete": "Merk som utført"
+  },
+  "notifications": {
+    "markAllRead": "Merk alle som lest",
+    "empty": "Ingen varsler",
+    "birthday": "Gratulér {name} med dagen!",
+    "anniversary": "{name} — {event} ({years} år)",
+    "justNow": "Akkurat nå",
+    "minutesAgo": "{n}m siden",
+    "hoursAgo": "{n}t siden",
+    "daysAgo": "{n}d siden"
   },
   "common": {
     "save": "Lagre",
@@ -218,6 +348,11 @@
     "search": "Søk...",
     "noResults": "Ingen resultater",
     "private": "Privat"
+  },
+  "cropper": {
+    "title": "Beskjær bilde",
+    "save": "Beskjær og lagre",
+    "skipCrop": "Last opp original"
   },
   "fieldTypes": {
     "phone": "Telefon",

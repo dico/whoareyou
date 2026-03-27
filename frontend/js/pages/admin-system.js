@@ -26,6 +26,16 @@ export async function renderSystemAdmin() {
           <div class="loading">${t('admin.loadingTenants')}</div>
         </div>
       </div>
+
+      <div class="settings-section glass-card">
+        <h4><i class="bi bi-envelope"></i> ${t('admin.emailConfig')}</h4>
+        <p class="text-muted small">${t('admin.emailConfigDesc')}</p>
+        <div class="settings-row">
+          <span class="settings-label">${t('admin.emailStatus')}</span>
+          <span class="badge bg-secondary">${t('admin.notConfigured')}</span>
+        </div>
+        <p class="text-muted small mt-2"><i class="bi bi-info-circle"></i> ${t('admin.emailConfigNote')}</p>
+      </div>
     </div>
   `;
 

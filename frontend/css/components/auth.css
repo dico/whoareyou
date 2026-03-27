@@ -17,13 +17,16 @@
   margin-bottom: var(--space-lg);
 }
 
+.auth-logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: var(--space-md);
+  border-radius: 20px;
+}
+
 .auth-header h1 {
   font-size: var(--font-size-2xl);
   margin-bottom: var(--space-xs);
-}
-
-.auth-header h1 i {
-  color: var(--color-primary);
 }
 
 .auth-header p {

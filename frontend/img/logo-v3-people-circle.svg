@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="50%" style="stop-color:#a855f7"/>
+      <stop offset="100%" style="stop-color:#ec4899"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="256" cy="256" r="240" fill="url(#bg3)"/>
+
+  <!-- Center person (front, larger) -->
+  <circle cx="256" cy="195" r="46" fill="white"/>
+  <path d="M 176 320 C 176 272 206 252 256 252 C 306 252 336 272 336 320 L 336 340 C 336 352 328 360 316 360 L 196 360 C 184 360 176 352 176 340 Z" fill="white"/>
+
+  <!-- Left person (behind, slightly left) -->
+  <circle cx="160" cy="185" r="34" fill="rgba(255,255,255,0.6)"/>
+  <path d="M 100 290 C 100 255 122 240 160 240 C 198 240 220 255 220 290 L 220 305 C 220 314 214 320 205 320 L 115 320 C 106 320 100 314 100 305 Z" fill="rgba(255,255,255,0.6)"/>
+
+  <!-- Right person (behind, slightly right) -->
+  <circle cx="352" cy="185" r="34" fill="rgba(255,255,255,0.6)"/>
+  <path d="M 292 290 C 292 255 314 240 352 240 C 390 240 412 255 412 290 L 412 305 C 412 314 406 320 397 320 L 307 320 C 298 320 292 314 292 305 Z" fill="rgba(255,255,255,0.6)"/>
+</svg>

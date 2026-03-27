@@ -14,8 +14,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  position: sticky;
-  top: 68px;
 }
 
 /* Sidebar contact list */
@@ -205,6 +203,11 @@
   right: var(--space-sm);
 }
 
+/* Lift entire post above siblings when dropdown is open */
+.timeline-post:has(.dropdown-menu.show) {
+  z-index: 10;
+}
+
 .post-date {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -215,6 +218,12 @@
   margin-bottom: var(--space-sm);
 }
 
+/* @mention links in post body */
+.mention-link {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
 .post-contacts {
   display: flex;
   flex-wrap: wrap;
@@ -222,26 +231,144 @@
   margin-top: var(--space-sm);
 }
 
-.post-contacts .badge {
-  font-weight: var(--font-weight-normal);
-  cursor: pointer;
+/* Contact chip — pill with avatar */
+.contact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  transition: all var(--transition-fast);
 }
 
-.post-contacts .badge:hover {
-  opacity: 0.8;
+.contact-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.contact-chip-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.contact-chip-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .post-media {
-  display: flex;
-  gap: var(--space-sm);
+  display: grid;
+  gap: var(--space-xs);
   margin-top: var(--space-sm);
-  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.post-media-grid-1 { grid-template-columns: 1fr; }
+.post-media-grid-2 { grid-template-columns: 1fr 1fr; }
+.post-media-grid-3 { grid-template-columns: 1fr 1fr; }
+.post-media-grid-4 { grid-template-columns: 1fr 1fr; }
+
+.post-media-item {
+  display: block;
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.post-media-grid-1 .post-media-item {
+  aspect-ratio: 16/9;
 }
 
 .post-media img {
-  height: 120px;
-  border-radius: var(--radius-sm);
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  transition: transform var(--transition-fast);
+}
+
+.post-media img:hover {
+  transform: scale(1.03);
+}
+
+/* Media preview in compose */
+.post-media-preview {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 0;
+  overflow-x: auto;
+}
+
+.media-preview-item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.media-preview-item img {
+  height: 64px;
+  width: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+/* Life event card in timeline */
+.life-event-card { border-left: 3px solid var(--color-primary); }
+.life-event-card-inner { display: flex; align-items: center; gap: var(--space-md); }
+.life-event-card-icon { font-size: 1.5rem; flex-shrink: 0; }
+.life-event-card-content strong { font-size: var(--font-size-sm); }
+.life-event-card-content .post-date { margin-left: var(--space-sm); }
+
+/* Post highlight (from search navigation) */
+.post-highlight {
+  animation: postHighlight 3s ease;
+}
+
+@keyframes postHighlight {
+  0% { box-shadow: 0 0 0 3px var(--color-primary); }
+  100% { box-shadow: none; }
+}
+
+/* Drop zone visual feedback */
+.post-compose.drop-active,
+.post-compose-inline.drop-active {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  background: rgba(0, 122, 255, 0.04);
+}
+
+.media-preview-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  color: #fff;
+  border: none;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
 }
 
 /* Tag modal */

@@ -95,6 +95,10 @@
 | Visibility toggle | `js/utils/visibility.js`, `css/base.css` | Shared/private pill-switch i post-compose |
 | Contact row | `js/components/contact-row.js`, `css/base.css` | Standardisert kontakt-rad: avatar + navn + meta. Brukes i sidebar, navbar-søk, kontaktsøk-dialog, relasjoner, household |
 | Visibility pill | `css/base.css` | Shared/Private pill-switch i post-compose |
+| Subtle link | `css/base.css` (.subtle-link) | Dempet lenke uten understrek — hover gir primærfarge. Brukes for sekundære navigasjonslenker (f.eks. "Se adresse") |
+| Media button | `css/base.css` (.post-media-btn) | Ikon-knapp uten border — subtil hover med bakgrunn. Brukes for bilde-upload o.l. i compose |
+| Contact fields | `js/components/contact-fields.js`, `css/components/card.css` | Kontaktfelt gruppert etter kategori (kontakt, nett, sosiale medier) med luft mellom grupper (ingen border). Nettsider vises som ikon + label/domene |
+| Contact chip | `css/components/timeline.css` (.contact-chip) | Pill med avatar + navn for tagging av kontakter i poster. Hvit bakgrunn, tynn border, avrundede ender, hover gir primærfarge. Brukes i post-tags |
 
 ### i18n-arkitektur
 
@@ -154,15 +158,18 @@ css/
 1. **Ingen `alert()`, `confirm()` eller `prompt()`** — bruk dialoger fra `dialogs.js`
 2. **Ingen inline styles** — bruk CSS-klasser og custom properties
 3. **Modaler er hvite** — `background: var(--color-surface)` (backdrop gjør glass grått)
-4. **Dropdowns/søkeresultater** — `rgba(255, 255, 255, 0.95)` for lesbarhet
+4. **Dropdowns/søkeresultater** — solid hvit bakgrunn (`var(--color-surface)`), aldri gjennomsiktig. Truncer lange tekster.
 5. **Keyboard-navigasjon** — alle søk/dropdowns støtter piltaster + Enter + Escape
 6. **Universell utforming** — nok kontrast i overlays, fokus-synlighet
-7. **Konsistente action-knapper** — bruk `.edit-action` / `.edit-action-primary` i edit-modus, ikke blandede Bootstrap-knapper
+7. **Konsistente action-knapper** — bruk `.edit-action` / `.edit-action-primary` kun i inline edit-modus (f.eks. post-redigering). I modaler: bruk standard Bootstrap-knapper (`btn btn-outline-secondary btn-sm` for avbryt, `btn btn-primary btn-sm` for primærhandling)
 8. **Avatar-interaksjon** — hover-overlay (ikke separat kamera-knapp), drag-and-drop for upload
 9. **Post-typer** — profil-poster viser kontakt med avatar øverst, aktivitets-poster viser dato + tags
 10. **Label-verdi-par** — label og verdi plasseres nær hverandre med fast gap, aldri `justify-content: space-between` over full bredde. Label har `min-width` for justering, verdien følger rett etter.
-11. **Dropdowns** — solid hvit bakgrunn (`var(--color-surface)`), ingen glass-effekt. WCAG-krav til kontrast.
+11. **Dropdowns** — alle dropdown/søkeresultater bruker `background: var(--color-surface)` (solid hvit), ingen glass/transparency. Gjelder `.glass-dropdown`, `.navbar-search-results`, `.notification-dropdown`. Søkeresultater trunceres (max 2 linjer).
 12. **Kontakt-rader** — alle lister/søk som viser kontakter bruker `.contact-row`-komponenten (`contact-row.js` + `contactRowHtml()`). 32px avatar, navn, valgfri meta-tekst under. Samme hover-effekt (`rgba(0,0,0,0.04)`) overalt. Aldri lag egne avatar+navn-strukturer — bruk denne komponenten.
+13. **Kontaktliste** — individuelle kort (`.contact-card`) i grid-layout, ikke én sammenhengende liste. Hvert kort har avatar, navn, meta, og visibility/favoritt-indikatorer.
+14. **Visibility-pill** — bruk pill-toggle (`visibility-pill`) overalt for shared/private-valg, aldri vanlig knapp. Konsistent design: shared (blå aktiv) | private.
+15. **Bilde-viewer** — alle bilder (profilbilder og post-bilder) åpnes i samme lightbox-design: svart bakgrunn, hvit footer, pil-navigasjon, tastaturstøtte. Aldri åpne bilder i ny tab. Gjenbruk `photo-viewer`-CSS-klassene.
 
 ## Navigasjonsstruktur (implementert)
 

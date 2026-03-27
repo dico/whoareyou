@@ -9,6 +9,8 @@ import { toggleVisibilityBtn, visibilityToggleHtml } from '../utils/visibility.j
 import { renderContactFields } from '../components/contact-fields.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate, formatDateLong } from '../utils/i18n.js';
+import { authUrl } from '../utils/auth-url.js';
+import { enableDropZone } from '../utils/drop-zone.js';
 
 export async function renderContactDetail(uuid) {
   const content = document.getElementById('app-content');
@@ -46,7 +48,7 @@ export async function renderContactDetail(uuid) {
               <div class="detail-profile">
                 <div class="detail-avatar" id="avatar-area">
                   ${contact.photos.length
-                    ? `<img src="${contact.photos.find(p => p.is_primary)?.file_path || contact.photos[0].file_path}" alt="">`
+                    ? `<img src="${authUrl(contact.photos.find(p => p.is_primary)?.file_path || contact.photos[0].file_path)}" alt="">`
                     : `<span>${(contact.first_name[0] || '') + (contact.last_name?.[0] || '')}</span>`
                   }
                   <div class="avatar-overlay" id="avatar-overlay" title="${contact.photos.length ? t('photos.viewPhotos') : t('photos.uploadPhoto')}">
@@ -58,7 +60,10 @@ export async function renderContactDetail(uuid) {
                   <h3>${contact.first_name} ${contact.last_name || ''}</h3>
                   ${contact.nickname ? `<p class="text-muted">"${contact.nickname}"</p>` : ''}
                   ${contact.date_of_birth ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatDateLong(contact.date_of_birth)} (${calcAge(contact.date_of_birth)})</p>` : ''}
-                  ${contact.visibility === 'private' ? `<span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>` : ''}
+                  ${contact.visibility === 'private'
+                    ? `<span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>`
+                    : `<span class="badge bg-light text-muted"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>`
+                  }
                   ${contact.is_favorite ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> ${t('contacts.favorites')}</span>` : ''}
                 </div>
               </div>
@@ -66,7 +71,7 @@ export async function renderContactDetail(uuid) {
                 <div class="photo-strip">
                   ${contact.photos.map(p => `
                     <div class="photo-strip-item ${p.is_primary ? 'active' : ''}" data-photo-id="${p.id}">
-                      <img src="${p.thumbnail_path}" alt="${p.caption || ''}">
+                      <img src="${authUrl(p.thumbnail_path)}" alt="${p.caption || ''}">
                     </div>
                   `).join('')}
                 </div>
@@ -77,12 +82,19 @@ export async function renderContactDetail(uuid) {
             <div class="detail-card glass-card post-compose-inline">
               <form id="quick-post-form">
                 <textarea class="form-control" id="quick-post-body" placeholder="${t('posts.writeAbout', { name: contact.first_name })}" rows="2"></textarea>
+                <div id="quick-post-media-preview" class="post-media-preview d-none"></div>
                 <div class="post-compose-bar">
                   <div class="visibility-pill" id="quick-post-visibility-btn" data-visibility="shared" title="${t('visibility.sharedHint')}">
                     <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
                     <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
                   </div>
-                  <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
+                  <div class="post-compose-actions">
+                    <label class="post-media-btn" title="${t('posts.addMedia')}">
+                      <i class="bi bi-image"></i>
+                      <input type="file" id="quick-post-media-input" multiple accept="image/*" hidden>
+                    </label>
+                    <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -124,7 +136,7 @@ export async function renderContactDetail(uuid) {
               </h4>
             ${contact.relationships.length ? `
               <div class="detail-relationships">
-                ${renderGroupedRelationships(contact.relationships)}
+                ${renderGroupedRelationships(contact.relationships, { hasAddress: contact.addresses.some(a => !a.moved_out_at && a.address_id) })}
               </div>
             ` : `<p class="text-muted small">${t('relationships.noRelationships')}</p>`}
             </div>
@@ -138,6 +150,13 @@ export async function renderContactDetail(uuid) {
                   contactRowHtml(h, { meta: h.street })
                 ).join('')}
               </div>
+              ${contact.addresses.filter(a => !a.moved_out_at && a.address_id).map(a => `
+                <div class="text-center mt-2">
+                  <a href="/addresses/${a.address_id}" data-link class="subtle-link">
+                    <i class="bi bi-house-door"></i> ${t('addresses.viewAddress')}
+                  </a>
+                </div>
+              `).join('')}
             </div>
             ` : ''}
 
@@ -150,10 +169,22 @@ export async function renderContactDetail(uuid) {
                 </button>
               </h4>
               ${contact.addresses.length ? contact.addresses.map(a => `
-                <div class="detail-address ${a.moved_out_at ? 'text-muted' : ''}">
-                  <strong>${a.label || 'Address'}</strong>
-                  ${a.moved_out_at ? `<span class="badge bg-secondary ms-1">${t('addresses.previous')}</span>` : ''}
-                  <p class="mb-0">${escapeHtml(a.street)}${a.street2 ? ', ' + escapeHtml(a.street2) : ''}<br>
+                <div class="detail-address ${a.moved_out_at ? 'text-muted' : ''}" data-address-id="${a.address_id}">
+                  <div class="detail-address-header">
+                    <strong>${a.label || 'Address'}</strong>
+                    ${a.moved_out_at ? `<span class="badge bg-secondary ms-1">${t('addresses.previous')}</span>` : ''}
+                    <div class="detail-address-actions">
+                      ${!a.moved_out_at ? `
+                        <button type="button" class="btn btn-link btn-sm btn-edit-address" data-address-id="${a.address_id}" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
+                        <button type="button" class="btn btn-link btn-sm btn-moveout-address" data-address-id="${a.address_id}" title="${t('addresses.moveOut')}"><i class="bi bi-box-arrow-right"></i></button>
+                      ` : `
+                        <button type="button" class="btn btn-link btn-sm btn-movein-address" data-address-id="${a.address_id}" title="${t('addresses.moveBackIn')}"><i class="bi bi-arrow-counterclockwise"></i></button>
+                      `}
+                      <button type="button" class="btn btn-link btn-sm text-danger btn-remove-address" data-address-id="${a.address_id}" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                  </div>
+                  <a href="/addresses/${a.address_id}" data-link class="detail-address-street">${escapeHtml(a.street)}${a.street2 ? ', ' + escapeHtml(a.street2) : ''}</a>
+                  <p class="mb-0">
                   ${[a.postal_code, a.city].filter(Boolean).join(' ')}</p>
                 </div>
               `).join('') : `<p class="text-muted small">${t('addresses.noAddresses')}</p>`}
@@ -187,14 +218,105 @@ export async function renderContactDetail(uuid) {
             </div>
 
             <!-- Labels -->
-            ${contact.labels.length ? `
             <div class="sidebar-card glass-card">
-              <h4><i class="bi bi-tags"></i> ${t('labels.title')}</h4>
-              <div class="detail-labels">
-                ${contact.labels.map(l => `<span class="badge" style="background:${l.color}">${escapeHtml(l.name)}</span>`).join(' ')}
+              <h4>
+                <i class="bi bi-tags"></i> ${t('labels.title')}
+                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-label" title="${t('common.add')}">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </h4>
+              <div class="detail-labels" id="contact-labels">
+                ${contact.labels.length
+                  ? contact.labels.map(l => `
+                    <span class="badge label-badge" style="background:${l.color}" data-label-id="${l.id}">
+                      <a href="/contacts?label=${encodeURIComponent(l.name)}" data-link class="label-link">${escapeHtml(l.name)}</a>
+                      <button type="button" class="btn-remove-label" data-label-id="${l.id}" title="${t('common.delete')}"><i class="bi bi-x"></i></button>
+                    </span>
+                  `).join(' ')
+                  : `<p class="text-muted small" id="labels-empty">${t('labels.noLabels')}</p>`
+                }
+              </div>
+              <div id="label-add-area" class="d-none mt-2">
+                <div class="label-add-tabs mb-2">
+                  <button type="button" class="btn btn-sm btn-outline-primary active" data-label-tab="existing">
+                    <i class="bi bi-tag"></i> ${t('labels.existing')}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" data-label-tab="new">
+                    <i class="bi bi-plus-circle"></i> ${t('labels.createNew')}
+                  </button>
+                </div>
+                <div id="label-tab-existing">
+                  <select class="form-select form-select-sm" id="label-select">
+                    <option value="" disabled selected>${t('labels.choose')}</option>
+                  </select>
+                </div>
+                <div id="label-tab-new" class="d-none">
+                  <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" id="new-label-name" placeholder="${t('labels.newLabel')}">
+                    <input type="color" class="form-control form-control-color" id="new-label-color" value="#007AFF" title="${t('labels.color')}">
+                    <button type="button" class="btn btn-primary" id="btn-create-label">${t('common.add')}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Companies -->
+            ${contact.companies?.length ? `
+            <div class="sidebar-card glass-card">
+              <h4><i class="bi bi-building"></i> ${t('companies.title')}</h4>
+              <div class="detail-relationships">
+                ${contact.companies.map(c => `
+                  <a href="/companies/${c.company_uuid}" data-link class="contact-row">
+                    <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
+                      <i class="bi bi-building" style="font-size:0.7rem"></i>
+                    </div>
+                    <div class="contact-row-info">
+                      <div class="contact-row-name">${escapeHtml(c.company_name)}</div>
+                      <div class="contact-row-meta">${[c.title, c.end_date ? t('addresses.previous') : ''].filter(Boolean).join(' — ')}</div>
+                    </div>
+                  </a>
+                `).join('')}
               </div>
             </div>
             ` : ''}
+
+            <!-- Life events -->
+            <div class="sidebar-card glass-card">
+              <h4>
+                <i class="bi bi-calendar-event"></i> ${t('lifeEvents.title')}
+                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-life-event" title="${t('common.add')}">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </h4>
+              <div id="contact-life-events"></div>
+            </div>
+
+            <!-- Reminders -->
+            <div class="sidebar-card glass-card">
+              <h4>
+                <i class="bi bi-bell"></i> ${t('reminders.title')}
+                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-reminder" title="${t('common.add')}">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </h4>
+              <div id="contact-reminders"></div>
+              <div id="reminder-add-form" class="d-none mt-2">
+                <input type="text" class="form-control form-control-sm mb-1" id="reminder-title" placeholder="${t('reminders.placeholder')}">
+                <div class="row g-1 mb-1">
+                  <div class="col-7"><input type="date" class="form-control form-control-sm" id="reminder-date"></div>
+                  <div class="col-5">
+                    <div class="form-check form-check-inline" style="font-size:0.8rem">
+                      <input type="checkbox" class="form-check-input" id="reminder-recurring">
+                      <label class="form-check-label" for="reminder-recurring">${t('reminders.recurring')}</label>
+                    </div>
+                  </div>
+                </div>
+                <div class="d-flex gap-1">
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-save-reminder">${t('common.add')}</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-cancel-reminder">${t('common.cancel')}</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -303,9 +425,233 @@ export async function renderContactDetail(uuid) {
     // Load contact fields (editable)
     renderContactFields('contact-fields-section', uuid, contact.fields);
 
+    // Labels
+    // Label tab switching
+    document.querySelectorAll('.label-add-tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.label-add-tabs button').forEach(b => {
+          b.classList.toggle('active', b === btn);
+          b.classList.toggle('btn-outline-primary', b === btn);
+          b.classList.toggle('btn-outline-secondary', b !== btn);
+        });
+        document.getElementById('label-tab-existing').classList.toggle('d-none', btn.dataset.labelTab !== 'existing');
+        document.getElementById('label-tab-new').classList.toggle('d-none', btn.dataset.labelTab !== 'new');
+      });
+    });
+
+    document.getElementById('btn-add-label')?.addEventListener('click', async () => {
+      const area = document.getElementById('label-add-area');
+      area.classList.toggle('d-none');
+      if (!area.classList.contains('d-none')) {
+        // Load available labels into select
+        try {
+          const { labels: allLabels } = await api.get('/labels');
+          const assignedIds = contact.labels.map(l => l.id);
+          const available = allLabels.filter(l => !assignedIds.includes(l.id));
+          const select = document.getElementById('label-select');
+          select.innerHTML = `<option value="" disabled selected>${t('labels.choose')}</option>` +
+            available.map(l => `<option value="${l.id}" data-color="${l.color}">${l.name}</option>`).join('');
+        } catch {}
+      }
+    });
+
+    // Assign existing label from select
+    document.getElementById('label-select')?.addEventListener('change', async (e) => {
+      const labelId = e.target.value;
+      if (!labelId) return;
+      try {
+        await api.post(`/labels/${labelId}/contacts`, { contact_uuid: uuid });
+        renderContactDetail(uuid);
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
+    });
+
+    // Create new label and assign
+    document.getElementById('btn-create-label')?.addEventListener('click', async () => {
+      const name = document.getElementById('new-label-name').value.trim();
+      if (!name) return;
+      const color = document.getElementById('new-label-color').value;
+      try {
+        const { label } = await api.post('/labels', { name, color });
+        await api.post(`/labels/${label.id}/contacts`, { contact_uuid: uuid });
+        renderContactDetail(uuid);
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
+    });
+
+    // Remove label from contact
+    document.querySelectorAll('.btn-remove-label').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await api.delete(`/labels/${btn.dataset.labelId}/contacts/${uuid}`);
+          renderContactDetail(uuid);
+        } catch (err) {
+          confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+        }
+      });
+    });
+
+    // Reminders
+    loadContactReminders(uuid);
+
+    document.getElementById('btn-add-reminder')?.addEventListener('click', () => {
+      document.getElementById('reminder-add-form').classList.toggle('d-none');
+    });
+    document.getElementById('btn-cancel-reminder')?.addEventListener('click', () => {
+      document.getElementById('reminder-add-form').classList.add('d-none');
+    });
+    document.getElementById('btn-save-reminder')?.addEventListener('click', async () => {
+      const title = document.getElementById('reminder-title').value.trim();
+      const date = document.getElementById('reminder-date').value;
+      if (!title || !date) return;
+      try {
+        await api.post('/reminders', {
+          title,
+          reminder_date: date,
+          is_recurring: document.getElementById('reminder-recurring').checked,
+          contact_uuid: uuid,
+        });
+        document.getElementById('reminder-title').value = '';
+        document.getElementById('reminder-date').value = '';
+        document.getElementById('reminder-recurring').checked = false;
+        document.getElementById('reminder-add-form').classList.add('d-none');
+        loadContactReminders(uuid);
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
+    });
+
+    // Life events
+    loadContactLifeEvents(uuid);
+
+    document.getElementById('btn-add-life-event')?.addEventListener('click', () => {
+      showAddLifeEventDialog(uuid, () => {
+        loadContactLifeEvents(uuid);
+      });
+    });
+
     // Add relationship
     document.getElementById('btn-add-relationship')?.addEventListener('click', () => {
       showAddRelationshipDialog(uuid, () => renderContactDetail(uuid));
+    });
+
+    // Share address with related contact
+    const currentAddresses = contact.addresses.filter(a => !a.moved_out_at && a.address_id);
+    document.querySelectorAll('.btn-share-address').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!currentAddresses.length) {
+          confirmDialog(t('addresses.noAddressToShare'), { title: t('addresses.shareAddress'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+          return;
+        }
+        const wrapper = btn.closest('.relationship-row-wrapper');
+        const relContactUuid = wrapper.dataset.contactUuid;
+        const relName = wrapper.querySelector('.contact-row-name')?.textContent || '';
+
+        // If only one address, share it directly. Otherwise let user pick.
+        let addressToShare;
+        if (currentAddresses.length === 1) {
+          addressToShare = currentAddresses[0];
+        } else {
+          // Show picker
+          const picked = await showAddressPicker(currentAddresses);
+          if (!picked) return;
+          addressToShare = picked;
+        }
+
+        try {
+          await api.post('/addresses/link', {
+            contact_uuid: relContactUuid,
+            address_id: addressToShare.address_id,
+          });
+          renderContactDetail(uuid);
+        } catch (err) {
+          confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+        }
+      });
+    });
+
+    // Edit relationship
+    document.querySelectorAll('.btn-edit-rel').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const wrapper = btn.closest('.relationship-row-wrapper');
+        showEditRelationshipDialog(wrapper, () => renderContactDetail(uuid));
+      });
+    });
+
+    // Delete relationship
+    document.querySelectorAll('.btn-delete-rel').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const wrapper = btn.closest('.relationship-row-wrapper');
+        const relId = wrapper.dataset.relId;
+        if (await confirmDialog(t('relationships.deleteConfirm'), { title: t('common.delete'), confirmText: t('common.delete') })) {
+          try {
+            await api.delete(`/relationships/${relId}`);
+            renderContactDetail(uuid);
+          } catch (err) {
+            confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+          }
+        }
+      });
+    });
+
+    // Edit address
+    document.querySelectorAll('.btn-edit-address').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const addrEl = btn.closest('.detail-address');
+        const addrId = btn.dataset.addressId;
+        const addr = contact.addresses.find(a => String(a.address_id) === addrId);
+        if (!addr) return;
+        showEditAddressDialog(uuid, addr, () => renderContactDetail(uuid));
+      });
+    });
+
+    // Move out from address
+    document.querySelectorAll('.btn-moveout-address').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const addrId = btn.dataset.addressId;
+        if (await confirmDialog(t('addresses.moveOutConfirm'), { title: t('addresses.moveOut'), confirmText: t('addresses.moveOut') })) {
+          try {
+            await api.patch(`/addresses/contact/${uuid}/${addrId}/move-out`, {});
+            renderContactDetail(uuid);
+          } catch (err) {
+            confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+          }
+        }
+      });
+    });
+
+    // Move back in (undo move-out)
+    document.querySelectorAll('.btn-movein-address').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const addrId = btn.dataset.addressId;
+        try {
+          await api.patch(`/addresses/contact/${uuid}/${addrId}/move-in`, {});
+          renderContactDetail(uuid);
+        } catch (err) {
+          confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+        }
+      });
+    });
+
+    // Remove address link
+    document.querySelectorAll('.btn-remove-address').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const addrId = btn.dataset.addressId;
+        if (await confirmDialog(t('addresses.removeConfirm'), { title: t('common.delete'), confirmText: t('common.delete') })) {
+          try {
+            await api.delete(`/addresses/contact/${uuid}/${addrId}`);
+            renderContactDetail(uuid);
+          } catch (err) {
+            confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+          }
+        }
+      });
     });
 
     // Address add form
@@ -360,15 +706,15 @@ export async function renderContactDetail(uuid) {
       try {
         const data = await api.get(`/addresses/search?q=${encodeURIComponent(q)}`);
         if (!data.results.length) { results.innerHTML = `<p class="text-muted small">${t('addresses.noResults')}</p>`; return; }
-        // Group by address
+        // Group by address_id
         const byAddr = new Map();
         for (const r of data.results) {
-          const key = `${r.street}|${r.postal_code}|${r.city}`;
+          const key = r.address_id;
           if (!byAddr.has(key)) byAddr.set(key, { ...r, contacts: [] });
           byAddr.get(key).contacts.push(`${r.first_name} ${r.last_name || ''}`);
         }
         results.innerHTML = Array.from(byAddr.values()).map(a => `
-          <button type="button" class="address-result" data-street="${escapeAttr(a.street)}" data-postal="${escapeAttr(a.postal_code || '')}" data-city="${escapeAttr(a.city || '')}">
+          <button type="button" class="address-result" data-address-id="${a.address_id}">
             <strong>${escapeHtml(a.street)}</strong>
             <span class="text-muted small">${[a.postal_code, a.city].filter(Boolean).join(' ')} — ${a.contacts.join(', ')}</span>
           </button>
@@ -376,11 +722,9 @@ export async function renderContactDetail(uuid) {
         results.querySelectorAll('.address-result').forEach(btn => {
           btn.addEventListener('click', async () => {
             try {
-              await api.post('/addresses', {
+              await api.post('/addresses/link', {
                 contact_uuid: contactUuid,
-                street: btn.dataset.street,
-                postal_code: btn.dataset.postal || undefined,
-                city: btn.dataset.city || undefined,
+                address_id: parseInt(btn.dataset.addressId),
                 label: t('addresses.defaultLabel'),
               });
               renderContactDetail(contactUuid);
@@ -405,6 +749,40 @@ export async function renderContactDetail(uuid) {
       pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
     });
 
+    // Quick post media handling
+    let quickPostMedia = [];
+    document.getElementById('quick-post-media-input')?.addEventListener('change', (e) => {
+      for (const file of e.target.files) {
+        if (file.type.startsWith('image/')) quickPostMedia.push(file);
+      }
+      renderQuickMediaPreview();
+      e.target.value = '';
+    });
+
+    // Drop zone for quick post (target the wrapper div for visual feedback)
+    enableDropZone(document.getElementById('quick-post-form').closest('.post-compose-inline'), (files) => {
+      quickPostMedia.push(...files);
+      renderQuickMediaPreview();
+    });
+
+    function renderQuickMediaPreview() {
+      const el = document.getElementById('quick-post-media-preview');
+      if (!quickPostMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
+      el.classList.remove('d-none');
+      el.innerHTML = quickPostMedia.map((f, i) => `
+        <div class="media-preview-item">
+          <img src="${URL.createObjectURL(f)}" alt="">
+          <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+        </div>
+      `).join('');
+      el.querySelectorAll('.media-preview-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          quickPostMedia.splice(parseInt(btn.dataset.index), 1);
+          renderQuickMediaPreview();
+        });
+      });
+    }
+
     // Quick post with @-mention support
     const quickPostExtra = [];
     attachMention(document.getElementById('quick-post-body'), (contact) => {
@@ -419,13 +797,23 @@ export async function renderContactDetail(uuid) {
       if (!body) return;
 
       const extraUuids = quickPostExtra.map((c) => c.uuid);
-      await api.post('/posts', {
+      const { post } = await api.post('/posts', {
         body,
         about_contact_uuid: uuid,
         contact_uuids: extraUuids.length ? extraUuids : undefined,
         visibility: document.getElementById('quick-post-visibility-btn').dataset.visibility,
       });
+
+      // Upload media
+      if (quickPostMedia.length && post?.uuid) {
+        const formData = new FormData();
+        for (const file of quickPostMedia) formData.append('media', file);
+        await api.upload(`/posts/${post.uuid}/media`, formData);
+      }
+
       document.getElementById('quick-post-body').value = '';
+      quickPostMedia = [];
+      renderQuickMediaPreview();
       quickPostExtra.length = 0;
       reloadPosts();
     });
@@ -476,7 +864,13 @@ function renderEditMode(contact) {
           <textarea class="form-control" id="edit-notes" style="height:100px">${escapeHtml(contact.notes || '')}</textarea>
           <label>${t('contacts.notes')}</label>
         </div>
-        ${visibilityToggleHtml('edit', contact.visibility)}
+        <div class="mt-3">
+          <label class="form-label small">${t('visibility.shared')} / ${t('visibility.private')}</label>
+          <div class="visibility-pill" id="edit-visibility-btn" data-visibility="${contact.visibility}">
+            <span class="visibility-pill-option ${contact.visibility === 'shared' ? 'active' : ''}" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
+            <span class="visibility-pill-option ${contact.visibility === 'private' ? 'active' : ''}" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
+          </div>
+        </div>
         <div id="edit-error" class="alert alert-danger d-none mt-3"></div>
         <div class="d-flex gap-2 mt-3">
           <button type="submit" class="btn btn-primary">${t('common.save')}</button>
@@ -491,7 +885,11 @@ function renderEditMode(contact) {
   document.getElementById('btn-cancel-2').addEventListener('click', goBack);
 
   document.getElementById('edit-visibility-btn').addEventListener('click', (e) => {
-    toggleVisibilityBtn(e.currentTarget);
+    const pill = e.currentTarget;
+    const clicked = e.target.closest('.visibility-pill-option');
+    if (!clicked) return;
+    pill.dataset.visibility = clicked.dataset.val;
+    pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
   });
 
   document.getElementById('edit-form').addEventListener('submit', async (e) => {
@@ -516,9 +914,252 @@ function renderEditMode(contact) {
   });
 }
 
-function renderGroupedRelationships(relationships) {
+async function loadContactLifeEvents(contactUuid) {
+  const el = document.getElementById('contact-life-events');
+  if (!el) return;
+  try {
+    const { events } = await api.get(`/life-events?contact_uuid=${contactUuid}`);
+    if (!events.length) {
+      el.innerHTML = `<p class="text-muted small">${t('lifeEvents.noEvents')}</p>`;
+      return;
+    }
+    el.innerHTML = events.map(e => `
+      <div class="life-event-item">
+        <div class="life-event-icon" style="color:${e.color}">
+          <i class="${e.icon}"></i>
+        </div>
+        <div class="life-event-info">
+          <div class="life-event-type">${t('lifeEvents.types.' + e.event_type)} ${e.remind_annually ? '<i class="bi bi-bell-fill text-muted" style="font-size:0.65rem" title="' + t('lifeEvents.remindAnnually') + '"></i>' : ''}</div>
+          <div class="life-event-date text-muted small">${formatDate(e.event_date)}</div>
+          ${e.description ? `<div class="life-event-desc text-muted small">${escapeHtml(e.description)}</div>` : ''}
+          ${e.linked_contacts.length ? `
+            <div class="life-event-linked">
+              ${e.linked_contacts.map(c => `<a href="/contacts/${c.uuid}" data-link class="text-muted small">${c.first_name} ${c.last_name || ''}</a>`).join(', ')}
+            </div>
+          ` : ''}
+        </div>
+        <div class="life-event-actions">
+          <button class="btn btn-link btn-sm btn-edit-event" data-uuid="${e.uuid}" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-link btn-sm text-danger btn-delete-event" data-uuid="${e.uuid}" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>
+    `).join('');
+
+    el.querySelectorAll('.btn-edit-event').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const event = events.find(e => e.uuid === btn.dataset.uuid);
+        if (event) showEditLifeEventDialog(event, () => loadContactLifeEvents(contactUuid));
+      });
+    });
+
+    el.querySelectorAll('.btn-delete-event').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api.delete(`/life-events/${btn.dataset.uuid}`);
+        loadContactLifeEvents(contactUuid);
+      });
+    });
+  } catch { el.innerHTML = ''; }
+}
+
+async function showLifeEventDialog(contactUuid, existingEvent, onDone) {
+  let types;
+  try {
+    types = (await api.get('/life-events/types')).types;
+  } catch { return; }
+
+  const isEdit = !!existingEvent;
+  const id = 'le-dlg-' + Date.now();
+  let linkedContacts = isEdit ? [...(existingEvent.linked_contacts || [])] : [];
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${id}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${isEdit ? t('common.edit') : t('lifeEvents.add')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label small">${t('lifeEvents.eventType')}</label>
+              <div class="life-event-type-grid">
+                ${types.map(tp => `
+                  <button type="button" class="life-event-type-btn ${isEdit && existingEvent.event_type === tp.name ? 'active' : ''}" data-id="${tp.id}" data-name="${tp.name}">
+                    <i class="${tp.icon}" style="color:${tp.color}"></i>
+                    <span>${t('lifeEvents.types.' + tp.name)}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+            <div id="${id}-details" class="${isEdit ? '' : 'd-none'}">
+              <div class="form-floating mb-3">
+                <input type="date" class="form-control" id="${id}-date" value="${isEdit ? (existingEvent.event_date || '').substring(0, 10) : ''}" required>
+                <label>${t('lifeEvents.date')}</label>
+              </div>
+              <div class="form-floating mb-3">
+                <textarea class="form-control" id="${id}-desc" style="height:60px">${isEdit ? escapeHtml(existingEvent.description || '') : ''}</textarea>
+                <label>${t('lifeEvents.description')}</label>
+              </div>
+              <div class="form-check mb-3">
+                <input type="checkbox" class="form-check-input" id="${id}-remind" ${isEdit && existingEvent.remind_annually ? 'checked' : ''}>
+                <label class="form-check-label small" for="${id}-remind">${t('lifeEvents.remindAnnually')}</label>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small">${t('lifeEvents.linkedContacts')}</label>
+                <div id="${id}-linked" class="d-flex flex-wrap gap-1 mb-1"></div>
+                <div class="position-relative">
+                  <input type="text" class="form-control form-control-sm" id="${id}-link-search" placeholder="${t('relationships.searchContact')}">
+                  <div id="${id}-link-results" class="contact-search-results position-absolute w-100" style="z-index:1100;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:200px;overflow-y:auto"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer ${isEdit ? '' : 'd-none'}" id="${id}-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+            <button type="button" class="btn btn-primary btn-sm" id="${id}-submit">${t('common.save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modalEl = document.getElementById(id);
+  const modal = new bootstrap.Modal(modalEl);
+  let selectedTypeId = isEdit ? types.find(tp => tp.name === existingEvent.event_type)?.id : null;
+
+  function renderLinked() {
+    const el = document.getElementById(`${id}-linked`);
+    el.innerHTML = linkedContacts.map(c => `
+      <span class="badge bg-primary">${c.first_name} ${c.last_name || ''}
+        <button type="button" class="btn-close btn-close-white ms-1" data-uuid="${c.uuid}" style="font-size:0.5em"></button>
+      </span>
+    `).join('');
+    el.querySelectorAll('.btn-close').forEach(btn => {
+      btn.addEventListener('click', () => {
+        linkedContacts = linkedContacts.filter(c => c.uuid !== btn.dataset.uuid);
+        renderLinked();
+      });
+    });
+  }
+  renderLinked();
+
+  // Inline search for linked contacts
+  const linkSearch = document.getElementById(`${id}-link-search`);
+  const linkResults = document.getElementById(`${id}-link-results`);
+  let linkTimeout;
+  linkSearch.addEventListener('input', () => {
+    clearTimeout(linkTimeout);
+    const q = linkSearch.value.trim();
+    if (q.length < 1) { linkResults.innerHTML = ''; return; }
+    linkTimeout = setTimeout(async () => {
+      try {
+        const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
+        const filtered = data.contacts.filter(c => !linkedContacts.find(lc => lc.uuid === c.uuid));
+        linkResults.innerHTML = filtered.map(c =>
+          contactRowHtml(c, { tag: 'div', meta: c.nickname ? `"${c.nickname}"` : '' })
+        ).join('') || '';
+        linkResults.querySelectorAll('.contact-row').forEach(item => {
+          item.addEventListener('click', () => {
+            linkedContacts.push({ uuid: item.dataset.uuid, first_name: item.dataset.first, last_name: item.dataset.last });
+            renderLinked();
+            linkSearch.value = '';
+            linkResults.innerHTML = '';
+          });
+        });
+      } catch {}
+    }, 200);
+  });
+  linkSearch.addEventListener('blur', () => setTimeout(() => { linkResults.innerHTML = ''; }, 200));
+
+  // Type selection
+  modalEl.querySelectorAll('.life-event-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modalEl.querySelectorAll('.life-event-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedTypeId = parseInt(btn.dataset.id);
+      document.getElementById(`${id}-details`).classList.remove('d-none');
+      document.getElementById(`${id}-footer`).classList.remove('d-none');
+      document.getElementById(`${id}-date`).focus();
+    });
+  });
+
+  // Submit
+  document.getElementById(`${id}-submit`).addEventListener('click', async () => {
+    const date = document.getElementById(`${id}-date`).value;
+    if (!selectedTypeId || !date) return;
+    try {
+      const payload = {
+        event_type_id: selectedTypeId,
+        event_date: date,
+        description: document.getElementById(`${id}-desc`).value.trim() || undefined,
+        remind_annually: document.getElementById(`${id}-remind`).checked,
+        linked_contact_uuids: linkedContacts.map(c => c.uuid),
+      };
+      if (isEdit) {
+        await api.put(`/life-events/${existingEvent.uuid}`, payload);
+      } else {
+        payload.contact_uuid = contactUuid;
+        await api.post('/life-events', payload);
+      }
+      modal.hide();
+      if (onDone) onDone();
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+    }
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+}
+
+function showAddLifeEventDialog(contactUuid, onDone) {
+  return showLifeEventDialog(contactUuid, null, onDone);
+}
+
+function showEditLifeEventDialog(event, onDone) {
+  return showLifeEventDialog(null, event, onDone);
+}
+
+async function loadContactReminders(contactUuid) {
+  const el = document.getElementById('contact-reminders');
+  if (!el) return;
+  try {
+    const { reminders } = await api.get(`/reminders?contact_uuid=${contactUuid}`);
+    if (!reminders.length) {
+      el.innerHTML = `<p class="text-muted small">${t('reminders.noReminders')}</p>`;
+      return;
+    }
+    el.innerHTML = reminders.map(r => `
+      <div class="reminder-item ${r.is_completed ? 'text-muted' : ''}">
+        <div class="reminder-info">
+          <span class="reminder-title">${r.is_recurring ? '🔁 ' : ''}${escapeHtml(r.title)}</span>
+          <span class="reminder-date text-muted small">${r.next_date}</span>
+        </div>
+        <div class="reminder-actions">
+          ${!r.is_completed ? `<button class="btn btn-link btn-sm btn-complete-reminder" data-id="${r.id}" title="${t('reminders.complete')}"><i class="bi bi-check-lg"></i></button>` : ''}
+          <button class="btn btn-link btn-sm text-danger btn-delete-reminder" data-id="${r.id}" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>
+    `).join('');
+
+    el.querySelectorAll('.btn-complete-reminder').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api.put(`/reminders/${btn.dataset.id}`, { is_completed: true });
+        loadContactReminders(contactUuid);
+      });
+    });
+    el.querySelectorAll('.btn-delete-reminder').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api.delete(`/reminders/${btn.dataset.id}`);
+        loadContactReminders(contactUuid);
+      });
+    });
+  } catch { el.innerHTML = ''; }
+}
+
+function renderGroupedRelationships(relationships, { hasAddress = false } = {}) {
   // Sort order for relationship types
-  const typePriority = { spouse: 0, child: 1, parent: 2, sibling: 3, grandchild: 4, grandparent: 5 };
+  const typePriority = { spouse: 0, cohabitant: 1, boyfriend_girlfriend: 2, partner: 3, child: 4, parent: 5, sibling: 6, grandchild: 7, grandparent: 8, stepchild: 9, stepparent: 10 };
   const catPriority = { family: 0, social: 1, professional: 2 };
 
   // Sort: family first, then by type priority, then alphabetically
@@ -546,9 +1187,16 @@ function renderGroupedRelationships(relationships) {
       const catLabel = { family: t('relationships.categories.family'), social: t('relationships.categories.social'), professional: t('relationships.categories.professional') }[cat] || cat;
       html += `<div class="relationship-group-label">${catLabel}</div>`;
     }
-    html += items.map(r =>
-      contactRowHtml(r, { meta: t(`relationships.types.${r.relationship}`) })
-    ).join('');
+    html += items.map(r => `
+      <div class="relationship-row-wrapper" data-rel-id="${r.relationship_id}" data-rel-type-id="${r.relationship_type_id}" data-start="${r.start_date || ''}" data-end="${r.end_date || ''}" data-contact-uuid="${r.uuid}">
+        ${contactRowHtml(r, { meta: t(`relationships.types.${r.relationship}`) })}
+        <div class="relationship-actions">
+          ${hasAddress ? `<button type="button" class="btn btn-link btn-sm btn-share-address" title="${t('addresses.shareAddress')}"><i class="bi bi-house-add"></i></button>` : ''}
+          <button type="button" class="btn btn-link btn-sm btn-edit-rel" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
+          <button type="button" class="btn btn-link btn-sm text-danger btn-delete-rel" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>
+    `).join('');
   }
   return html;
 }
@@ -657,6 +1305,189 @@ function showExpandedMap(lat, lng, addr, contact) {
   modal.show();
 }
 
+function showAddressPicker(addresses) {
+  return new Promise(resolve => {
+    const id = 'addr-pick-' + Date.now();
+    const html = `
+      <div class="modal fade" id="${id}" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">${t('addresses.chooseAddress')}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              ${addresses.map(a => `
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100 mb-1 text-start addr-pick-btn" data-address-id="${a.address_id}">
+                  <strong>${a.label || 'Address'}</strong><br>
+                  <span class="text-muted small">${a.street}, ${[a.postal_code, a.city].filter(Boolean).join(' ')}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modalEl = document.getElementById(id);
+    const modal = new bootstrap.Modal(modalEl);
+    let resolved = false;
+
+    modalEl.querySelectorAll('.addr-pick-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        resolved = true;
+        modal.hide();
+        resolve(addresses.find(a => String(a.address_id) === btn.dataset.addressId));
+      });
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      modalEl.remove();
+      if (!resolved) resolve(null);
+    }, { once: true });
+
+    modal.show();
+  });
+}
+
+async function showEditAddressDialog(contactUuid, addr, onDone) {
+  const id = 'addr-edit-' + Date.now();
+  const html = `
+    <div class="modal fade" id="${id}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('common.edit')} — ${escapeHtml(addr.label || 'Address')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="${id}-form">
+            <div class="modal-body">
+              <input type="text" class="form-control form-control-sm mb-2" id="${id}-street" placeholder="${t('addresses.street')}" value="${escapeAttr(addr.street || '')}" required>
+              <input type="text" class="form-control form-control-sm mb-2" id="${id}-street2" placeholder="${t('addresses.street')} 2" value="${escapeAttr(addr.street2 || '')}">
+              <div class="row g-1 mb-2">
+                <div class="col-4"><input type="text" class="form-control form-control-sm" id="${id}-postal" placeholder="${t('addresses.postalCode')}" value="${escapeAttr(addr.postal_code || '')}"></div>
+                <div class="col-8"><input type="text" class="form-control form-control-sm" id="${id}-city" placeholder="${t('addresses.city')}" value="${escapeAttr(addr.city || '')}"></div>
+              </div>
+              <input type="text" class="form-control form-control-sm mb-2" id="${id}-label" placeholder="${t('addresses.label')}" value="${escapeAttr(addr.label || '')}">
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="submit" class="btn btn-primary btn-sm">${t('common.save')}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+  const modalEl = document.getElementById(id);
+  const modal = new bootstrap.Modal(modalEl);
+
+  document.getElementById(`${id}-form`).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/addresses/${addr.address_id}`, {
+        street: document.getElementById(`${id}-street`).value,
+        street2: document.getElementById(`${id}-street2`).value || null,
+        postal_code: document.getElementById(`${id}-postal`).value || null,
+        city: document.getElementById(`${id}-city`).value || null,
+        label: document.getElementById(`${id}-label`).value || null,
+        contact_uuid: contactUuid,
+      });
+      modal.hide();
+      if (onDone) onDone();
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+    }
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+}
+
+async function showEditRelationshipDialog(wrapper, onDone) {
+  const relId = wrapper.dataset.relId;
+  const currentTypeId = wrapper.dataset.relTypeId;
+  const startDate = wrapper.dataset.start;
+  const endDate = wrapper.dataset.end;
+  const contactName = wrapper.querySelector('.contact-row-name')?.textContent || '';
+
+  let types;
+  try {
+    types = (await api.get('/relationships/types')).types;
+  } catch (err) {
+    confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+    return;
+  }
+
+  const catLabels = { family: t('relationships.categories.family'), social: t('relationships.categories.social'), professional: t('relationships.categories.professional') };
+  const typeOptions = ['family', 'social', 'professional'].map(cat => {
+    const catTypes = types.filter(t => t.category === cat);
+    if (!catTypes.length) return '';
+    return `<optgroup label="${catLabels[cat]}">
+      ${catTypes.map(tp => `<option value="${tp.id}" ${String(tp.id) === currentTypeId ? 'selected' : ''}>${t('relationships.types.' + tp.name) !== 'relationships.types.' + tp.name ? t('relationships.types.' + tp.name) : tp.name}</option>`).join('')}
+    </optgroup>`;
+  }).join('');
+
+  const id = 'rel-edit-' + Date.now();
+  const html = `
+    <div class="modal fade" id="${id}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('common.edit')} — ${escapeHtml(contactName)}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label small">${t('relationships.type')}</label>
+              <select class="form-select form-select-sm" id="${id}-type">
+                ${typeOptions}
+              </select>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label class="form-label small">${t('relationships.since')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                <input type="date" class="form-control form-control-sm" id="${id}-start" value="${startDate || ''}">
+              </div>
+              <div class="col">
+                <label class="form-label small">${t('relationships.until')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                <input type="date" class="form-control form-control-sm" id="${id}-end" value="${endDate || ''}">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+            <button type="button" class="btn btn-primary btn-sm" id="${id}-submit">${t('common.save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+  const modalEl = document.getElementById(id);
+  const modal = new bootstrap.Modal(modalEl);
+
+  document.getElementById(`${id}-submit`).addEventListener('click', async () => {
+    try {
+      await api.put(`/relationships/${relId}`, {
+        relationship_type_id: parseInt(document.getElementById(`${id}-type`).value),
+        start_date: document.getElementById(`${id}-start`).value || null,
+        end_date: document.getElementById(`${id}-end`).value || null,
+      });
+      modal.hide();
+      if (onDone) onDone();
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+    }
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+}
+
 async function showAddRelationshipDialog(contactUuid, onDone) {
   let types;
   try {
@@ -671,7 +1502,7 @@ async function showAddRelationshipDialog(contactUuid, onDone) {
     const catTypes = types.filter(t => t.category === cat);
     if (!catTypes.length) return '';
     return `<optgroup label="${catLabels[cat]}">
-      ${catTypes.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+      ${catTypes.map(tp => `<option value="${tp.id}">${t('relationships.types.' + tp.name) !== 'relationships.types.' + tp.name ? t('relationships.types.' + tp.name) : tp.name}</option>`).join('')}
     </optgroup>`;
   }).join('');
 

@@ -12,6 +12,11 @@ import contactRoutes from './routes/contacts.js';
 import postRoutes from './routes/posts.js';
 import addressRoutes from './routes/addresses.js';
 import relationshipRoutes from './routes/relationships.js';
+import labelRoutes from './routes/labels.js';
+import companyRoutes from './routes/companies.js';
+import lifeEventRoutes from './routes/life-events.js';
+import reminderRoutes from './routes/reminders.js';
+import notificationRoutes from './routes/notifications.js';
 import uploadRoutes from './routes/uploads.js';
 
 const app = express();
@@ -67,7 +72,26 @@ app.use('/api/contacts', authenticate, tenantScope, contactRoutes);
 app.use('/api/posts', authenticate, tenantScope, postRoutes);
 app.use('/api/addresses', authenticate, tenantScope, addressRoutes);
 app.use('/api/relationships', authenticate, tenantScope, relationshipRoutes);
+app.use('/api/labels', authenticate, tenantScope, labelRoutes);
+app.use('/api/companies', authenticate, tenantScope, companyRoutes);
+app.use('/api/life-events', authenticate, tenantScope, lifeEventRoutes);
+app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
+app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
+
+// Protected file serving — auth check via header OR query param
+import path from 'path';
+app.use('/uploads/', (req, res, next) => {
+  if (!req.headers.authorization && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  next();
+}, authenticate, express.static(path.join(process.cwd(), '..', 'uploads'), {
+  maxAge: '1d',
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'private, max-age=86400');
+  },
+}));
 
 // Error handler (must be last)
 app.use(errorHandler);

@@ -60,7 +60,8 @@ router.get('/', async (req, res, next) => {
         .select(
           'post_contacts.post_id',
           'contacts.uuid', 'contacts.first_name', 'contacts.last_name'
-        ),
+        )
+        .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)),
       db('post_media')
         .whereIn('post_id', postIds)
         .select('post_id', 'file_path', 'thumbnail_path', 'file_type')
@@ -92,6 +93,7 @@ router.get('/', async (req, res, next) => {
         uuid: tc.uuid,
         first_name: tc.first_name,
         last_name: tc.last_name,
+        avatar: tc.avatar || null,
       });
     }
 
@@ -126,8 +128,47 @@ router.get('/', async (req, res, next) => {
       };
     });
 
+    // Fetch life events for this contact (if filtering by contact)
+    let lifeEvents = [];
+    const contactForEvents = contact ? await db('contacts').where({ uuid: contact, tenant_id: req.tenantId }).first() : null;
+    if (contactForEvents) {
+      const events = await db('life_events')
+        .join('life_event_types', 'life_events.event_type_id', 'life_event_types.id')
+        .join('contacts', 'life_events.contact_id', 'contacts.id')
+        .where('life_events.tenant_id', req.tenantId)
+        .where(function () {
+          this.where('life_events.contact_id', contactForEvents.id)
+            .orWhereIn('life_events.id',
+              db('life_event_contacts').where('contact_id', contactForEvents.id).select('life_event_id')
+            );
+        })
+        .select(
+          'life_events.uuid', 'life_events.event_date', 'life_events.description',
+          'life_event_types.name as event_type', 'life_event_types.icon', 'life_event_types.color',
+          'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name'
+        )
+        .orderBy('life_events.event_date', 'desc');
+
+      lifeEvents = events.map(e => ({
+        type: 'life_event',
+        uuid: e.uuid,
+        event_type: e.event_type,
+        icon: e.icon,
+        color: e.color,
+        post_date: e.event_date,
+        description: e.description,
+        contact_uuid: e.contact_uuid,
+        first_name: e.first_name,
+        last_name: e.last_name,
+      }));
+    }
+
+    // Merge posts and life events, sorted by date
+    const merged = [...result.map(p => ({ ...p, type: 'post' })), ...lifeEvents]
+      .sort((a, b) => new Date(b.post_date) - new Date(a.post_date));
+
     res.json({
-      posts: result,
+      posts: merged,
       pagination: {
         total: count,
         page: Math.floor(offset / limit) + 1,
