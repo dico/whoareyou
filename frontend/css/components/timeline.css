@@ -6,6 +6,12 @@
   align-items: start;
 }
 
+@media (max-width: 768px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dashboard-main {
   min-width: 0;
 }
@@ -219,6 +225,12 @@
 .post-body {
   line-height: 1.6;
   margin-bottom: var(--space-sm);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.post-body a {
+  word-break: break-all;
 }
 
 /* @mention links in post body */

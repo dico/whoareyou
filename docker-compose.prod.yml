@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/dico/whoareyou:latest
+    image: fosenutvikling/whoareyou:latest
     container_name: whoareyou-app
     ports:
       - "${APP_PORT:-80}:80"
