@@ -1,0 +1,8 @@
+/* Contact search dialog */
+.contact-search-results {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

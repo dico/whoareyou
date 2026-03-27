@@ -1,0 +1,367 @@
+/* Profile layout */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.profile-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  position: sticky;
+  top: 68px;
+}
+
+.sidebar-card {
+  padding: var(--space-md);
+}
+
+.sidebar-card h4 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.sidebar-card p {
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.sidebar-card p:last-child {
+  margin-bottom: 0;
+}
+
+.contact-mini-map {
+  height: 150px;
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-sm);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.contact-mini-map:hover {
+  opacity: 0.85;
+}
+
+.post-compose-inline textarea {
+  border: none;
+  background: transparent;
+  resize: none;
+}
+
+.post-compose-inline textarea:focus {
+  box-shadow: none;
+  background: transparent;
+}
+
+@media (max-width: 768px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-sidebar {
+    position: static;
+  }
+}
+
+/* Detail cards */
+.contact-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.detail-card {
+  padding: var(--space-lg);
+}
+
+.detail-card h4 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.detail-card p {
+  margin-bottom: var(--space-sm);
+}
+
+.detail-card p:last-child {
+  margin-bottom: 0;
+}
+
+/* Profile */
+.detail-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.detail-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.detail-avatar span {
+  color: white;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-xl);
+}
+
+.detail-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.detail-meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* Contact fields */
+.detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.detail-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  position: relative;
+}
+
+.detail-field > i:first-child {
+  width: 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.field-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-content a {
+  word-break: break-all;
+}
+
+.field-actions {
+  display: none;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.detail-field:hover .field-actions {
+  display: flex;
+}
+
+.field-actions .btn {
+  padding: 0 4px;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.field-add-btn {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  margin-left: auto;
+}
+
+/* Contact field inline form */
+.field-form {
+  margin-top: var(--space-sm);
+}
+
+.field-inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.field-inline-form .field-type-select {
+  max-width: 150px;
+}
+
+.field-form-actions {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.detail-field.editing {
+  padding: var(--space-xs) 0;
+}
+
+/* Social media fields — compact icon + username */
+.field-social {
+  gap: var(--space-xs);
+}
+
+.field-social .field-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+
+.field-social .field-link:hover {
+  color: var(--color-primary);
+}
+
+.field-social .field-link i {
+  width: 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.field-social .field-social-name {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Relationships */
+.detail-relationships {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Relationship group labels */
+.relationship-group-label {
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.relationship-group-label:first-child {
+  margin-top: 0;
+}
+
+/* Address */
+.detail-address {
+  margin-bottom: var(--space-md);
+}
+
+.detail-address:last-child {
+  margin-bottom: 0;
+}
+
+/* Labels */
+.detail-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+}
+
+/* Address search results */
+.address-search-results {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.address-result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-xs) 0;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.address-result:hover {
+  color: var(--color-primary);
+}
+
+.address-result:last-child {
+  border-bottom: none;
+}
+
+.address-add-tabs {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+/* Relationship type picker */
+.rel-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.rel-type-category {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.rel-type-category small {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.rel-type-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 3px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.rel-type-btn:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* Modal glass effect */
+.modal-content.glass-card {
+  border: var(--glass-border);
+}

@@ -1,0 +1,215 @@
+/* Avatar with upload overlay */
+.detail-avatar {
+  position: relative;
+}
+
+/* Hover overlay — shows icon over avatar */
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.2rem;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.detail-avatar:hover .avatar-overlay {
+  opacity: 1;
+}
+
+/* Drag-over state */
+.detail-avatar.avatar-drag-over {
+  outline: 3px dashed var(--color-primary);
+  outline-offset: 4px;
+}
+
+.detail-avatar.avatar-drag-over .avatar-overlay {
+  opacity: 1;
+  background: rgba(0, 122, 255, 0.5);
+}
+
+
+/* Photo strip (multiple profile photos) */
+.photo-strip {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.photo-strip-item {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.photo-strip-item.active {
+  border-color: var(--color-primary);
+}
+
+.photo-strip-item:hover {
+  border-color: var(--color-primary);
+  opacity: 0.8;
+}
+
+.photo-strip-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Photo viewer modal */
+.photo-viewer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  min-height: 400px;
+  border-radius: 0;
+}
+
+.photo-viewer img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.photo-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.photo-viewer-nav:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.photo-viewer-prev { left: var(--space-md); }
+.photo-viewer-next { right: var(--space-md); }
+
+.photo-viewer-footer {
+  padding: var(--space-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.photo-viewer-caption {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Crop area */
+.crop-container {
+  position: relative;
+  width: 100%;
+  max-height: 400px;
+  overflow: hidden;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crop-container img {
+  max-width: 100%;
+  max-height: 400px;
+}
+
+.crop-overlay {
+  position: absolute;
+  border: 2px dashed rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  cursor: move;
+}
+
+/* Image cropper */
+.cropper-area {
+  position: relative;
+  width: 100%;
+  height: 350px;
+  overflow: hidden;
+  background: #1a1a1a;
+  user-select: none;
+}
+
+.cropper-area canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cropper-viewport {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-full);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.cropper-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.cropper-zoom {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--color-primary);
+}
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl);
+  text-align: center;
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.drop-zone.drag-over {
+  border-color: var(--color-primary);
+  background: rgba(0, 122, 255, 0.04);
+  color: var(--color-primary);
+}
+
+.drop-zone i {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: var(--space-sm);
+}

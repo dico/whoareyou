@@ -1,0 +1,27 @@
+# Dev-tools (separate repository)
+dev-tools/
+
+# Dependencies
+node_modules/
+# Keep package-lock.json in git (do not ignore it)
+
+# Environment
+.env
+.env.local
+
+# Uploads
+uploads/
+
+# Temp files (migration data, etc.)
+_tmp/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/

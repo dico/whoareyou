@@ -1,0 +1,36 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whoareyou-app
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      # Bind mounts for hot-reload during development
+      - ./frontend:/app/frontend
+      - ./backend/src:/app/backend/src
+      # Persistent uploads
+      - ./uploads:/app/uploads
+      # Temp: Monica photos for migration (can be removed after import)
+      - ./_tmp:/app/_tmp
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_NAME=${DB_NAME:-whoareyou}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+      - SELF_SIGNED_HOST=${VIRTUAL_HOST}
+      - TZ=Europe/Oslo
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - whoareyou
+    restart: unless-stopped
+
+networks:
+  whoareyou:
+    name: whoareyou

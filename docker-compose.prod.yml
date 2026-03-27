@@ -1,0 +1,35 @@
+services:
+  app:
+    image: ghcr.io/dico/whoareyou:latest
+    container_name: whoareyou-app
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_NAME=${DB_NAME:-whoareyou}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+    restart: unless-stopped
+
+  # Optional — for users without their own MySQL server
+  db:
+    image: mysql:8
+    container_name: whoareyou-db
+    volumes:
+      - db-data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${DB_NAME:-whoareyou}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    profiles: ["with-db"]
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  db-data:
