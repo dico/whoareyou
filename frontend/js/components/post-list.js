@@ -11,13 +11,20 @@ import { authUrl } from '../utils/auth-url.js';
  * @param {string|null} contactUuid - Filter by contact, or null for global
  * @param {function} onChanged - Callback after post is edited/deleted
  */
-export async function renderPostList(containerId, contactUuid, onChanged) {
+let currentLimit = {};
+
+export async function renderPostList(containerId, contactUuid, onChanged, loadMore = false) {
   const el = document.getElementById(containerId);
   if (!el) return;
+
+  const key = containerId + (contactUuid || '');
+  if (!currentLimit[key] || !loadMore) currentLimit[key] = 20;
+  else currentLimit[key] += 20;
 
   try {
     const params = new URLSearchParams();
     if (contactUuid) params.set('contact', contactUuid);
+    params.set('limit', currentLimit[key]);
 
     const data = await api.get(`/posts?${params}`);
 
@@ -127,6 +134,19 @@ export async function renderPostList(containerId, contactUuid, onChanged) {
         </div>
       </div>
     `).join('');
+
+    // Add "load more" button if there are more posts
+    const hasMore = data.pagination && data.posts.length >= currentLimit[key];
+    if (hasMore) {
+      el.insertAdjacentHTML('beforeend', `
+        <button class="btn btn-outline-secondary btn-sm w-100 mt-3 load-more-btn">
+          ${t('posts.loadMore')}
+        </button>
+      `);
+      el.querySelector('.load-more-btn').addEventListener('click', () => {
+        renderPostList(containerId, contactUuid, onChanged, true);
+      });
+    }
 
     // Store post data for editing
     const postsMap = new Map(data.posts.map((p) => [p.uuid, p]));

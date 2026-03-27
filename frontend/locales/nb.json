@@ -73,7 +73,8 @@
     "makePrivate": "Gjør privat",
     "tag": "Tagg",
     "tagContact": "Tagg kontakt",
-    "addMedia": "Legg til bilder"
+    "addMedia": "Legg til bilder",
+    "loadMore": "Last inn flere"
   },
   "visibility": {
     "shared": "Delt",

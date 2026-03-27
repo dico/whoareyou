@@ -10,6 +10,15 @@
   .dashboard-layout {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-sidebar {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-sidebar .sidebar-card {
+    width: 100%;
+  }
 }
 
 .dashboard-main {
@@ -92,12 +101,11 @@
 
   .dashboard-sidebar {
     position: static;
-    flex-direction: row;
-    overflow-x: auto;
+    flex-direction: column;
   }
 
   .dashboard-sidebar .sidebar-card {
-    min-width: 250px;
+    width: 100%;
   }
 }
 

@@ -163,6 +163,9 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Passkey/WebAuthn — registrering i profil, passordfri innlogging, bypasser 2FA, browser-lib fra vendor
 - [x] Profil/Settings-splitt — `/profile` for personlig (konto, 2FA, passkeys), `/settings` for admin-kort
 
+- [x] Mobil-layout — dashboard sidebar stacker vertikalt, lange URLer brytes, "Last inn flere"-knapp på tidslinje
+- [x] Sikkerhetsaudit runde 2 — alle HIGH/MEDIUM-funn fikset (label-tenant, fil-tenant, type-validering)
+
 #### Gjenstår (sikkerhet)
 - [ ] E-post ved ny pålogging — varsle bruker når ny enhet/lokasjon logger inn (krever SMTP-oppsett)
 

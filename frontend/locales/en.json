@@ -73,7 +73,8 @@
     "makePrivate": "Make private",
     "tag": "Tag",
     "tagContact": "Tag contact",
-    "addMedia": "Add images"
+    "addMedia": "Add images",
+    "loadMore": "Load more"
   },
   "visibility": {
     "shared": "Shared",
