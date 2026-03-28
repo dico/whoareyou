@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs/promises';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
@@ -8,15 +9,35 @@ import { config } from '../config/index.js';
 
 const router = Router();
 
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const DOCUMENT_TYPES = ['application/pdf', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv'];
+const ALL_MEDIA_TYPES = [...IMAGE_TYPES, ...DOCUMENT_TYPES];
+
+// Image-only upload (for contact photos)
 const upload = multer({
   dest: path.join(config.uploads.dir, 'temp'),
   limits: { fileSize: config.uploads.maxFileSize },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (allowed.includes(file.mimetype)) {
+    if (IMAGE_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new AppError('Only JPEG, PNG, WebP and GIF images are allowed', 400));
+    }
+  },
+});
+
+// Image + document upload (for post media)
+const uploadMedia = multer({
+  dest: path.join(config.uploads.dir, 'temp'),
+  limits: { fileSize: config.uploads.maxFileSize },
+  fileFilter: (req, file, cb) => {
+    if (ALL_MEDIA_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new AppError('File type not allowed', 400));
     }
   },
 });
@@ -122,8 +143,8 @@ router.delete('/contacts/:uuid/photos/:photoId', async (req, res, next) => {
   }
 });
 
-// POST /api/posts/:uuid/media — upload media to a post
-router.post('/posts/:uuid/media', upload.array('media', 10), async (req, res, next) => {
+// POST /api/posts/:uuid/media — upload media (images + documents) to a post
+router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, res, next) => {
   try {
     if (!req.files?.length) throw new AppError('No files uploaded', 400);
 
@@ -141,23 +162,44 @@ router.post('/posts/:uuid/media', upload.array('media', 10), async (req, res, ne
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       const timestamp = Date.now();
-      const { filePath, thumbnailPath } = await processImage(
-        file.path,
-        `posts/${post.uuid}`,
-        `media_${timestamp}_${i}`
-      );
+      const isImage = IMAGE_TYPES.includes(file.mimetype);
+
+      let filePath, thumbnailPath, fileType;
+
+      if (isImage) {
+        const processed = await processImage(
+          file.path, `posts/${post.uuid}`, `media_${timestamp}_${i}`
+        );
+        filePath = processed.filePath;
+        thumbnailPath = processed.thumbnailPath;
+        fileType = 'image/webp';
+      } else {
+        // Document — store as-is with original extension
+        const ext = path.extname(file.originalname) || '.bin';
+        const outDir = path.join(config.uploads.dir, 'posts', post.uuid);
+        await fs.mkdir(outDir, { recursive: true });
+        const destName = `doc_${timestamp}_${i}${ext}`;
+        await fs.rename(file.path, path.join(outDir, destName));
+        filePath = `/uploads/posts/${post.uuid}/${destName}`;
+        thumbnailPath = null;
+        fileType = file.mimetype;
+      }
 
       const [mediaId] = await db('post_media').insert({
         post_id: post.id,
         tenant_id: req.tenantId,
         file_path: filePath,
         thumbnail_path: thumbnailPath,
-        file_type: 'image/webp',
+        file_type: fileType,
         file_size: file.size,
+        original_name: file.originalname || null,
         sort_order: (maxSort || 0) + i + 1,
       });
 
-      results.push({ id: mediaId, file_path: filePath, thumbnail_path: thumbnailPath });
+      results.push({
+        id: mediaId, file_path: filePath, thumbnail_path: thumbnailPath,
+        file_type: fileType, original_name: file.originalname,
+      });
     }
 
     res.status(201).json({ media: results });

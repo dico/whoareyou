@@ -192,17 +192,27 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
       .first();
     if (!contact) throw new AppError('Contact not found', 404);
 
-    // Get all relationships in the tenant (family only for tree)
-    const allRels = await db('relationships')
+    // Query params: depth (1-6, default 3), categories (comma-separated, default 'family')
+    const maxDepth = Math.min(Math.max(parseInt(req.query.depth) || 3, 1), 6);
+    const categories = (req.query.categories || 'family').split(',').map(c => c.trim()).filter(Boolean);
+
+    // Get all relationships in the tenant filtered by category
+    let relsQuery = db('relationships')
       .join('relationship_types', 'relationships.relationship_type_id', 'relationship_types.id')
       .where({ 'relationships.tenant_id': req.tenantId })
-      .where('relationship_types.category', 'family')
       .select(
         'relationships.contact_id', 'relationships.related_contact_id',
-        'relationship_types.name as type', 'relationship_types.inverse_name'
+        'relationship_types.name as type', 'relationship_types.inverse_name',
+        'relationship_types.category'
       );
 
-    // BFS from the contact to find connected family members (max depth 3)
+    if (!categories.includes('all')) {
+      relsQuery = relsQuery.whereIn('relationship_types.category', categories);
+    }
+
+    const allRels = await relsQuery;
+
+    // BFS from the contact to find connected members (configurable depth)
     const visited = new Set();
     const nodes = new Map();
     const edges = [];
@@ -211,7 +221,7 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
 
     while (queue.length) {
       const { id: currentId, depth } = queue.shift();
-      if (depth > 3) continue;
+      if (depth > maxDepth) continue;
 
       // Find all relationships for this contact
       for (const rel of allRels) {
@@ -239,7 +249,7 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
         .whereIn('id', [...visited])
         .whereNull('deleted_at')
         .select(
-          'id', 'uuid', 'first_name', 'last_name', 'date_of_birth',
+          'id', 'uuid', 'first_name', 'last_name', 'birth_year',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
         );
 
@@ -247,7 +257,7 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
         nodes.set(c.id, {
           id: c.id, uuid: c.uuid,
           first_name: c.first_name, last_name: c.last_name,
-          date_of_birth: c.date_of_birth, avatar: c.avatar,
+          birth_year: c.birth_year, avatar: c.avatar,
           is_root: c.id === contact.id,
         });
       }

@@ -65,6 +65,38 @@ Applikasjonen er funksjonell og i daglig bruk. Utviklingen foregår iterativt me
 - Rate limiting på alle endepunkter
 - PWA-støtte for hjemskjerm-app
 
+### Milepæl 8: E-post og SMTP ✅
+- SMTP-konfigurasjon i system admin (host, port, user, pass, from)
+- nodemailer-integrasjon med dynamisk config fra system_settings
+- E-postvarsling ved ny pålogging (fire-and-forget, blokkerer aldri login)
+- Test-e-post-funksjon
+- Login-varsler kan slås av/på
+
+### Milepæl 9: Gaver (fase 1) ✅
+- 7 nye tabeller (gift_events, gift_products, gift_product_links, gift_orders, gift_order_participants, gift_wishlists, gift_wishlist_items)
+- Gavehendelser med auto-fill (jul → 24.12 + nåværende år)
+- Produktkatalog med inline søk/opprett og URL-scraping
+- Gaverregistrering med avsender/mottaker-kontakter
+- Status-lifecycle (idea → purchased → given) med klikk-cycling
+- Synlighet: private under planlegging, auto-shared ved gitt, skjult fra mottaker
+- Product-picker komponent (gjenbrukbar)
+- Navbar-lenke, sub-navigasjon, dashboard
+- Ønskelister per familiemedlem med add/delete items, mark fulfilled
+- Global planleggingsliste for gaveidéer uten event, overfør til event-modal
+- Gir/Mottar filter-tabs på event-detalj, mottar gruppert per familiemedlem
+- Migrering fra mygifts-database (140 gaver, 89 produkter, 4 ønskelister)
+- Gave-modal i stedet for inline quick-add
+
+### Milepæl 10: Brukerkobling og fødselsdato ✅ (dag 3)
+- Delt opp fødselsdato — tre separate felt (dag/måned/år) med migrering av eksisterende data
+- Gjenbrukbar ny-kontakt-modal brukt fra forsiden og kontaktliste
+- Husstandsmedlemmer uten innlogging — "Legg til medlem" med kan-logge-inn-toggle, auto-generert passord, valgfri velkomst-e-post
+- Bruker-kontakt-synk — navbar og medlemsliste viser kontaktens profilbilde som avatar
+- Auto-foreslå kontaktkobling — matcher ukoblede brukere mot kontakter via e-post eller navn, ett-klikks kobling
+- Slektstre forbedringer — pan/zoom (drag+scroll+pinch), dybde-kontroll (1-6), kategorifilter (familie/sosialt/jobb), visningsmodus (hele familien/direkte linje/forfedre/etterkommere), relasjonslabels, auto-fit, 90vw×85vh modal, persistent modal med inline re-render
+- Navbar-søk husker siste søk — fokus viser forrige resultater uten ny forespørsel
+- Dokumentvedlegg i poster — PDF, Word, Excel, TXT, CSV i post-media. Bilder via sharp, dokumenter som-de-er. PDF/TXT preview i iframe-modal, andre som nedlasting. Drag-and-drop med dokumentstøtte
+
 ## MVP-definisjon
 
 MVP ble nådd i milepæl 1. Applikasjonen er i daglig bruk.

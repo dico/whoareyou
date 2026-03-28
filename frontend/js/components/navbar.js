@@ -2,6 +2,7 @@ import { state, navigate } from '../app.js';
 import { api } from '../api/client.js';
 import { contactRowHtml } from './contact-row.js';
 import { t } from '../utils/i18n.js';
+import { authUrl } from '../utils/auth-url.js';
 
 export function renderNavbar() {
   const nav = document.getElementById('app-navbar');
@@ -39,6 +40,10 @@ export function renderNavbar() {
           <i class="bi bi-building"></i>
           <span>${t('nav.companies')}</span>
         </a>
+        <a href="/gifts" data-link class="nav-link">
+          <i class="bi bi-gift"></i>
+          <span>${t('nav.gifts')}</span>
+        </a>
       </div>
 
       <div class="navbar-end">
@@ -60,7 +65,10 @@ export function renderNavbar() {
 
         <div class="dropdown">
           <button class="nav-link nav-user" data-bs-toggle="dropdown">
-            <span class="user-avatar">${user ? (user.first_name[0] + user.last_name[0]) : '?'}</span>
+            ${user?.avatar
+              ? `<img class="user-avatar" src="${authUrl(user.avatar)}" alt="">`
+              : `<span class="user-avatar">${user ? (user.first_name[0] + user.last_name[0]) : '?'}</span>`
+            }
           </button>
           <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
             <li><a class="dropdown-item" href="/profile" data-link><i class="bi bi-person-circle me-2"></i>${t('nav.profile')}</a></li>
@@ -169,6 +177,7 @@ export function renderNavbar() {
   const searchInput = document.getElementById('navbar-search');
   const searchResults = document.getElementById('navbar-search-results');
   let searchTimeout;
+  let lastSearchQuery = '';
 
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
@@ -177,7 +186,14 @@ export function renderNavbar() {
       searchResults.classList.add('d-none');
       return;
     }
-    searchTimeout = setTimeout(() => loadSearchResults(q), 200);
+    searchTimeout = setTimeout(() => { lastSearchQuery = q; loadSearchResults(q); }, 200);
+  });
+
+  // Re-show last results on focus
+  searchInput.addEventListener('focus', () => {
+    if (searchInput.value.trim().length >= 2 && searchResults.innerHTML && lastSearchQuery) {
+      searchResults.classList.remove('d-none');
+    }
   });
 
   searchInput.addEventListener('keydown', (e) => {
@@ -200,9 +216,10 @@ export function renderNavbar() {
         e.preventDefault();
         const target = active || items[0];
         if (target) {
-          searchInput.value = '';
           searchResults.classList.add('d-none');
-          navigate(`/contacts/${target.dataset.uuid}`);
+          searchInput.blur();
+          if (target.dataset.uuid) navigate(`/contacts/${target.dataset.uuid}`);
+          else if (target.getAttribute('href')) navigate(target.getAttribute('href'));
         }
       } else if (e.key === 'Escape') {
         searchResults.classList.add('d-none');
@@ -285,8 +302,8 @@ export function renderNavbar() {
       searchResults.querySelectorAll('.contact-row').forEach((item) => {
         item.addEventListener('mousedown', (e) => {
           e.preventDefault();
-          searchInput.value = '';
           searchResults.classList.add('d-none');
+          searchInput.blur();
           if (item.dataset.uuid) {
             navigate(`/contacts/${item.dataset.uuid}`);
           } else if (item.getAttribute('href')) {

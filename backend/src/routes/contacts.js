@@ -62,7 +62,8 @@ router.get('/', async (req, res, next) => {
     const contacts = await query
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
-        'contacts.nickname', 'contacts.date_of_birth', 'contacts.is_favorite',
+        'contacts.nickname', 'contacts.birth_day', 'contacts.birth_month', 'contacts.birth_year',
+        'contacts.is_favorite',
         'contacts.last_contacted_at', 'contacts.last_viewed_at', 'contacts.created_at',
         'contacts.visibility'
       )
@@ -197,7 +198,9 @@ router.get('/:uuid', async (req, res, next) => {
         first_name: contact.first_name,
         last_name: contact.last_name,
         nickname: contact.nickname,
-        date_of_birth: contact.date_of_birth,
+        birth_day: contact.birth_day,
+        birth_month: contact.birth_month,
+        birth_year: contact.birth_year,
         how_we_met: contact.how_we_met,
         notes: contact.notes,
         is_favorite: !!contact.is_favorite,
@@ -238,7 +241,9 @@ router.post('/', async (req, res, next) => {
       first_name: req.body.first_name.trim(),
       last_name: req.body.last_name?.trim() || null,
       nickname: req.body.nickname?.trim() || null,
-      date_of_birth: req.body.date_of_birth || null,
+      birth_day: req.body.birth_day || null,
+      birth_month: req.body.birth_month || null,
+      birth_year: req.body.birth_year || null,
       how_we_met: req.body.how_we_met?.trim() || null,
       notes: req.body.notes?.trim() || null,
       is_favorite: !!req.body.is_favorite,
@@ -265,7 +270,9 @@ router.post('/', async (req, res, next) => {
         first_name: contact.first_name,
         last_name: contact.last_name,
         nickname: contact.nickname,
-        date_of_birth: contact.date_of_birth,
+        birth_day: contact.birth_day,
+        birth_month: contact.birth_month,
+        birth_year: contact.birth_year,
         is_favorite: !!contact.is_favorite,
         visibility: contact.visibility,
         created_at: contact.created_at,
@@ -292,7 +299,7 @@ router.put('/:uuid', async (req, res, next) => {
     }
 
     const updates = {};
-    const allowed = ['first_name', 'last_name', 'nickname', 'date_of_birth', 'how_we_met', 'notes', 'is_favorite', 'visibility'];
+    const allowed = ['first_name', 'last_name', 'nickname', 'birth_day', 'birth_month', 'birth_year', 'how_we_met', 'notes', 'is_favorite', 'visibility'];
     for (const field of allowed) {
       if (req.body[field] !== undefined) {
         updates[field] = typeof req.body[field] === 'string' ? req.body[field].trim() : req.body[field];
@@ -328,7 +335,9 @@ router.put('/:uuid', async (req, res, next) => {
         first_name: updated.first_name,
         last_name: updated.last_name,
         nickname: updated.nickname,
-        date_of_birth: updated.date_of_birth,
+        birth_day: updated.birth_day,
+        birth_month: updated.birth_month,
+        birth_year: updated.birth_year,
         how_we_met: updated.how_we_met,
         notes: updated.notes,
         is_favorite: !!updated.is_favorite,
@@ -447,27 +456,29 @@ router.get('/search/global', async (req, res, next) => {
 // GET /api/contacts/upcoming-birthdays — next 30 days of birthdays
 router.get('/upcoming-birthdays/list', async (req, res, next) => {
   try {
+    // Need at least day+month to calculate upcoming birthdays
     const contacts = await db('contacts')
       .where('contacts.tenant_id', req.tenantId)
       .whereNull('contacts.deleted_at')
-      .whereNotNull('contacts.date_of_birth')
+      .whereNotNull('contacts.birth_day')
+      .whereNotNull('contacts.birth_month')
       .where(function () {
         this.where('contacts.visibility', 'shared').orWhere('contacts.created_by', req.user.id);
       })
       .select(
-        'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.date_of_birth',
+        'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+        'contacts.birth_day', 'contacts.birth_month', 'contacts.birth_year',
         db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
       );
 
     const today = new Date();
     const upcoming = contacts
       .map(c => {
-        const dob = new Date(c.date_of_birth);
-        const nextBirthday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+        const nextBirthday = new Date(today.getFullYear(), c.birth_month - 1, c.birth_day);
         if (nextBirthday < today) nextBirthday.setFullYear(today.getFullYear() + 1);
         const daysUntil = Math.ceil((nextBirthday - today) / (1000 * 60 * 60 * 24));
-        const age = nextBirthday.getFullYear() - dob.getFullYear();
-        return { ...c, days_until: daysUntil, turning_age: age };
+        const turningAge = c.birth_year ? nextBirthday.getFullYear() - c.birth_year : null;
+        return { ...c, days_until: daysUntil, turning_age: turningAge };
       })
       .filter(c => c.days_until <= 30)
       .sort((a, b) => a.days_until - b.days_until);

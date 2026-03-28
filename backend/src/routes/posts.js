@@ -64,7 +64,7 @@ router.get('/', async (req, res, next) => {
         .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)),
       db('post_media')
         .whereIn('post_id', postIds)
-        .select('post_id', 'file_path', 'thumbnail_path', 'file_type')
+        .select('post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
         .orderBy('sort_order'),
       profileContactIds.length
         ? db('contacts')
@@ -104,6 +104,8 @@ router.get('/', async (req, res, next) => {
         file_path: m.file_path,
         thumbnail_path: m.thumbnail_path,
         file_type: m.file_type,
+        original_name: m.original_name,
+        file_size: m.file_size,
       });
     }
 
@@ -367,7 +369,7 @@ async function getPostWithDetails(postId, tenantId) {
       .select('contacts.uuid', 'contacts.first_name', 'contacts.last_name'),
     db('post_media')
       .where('post_id', postId)
-      .select('file_path', 'thumbnail_path', 'file_type')
+      .select('file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
       .orderBy('sort_order'),
   ]);
 

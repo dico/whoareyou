@@ -3,6 +3,7 @@ import { navigate } from '../app.js';
 import { toggleVisibilityBtn } from '../utils/visibility.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
+import { addContactModalHtml, initAddContactModal, showAddContactModal } from '../components/add-contact-modal.js';
 
 let currentSearch = '';
 let currentFilter = localStorage.getItem('contacts.filter') || 'all';
@@ -57,58 +58,7 @@ export async function renderContacts() {
       </div>
     </div>
 
-    <!-- Add contact modal -->
-    <div class="modal fade" id="add-contact-modal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content glass-card">
-          <div class="modal-header">
-            <h5 class="modal-title">${t('contacts.newContact')}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <form id="add-contact-form">
-            <div class="modal-body">
-              <div class="row g-2 mb-3">
-                <div class="col">
-                  <div class="form-floating">
-                    <input type="text" class="form-control" id="new-first-name" placeholder="${t('auth.firstName')}" required>
-                    <label>${t('auth.firstName')}</label>
-                  </div>
-                </div>
-                <div class="col">
-                  <div class="form-floating">
-                    <input type="text" class="form-control" id="new-last-name" placeholder="${t('auth.lastName')}">
-                    <label>${t('auth.lastName')}</label>
-                  </div>
-                </div>
-              </div>
-              <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="new-nickname" placeholder="${t('contacts.nickname')}">
-                <label>${t('contacts.nickname')}</label>
-              </div>
-              <div class="form-floating mb-3">
-                <input type="date" class="form-control" id="new-dob" placeholder="${t('contacts.dateOfBirth')}">
-                <label>${t('contacts.dateOfBirth')}</label>
-              </div>
-              <div class="form-floating mb-3">
-                <textarea class="form-control" id="new-how-met" placeholder="${t('contacts.howWeMet')}" style="height:80px"></textarea>
-                <label>${t('contacts.howWeMet')}</label>
-              </div>
-              <div class="mb-3">
-                <div class="visibility-pill" id="new-visibility-btn" data-visibility="shared">
-                  <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
-                  <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
-                </div>
-              </div>
-              <div id="add-contact-error" class="alert alert-danger d-none"></div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">${t('contacts.cancel')}</button>
-              <button type="submit" class="btn btn-primary">${t('contacts.create')}</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    ${addContactModalHtml()}
   `;
 
   // Load labels for filter
@@ -163,45 +113,9 @@ export async function renderContacts() {
     loadContacts();
   });
 
-  // Add contact button
-  document.getElementById('btn-add-contact').addEventListener('click', () => {
-    const modal = new bootstrap.Modal(document.getElementById('add-contact-modal'));
-    modal.show();
-  });
-
-  // Visibility pill toggle
-  document.getElementById('new-visibility-btn').addEventListener('click', (e) => {
-    const pill = e.currentTarget;
-    const clicked = e.target.closest('.visibility-pill-option');
-    if (!clicked) return;
-    pill.dataset.visibility = clicked.dataset.val;
-    pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
-  });
-
-  // Add contact form
-  document.getElementById('add-contact-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const errorEl = document.getElementById('add-contact-error');
-    errorEl.classList.add('d-none');
-
-    try {
-      const data = await api.post('/contacts', {
-        first_name: document.getElementById('new-first-name').value,
-        last_name: document.getElementById('new-last-name').value || undefined,
-        nickname: document.getElementById('new-nickname').value || undefined,
-        date_of_birth: document.getElementById('new-dob').value || undefined,
-        how_we_met: document.getElementById('new-how-met').value || undefined,
-        visibility: document.getElementById('new-visibility-btn').dataset.visibility,
-      });
-
-      bootstrap.Modal.getInstance(document.getElementById('add-contact-modal')).hide();
-      e.target.reset();
-      navigate(`/contacts/${data.contact.uuid}`);
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.classList.remove('d-none');
-    }
-  });
+  // Add contact modal (shared component)
+  initAddContactModal();
+  document.getElementById('btn-add-contact').addEventListener('click', showAddContactModal);
 }
 
 async function loadContacts() {
@@ -242,11 +156,13 @@ async function loadContacts() {
             ${c.first_name} ${c.last_name || ''}
             ${c.nickname ? `<span class="contact-nickname">"${c.nickname}"</span>` : ''}
           </div>
-          ${c.date_of_birth
-            ? `<div class="contact-meta"><i class="bi bi-cake2"></i> ${calcAge(c.date_of_birth)}</div>`
-            : c.last_contacted_at
-              ? `<div class="contact-meta">${t('contacts.lastContact', { date: formatDate(c.last_contacted_at) })}</div>`
-              : ''
+          ${c.birth_year
+            ? `<div class="contact-meta"><i class="bi bi-cake2"></i> ${calcAge(c.birth_year, c.birth_month, c.birth_day)}</div>`
+            : c.birth_month && c.birth_day
+              ? `<div class="contact-meta"><i class="bi bi-cake2"></i> ${formatBirthDate(c.birth_day, c.birth_month)}</div>`
+              : c.last_contacted_at
+                ? `<div class="contact-meta">${t('contacts.lastContact', { date: formatDate(c.last_contacted_at) })}</div>`
+                : ''
           }
         </div>
         <div class="contact-badges">
@@ -263,11 +179,17 @@ async function loadContacts() {
   }
 }
 
-function calcAge(dateStr) {
-  const birth = new Date(dateStr);
+function calcAge(birthYear, birthMonth, birthDay) {
   const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  let age = today.getFullYear() - birthYear;
+  if (birthMonth && birthDay) {
+    const m = today.getMonth() + 1 - birthMonth;
+    if (m < 0 || (m === 0 && today.getDate() < birthDay)) age--;
+  }
   return `${age} ${t('contacts.years')}`;
+}
+
+function formatBirthDate(day, month) {
+  const date = new Date(2000, month - 1, day);
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }

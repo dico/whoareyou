@@ -30,6 +30,7 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 | Bildeprosessering | sharp (WebP, thumbnail, EXIF-stripping) |
 | Kart | Leaflet + OpenStreetMap, Nominatim geocoding |
 | i18n | JSON locale-filer (en + nb), t()-funksjon med fallback |
+| E-post | nodemailer, SMTP-config i system_settings, login-varsler |
 | Dev-tools | FastAPI-bro for AI-assistert debugging (port 7601) |
 | CI/CD | GitHub → DockerHub/GHCR (ikke satt opp ennå) |
 
@@ -144,6 +145,14 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Relasjonstyper begge retninger — forelder/barn, besteforelder/barnebarn, sjef/ansatt som separate valg
 - [x] PWA — manifest.json, app-ikoner (192+512), apple-touch-icon, standalone-modus, safe-area for notch
 
+### Gjort (dag 3 — 2026-03-28)
+- [x] Fødselsdato delt opp — `date_of_birth` erstattet med `birth_day`, `birth_month`, `birth_year` (alle nullable) for delvis fødselsdato (f.eks. dag+måned uten år fra Facebook). Tre dropdowns i skjema, alder vises bare med år, bursdager fungerer uten år.
+- [x] Ny kontakt fra forsiden — gjenbrukbar `add-contact-modal.js`-komponent brukes på både tidslinje og kontaktliste
+- [x] Husstandsmedlemmer uten innlogging — "Legg til medlem" med "Kan logge inn"-toggle, e-post/passord valgfritt (passord auto-genereres om tomt), `is_active=false` for ikke-login-brukere, "Ingen innlogging"-badge
+- [x] Velkomst-e-post — valgfri e-post ved opprettelse av medlem, sender innloggingsinfo via SMTP
+- [x] Bruker-kontakt-synk — brukerens koblede kontakt-avatar vises i navbar og medlemsliste, `/auth/me` returnerer avatar
+- [x] Auto-foreslå kontaktkobling — ukoblede brukere får foreslått kontakt basert på e-post-match (contact_fields) eller navnematch, med ett-klikks kobling i medlemslisten
+
 ### Neste (prioritert)
 - [ ] **Eksport** — eksportere kontakter, poster, relasjoner som JSON/CSV
 
@@ -167,29 +176,38 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Sikkerhetsaudit runde 2 — alle HIGH/MEDIUM-funn fikset (label-tenant, fil-tenant, type-validering)
 
 #### Gjenstår (sikkerhet)
-- [ ] E-post ved ny pålogging — varsle bruker når ny enhet/lokasjon logger inn (krever SMTP-oppsett)
+- [x] E-post ved ny pålogging — SMTP-konfigurasjon i system admin, nodemailer, login-varsel fire-and-forget
+- [x] SMTP-admin — `/admin/system` med SMTP-konfigurasjon, test-e-post, login-varsler on/off
+
+- [x] Slektstre forbedringer — pan/zoom (mus + touch/pinch), dybde-kontroll (slider 1-6), kategorifilter (familie/sosialt/jobb), relasjonslabels på kanter, auto-fit ved åpning, visningsmodus (hele familien/direkte linje/forfedre/etterkommere), 90vw×85vh modal, persistent modal med inline re-render
+- [x] Navbar-søk husker siste søk — klikk i søkefeltet viser forrige resultater uten ny forespørsel
+- [x] Dokumentvedlegg i poster — PDF, Word, Excel, TXT, CSV kan hektes på innlegg. Bilder prosesseres med sharp som før, dokumenter lagres som-de-er. Vises som nedlastingslenker med filtype-ikon og filstørrelse. Binders-ikon i compose. PDF/TXT åpnes i preview-modal med iframe, andre som nedlasting. Drag-and-drop støtter dokumenter
+- [x] Kjæledyr — ny relasjonstype eier/kjæledyr (owner/pet). Kjæledyr registreres som vanlig kontakt med relasjon
 
 ### Senere
-- [ ] Slektstre forbedringer — pan/zoom, husstand-gruppering, velge hvilke relasjoner som vises, dybde-kontroll
-- [ ] Dokumenter — utvide upload-støtte til PDF/filer
-- [ ] Reminder-frekvens — månedlig, kvartalsvis, årlig
+
+- [x] Gaver (fase 1) — gavemodul med events, produktkatalog, gaverregistrering med avsender/mottaker, visibility (private under planlegging, auto-shared ved gitt), product-picker med URL-scraping, navbar-lenke
+- [x] Gaver (fase 2) — ønskelister per familiemedlem, planleggingsliste (globale idéer uten event), overfør idé til event, migrering fra mygifts
+
+#### Gaver — gjenstår
+- [ ] Gaver: kontaktprofil-integrasjon (vise gaver i sidebar)
+- [ ] Gaver: "Legg til husstand" / "Legg til familie"-snarveier på giver/mottaker
+- [ ] Gaver: produktbilde-upload
+- [ ] Gaver: ønskelister på vanlige kontakter (ikke bare familiemedlemmer)
 
 ### Vurderes
-- [ ] **Gaver og ønskelister** — events (f.eks. "Jul 2026"), gaver gitt/mottatt med retning (person→person, husstand→husstand, husstand→person), ønskelister per person, produktregister med historikk over hvem som fikk/ga produktet. Større feature som krever eget design
-- [ ] Kjæledyr-registrering
-- [ ] Egendefinerte kjønn
-- [ ] Konfigurerbare seksjoner på kontaktkortet
+*Ingen åpne punkter for øyeblikket.*
 
 ### Planlagte konsepter
 
 #### ~~Household / adresse-deling~~ ✅ Implementert
 Household-seksjon, "same as"-snarvei, adresse-side med beboerhistorikk, move-out/move-in.
 
-#### Komplekse familieforhold
-Familierelasjoner kan være rotete — skilte foreldre, barn med flere partnere, bonus/ste-barn. Vi trenger å støtte dette uten å gjøre UI-et rotete. Mulig tilnærming: toggle/filter på relasjonskategorier (familie/sosialt/jobb), og et slektstre (SVG) i modal for å visualisere familiestruktur.
+#### ~~Komplekse familieforhold~~ ✅ Implementert
+Slektstre med visningsmodus (direkte linje/forfedre/etterkommere), kategorifilter (familie/sosialt/jobb), dybde-kontroll. 19 relasjonstyper inkl. ste-foreldre, bonus-barn, svigers.
 
-#### Slektstre
-Rendere familiestruktur visuelt med SVG eller canvas i en modal. Åpnes fra et ikon ved siden av "Relationships"-headeren. Viser foreldre, barn, søsken, ektefelle — med klikkbare noder for å navigere.
+#### ~~Slektstre~~ ✅ Implementert
+SVG-basert slektstre i persistent modal med pan/zoom, relasjonslabels, hover-highlight, klikk-navigasjon.
 
 #### Label-administrasjon (tag management)
 Side for avansert tag-håndtering: se alle kontakter per tag, flytte kontakter mellom tags i en split-view (venstre: kilde-tag, høyre: mål-tag). Nyttig når grupper endrer seg over tid — f.eks. barnehage → skole, der de fleste men ikke alle skal flyttes til ny tag. Beholder historikk ved å ha begge tags.
@@ -229,7 +247,7 @@ Side for avansert tag-håndtering: se alle kontakter per tag, flytte kontakter m
 | Relasjonsdatoer | **Implementert** | Valgfri start_date/end_date (sammen siden, gikk fra hverandre) |
 | Relasjonsvisning | **Implementert** | Avatar + navn + type, sortert: spouse → child → parent → sibling → venner |
 | Navigasjon | **Implementert** | Klikke mellom relaterte kontakter |
-| Slektstre | Planlagt | SVG-visualisering i modal |
+| Slektstre | **Implementert** | SVG med pan/zoom, dybde-kontroll, kategorifilter, visningsmodus (direkte linje/forfedre/etterkommere), relasjonslabels, hover-highlight, klikk-navigasjon |
 
 ### Adresser og kart
 | Feature | Status | Beskrivelse |
@@ -249,13 +267,25 @@ Side for avansert tag-håndtering: se alle kontakter per tag, flytte kontakter m
 | Felt-typer | **Implementert** | phone, email, website, facebook, instagram, linkedin, x, snapchat, youtube, tiktok |
 | Flere felt per type | **Støttet** | Kan ha flere av samme type (f.eks. to YouTube-kanaler) med label |
 
+### Gaver
+| Feature | Status | Beskrivelse |
+|---------|--------|-------------|
+| Gavehendelser | **Implementert** | Events (jul, bursdag, bryllup, annet), auto-fill dato/navn for jul |
+| Gaverregistrering | **Implementert** | Gave med avsender(e)/mottaker(e), status-lifecycle, inline quick-add |
+| Produktkatalog | **Implementert** | Søk/opprett inline, URL-scraping for metadata, gjenbrukbar katalog |
+| Synlighet | **Implementert** | Private under planlegging, auto-shared ved gitt, skjult fra mottaker |
+| Product-picker | **Implementert** | Inline søk/opprett, URL-paste med auto-hent, debounced |
+| Ønskelister | **Implementert** | Per familiemedlem, add/delete items, mark fulfilled, product-picker |
+| Planleggingsliste | **Implementert** | Globale gaveidéer uten event, gruppert per mottaker, overfør til event |
+| Migrering fra mygifts | **Implementert** | 3 events, 140 gaver, 89 produkter, 4 ønskelister importert |
+
 ### Påminnelser og varsler
 | Feature | Status | Beskrivelse |
 |---------|--------|-------------|
 | Bursdagspåminnelser | Planlagt | Tabeller finnes, frontend mangler |
 | Egne påminnelser | Planlagt | 41 migrert fra Monica |
 | In-app varsler | Planlagt | Bjelle-ikon er placeholder |
-| E-postvarsler | Senere | |
+| E-postvarsler | **Implementert** | SMTP-konfig i system admin, login-varsler via nodemailer |
 | Push-varsler | Senere | |
 
 ### System

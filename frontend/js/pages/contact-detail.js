@@ -8,7 +8,7 @@ import { showCropper } from '../components/image-cropper.js';
 import { toggleVisibilityBtn, visibilityToggleHtml } from '../utils/visibility.js';
 import { renderContactFields } from '../components/contact-fields.js';
 import { contactRowHtml } from '../components/contact-row.js';
-import { t, formatDate, formatDateLong } from '../utils/i18n.js';
+import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { enableDropZone } from '../utils/drop-zone.js';
 
@@ -59,7 +59,12 @@ export async function renderContactDetail(uuid) {
                 <div>
                   <h3>${contact.first_name} ${contact.last_name || ''}</h3>
                   ${contact.nickname ? `<p class="text-muted">"${contact.nickname}"</p>` : ''}
-                  ${contact.date_of_birth ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatDateLong(contact.date_of_birth)} (${calcAge(contact.date_of_birth)})</p>` : ''}
+                  ${contact.birth_month && contact.birth_day
+                    ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatBirthParts(contact.birth_day, contact.birth_month, contact.birth_year)}</p>`
+                    : contact.birth_year
+                      ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${t('contacts.bornYear', { year: contact.birth_year })}</p>`
+                      : ''
+                  }
                   ${contact.visibility === 'private'
                     ? `<span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>`
                     : `<span class="badge bg-light text-muted"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>`
@@ -92,6 +97,10 @@ export async function renderContactDetail(uuid) {
                     <label class="post-media-btn" title="${t('posts.addMedia')}">
                       <i class="bi bi-image"></i>
                       <input type="file" id="quick-post-media-input" multiple accept="image/*" hidden>
+                    </label>
+                    <label class="post-media-btn" title="${t('posts.addDocument')}">
+                      <i class="bi bi-paperclip"></i>
+                      <input type="file" id="quick-post-doc-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
                     </label>
                     <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
                   </div>
@@ -829,7 +838,7 @@ export async function renderContactDetail(uuid) {
       pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
     });
 
-    // Quick post media handling
+    // Quick post media handling (images + documents)
     let quickPostMedia = [];
     document.getElementById('quick-post-media-input')?.addEventListener('change', (e) => {
       for (const file of e.target.files) {
@@ -839,22 +848,42 @@ export async function renderContactDetail(uuid) {
       e.target.value = '';
     });
 
-    // Drop zone for quick post (target the wrapper div for visual feedback)
+    document.getElementById('quick-post-doc-input')?.addEventListener('change', (e) => {
+      for (const file of e.target.files) quickPostMedia.push(file);
+      renderQuickMediaPreview();
+      e.target.value = '';
+    });
+
+    // Drop zone for quick post (images + documents)
     enableDropZone(document.getElementById('quick-post-form').closest('.post-compose-inline'), (files) => {
       quickPostMedia.push(...files);
       renderQuickMediaPreview();
-    });
+    }, { acceptDocuments: true });
+
+    const docIcons = { 'application/pdf': 'bi-file-earmark-pdf', 'text/plain': 'bi-file-earmark-text', 'text/csv': 'bi-file-earmark-spreadsheet' };
+    function getDocIcon(type) {
+      if (type.includes('word') || type.includes('document')) return 'bi-file-earmark-word';
+      if (type.includes('excel') || type.includes('sheet') || type.includes('csv')) return 'bi-file-earmark-spreadsheet';
+      return docIcons[type] || 'bi-file-earmark';
+    }
 
     function renderQuickMediaPreview() {
       const el = document.getElementById('quick-post-media-preview');
       if (!quickPostMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
       el.classList.remove('d-none');
-      el.innerHTML = quickPostMedia.map((f, i) => `
-        <div class="media-preview-item">
-          <img src="${URL.createObjectURL(f)}" alt="">
+      el.innerHTML = quickPostMedia.map((f, i) => {
+        if (f.type.startsWith('image/')) {
+          return `<div class="media-preview-item">
+            <img src="${URL.createObjectURL(f)}" alt="">
+            <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+          </div>`;
+        }
+        return `<div class="media-preview-item media-preview-doc">
+          <i class="${getDocIcon(f.type)}"></i>
+          <span class="media-preview-doc-name">${f.name}</span>
           <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
       el.querySelectorAll('.media-preview-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           quickPostMedia.splice(parseInt(btn.dataset.index), 1);
@@ -932,9 +961,23 @@ function renderEditMode(contact) {
           <input type="text" class="form-control" id="edit-nickname" value="${escapeAttr(contact.nickname || '')}">
           <label>${t('contacts.nickname')}</label>
         </div>
-        <div class="form-floating mb-3">
-          <input type="date" class="form-control" id="edit-dob" value="${contact.date_of_birth ? contact.date_of_birth.slice(0, 10) : ''}">
-          <label>${t('contacts.dateOfBirth')}</label>
+        <label class="form-label small mb-1">${t('contacts.dateOfBirth')}</label>
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <select class="form-select" id="edit-birth-day">
+              <option value="">${t('contacts.day')}</option>
+              ${Array.from({length: 31}, (_, i) => `<option value="${i+1}" ${contact.birth_day === i+1 ? 'selected' : ''}>${i+1}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-4">
+            <select class="form-select" id="edit-birth-month">
+              <option value="">${t('contacts.month')}</option>
+              ${Array.from({length: 12}, (_, i) => `<option value="${i+1}" ${contact.birth_month === i+1 ? 'selected' : ''}>${t('contacts.months.' + (i+1))}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-4">
+            <input type="number" class="form-control" id="edit-birth-year" placeholder="${t('contacts.year')}" min="1900" max="${new Date().getFullYear()}" value="${contact.birth_year || ''}">
+          </div>
         </div>
         <div class="form-floating mb-3">
           <textarea class="form-control" id="edit-how-met" style="height:80px">${escapeHtml(contact.how_we_met || '')}</textarea>
@@ -981,7 +1024,9 @@ function renderEditMode(contact) {
         first_name: document.getElementById('edit-first-name').value,
         last_name: document.getElementById('edit-last-name').value || null,
         nickname: document.getElementById('edit-nickname').value || null,
-        date_of_birth: document.getElementById('edit-dob').value || null,
+        birth_day: parseInt(document.getElementById('edit-birth-day').value) || null,
+        birth_month: parseInt(document.getElementById('edit-birth-month').value) || null,
+        birth_year: parseInt(document.getElementById('edit-birth-year').value) || null,
         how_we_met: document.getElementById('edit-how-met').value || null,
         notes: document.getElementById('edit-notes').value || null,
         visibility: document.getElementById('edit-visibility-btn').dataset.visibility,
@@ -1289,21 +1334,203 @@ function renderGroupedRelationships(relationships, { hasAddress = false } = {}) 
   return html;
 }
 
+let _treeModal = null; // persistent modal instance
+
 async function showFamilyTree(contactUuid) {
+  // Create modal shell (recreate if DOM element was removed)
+  if (_treeModal && !document.contains(_treeModal.el)) {
+    _treeModal = null;
+  }
+  if (!_treeModal) {
+    const dlgId = 'tree-modal-' + Date.now();
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal fade" id="${dlgId}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:90vw;width:90vw">
+          <div class="modal-content" style="height:85vh">
+            <div class="modal-header">
+              <h5 class="modal-title"><i class="bi bi-diagram-2 me-2"></i>${t('relationships.familyTree')}</h5>
+              <div class="d-flex align-items-center gap-3 ms-auto me-3" id="tree-controls"></div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body tree-pan-container" style="overflow:hidden;flex:1;position:relative;cursor:grab">
+              <div class="tree-pan-inner" id="tree-inner" style="transform-origin:0 0"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    const modalEl = document.getElementById(dlgId);
+    _treeModal = { el: modalEl, bs: new bootstrap.Modal(modalEl) };
+
+    // --- Pan & Zoom (attached once) ---
+    const container = modalEl.querySelector('.tree-pan-container');
+    const inner = document.getElementById('tree-inner');
+    let scale = 1, panX = 0, panY = 0, isPanning = false, startX, startY;
+
+    _treeModal._visible = false;
+
+    _treeModal.resetView = (w, h) => {
+      _treeModal._svgW = w;
+      _treeModal._svgH = h;
+      const cw = container.clientWidth, ch = container.clientHeight;
+      if (cw && ch && w && h) {
+        const pad = 40;
+        scale = Math.min((cw - pad) / w, (ch - pad) / h, 1.5);
+        panX = (cw - w * scale) / 2;
+        panY = (ch - h * scale) / 2;
+        inner.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      }
+    };
+
+    // Only source of truth for first-time fit: after modal animation completes
+    modalEl.addEventListener('shown.bs.modal', () => {
+      _treeModal._visible = true;
+      if (_treeModal._svgW) {
+        _treeModal.resetView(_treeModal._svgW, _treeModal._svgH);
+        inner.style.visibility = '';
+      }
+    });
+    modalEl.addEventListener('hidden.bs.modal', () => { _treeModal._visible = false; });
+
+    function applyTransform() {
+      inner.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    }
+
+    container.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.tree-node')) return;
+      isPanning = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+      container.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      applyTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isPanning = false;
+      if (container) container.style.cursor = 'grab';
+    });
+
+    container.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.min(Math.max(scale * delta, 0.2), 3);
+      panX = mx - (mx - panX) * (newScale / scale);
+      panY = my - (my - panY) * (newScale / scale);
+      scale = newScale;
+      applyTransform();
+    }, { passive: false });
+
+    let lastTouchDist = 0;
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) { isPanning = true; startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY; }
+      else if (e.touches.length === 2) { lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
+    }, { passive: true });
+    container.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1 && isPanning) { panX = e.touches[0].clientX - startX; panY = e.touches[0].clientY - startY; applyTransform(); }
+      else if (e.touches.length === 2) { const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (lastTouchDist) { scale = Math.min(Math.max(scale * (dist / lastTouchDist), 0.2), 3); applyTransform(); } lastTouchDist = dist; }
+    }, { passive: true });
+    container.addEventListener('touchend', () => { isPanning = false; lastTouchDist = 0; });
+  }
+
+  // Load and render tree content
+  await renderTreeContent(contactUuid, 3, ['family']);
+  _treeModal.bs.show();
+}
+
+async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMode = 'full') {
+  const inner = document.getElementById('tree-inner');
+  const controlsEl = document.getElementById('tree-controls');
+  inner.innerHTML = `<div class="text-center p-4 text-muted">${t('app.loading')}</div>`;
+
+  const parentTypes = ['parent', 'stepparent', 'godparent', 'grandparent'];
+  const childTypes = ['child', 'stepchild', 'godchild', 'grandchild'];
+  const partnerTypes = ['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant'];
+
   try {
-    const data = await api.get(`/relationships/tree/${contactUuid}`);
-    const { rootId, nodes, edges } = data;
+    const params = `depth=${treeDepth}&categories=${treeCategories.join(',')}`;
+    const data = await api.get(`/relationships/tree/${contactUuid}?${params}`);
+    const { rootId, nodes, edges: rawEdges } = data;
 
     if (nodes.length < 2) {
-      confirmDialog(t('relationships.noFamilyTree'), { title: t('relationships.familyTree'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      inner.innerHTML = `<div class="text-center p-4 text-muted">${t('relationships.noFamilyTree')}</div>`;
       return;
+    }
+
+    // Filter edges based on tree mode
+    // For directional modes, we need to do a two-pass:
+    // 1. BFS with filtered edge types to find reachable nodes
+    // 2. Only include edges between reachable nodes
+    let edges;
+    if (treeMode === 'full') {
+      edges = rawEdges;
+    } else {
+      // Determine which edge types to follow during BFS
+      const allowedForTraversal = (type, fromId, toId, currentId) => {
+        const isPartner = partnerTypes.includes(type);
+        if (isPartner) return true; // always follow partner edges
+
+        if (treeMode === 'lineage') {
+          // Only parent/child — no siblings, uncles, etc.
+          return parentTypes.includes(type) || childTypes.includes(type);
+        }
+        if (treeMode === 'ancestors') {
+          // Only go up: from current's perspective, follow edges where the other is a parent
+          if (currentId === toId && parentTypes.includes(type)) return true; // other (from) is parent of me
+          if (currentId === fromId && childTypes.includes(type)) return true; // I am child of other → other is parent
+          return false;
+        }
+        if (treeMode === 'descendants') {
+          // Only go down: from current's perspective, follow edges where the other is a child
+          if (currentId === fromId && parentTypes.includes(type)) return true; // I am parent of other → other is child
+          if (currentId === toId && childTypes.includes(type)) return true; // other (from) is child of me
+          return false;
+        }
+        return true;
+      };
+
+      // BFS with filtered traversal to find reachable nodes
+      const reachable = new Set([rootId]);
+      const q = [rootId];
+      while (q.length) {
+        const cid = q.shift();
+        for (const e of rawEdges) {
+          let otherId;
+          if (e.from === cid) otherId = e.to;
+          else if (e.to === cid) otherId = e.from;
+          else continue;
+          if (reachable.has(otherId)) continue;
+          if (allowedForTraversal(e.type, e.from, e.to, cid)) {
+            reachable.add(otherId);
+            q.push(otherId);
+          }
+        }
+      }
+
+      // Include only edges where both nodes are reachable
+      edges = rawEdges.filter(e => reachable.has(e.from) && reachable.has(e.to));
+      // Also filter out sibling edges in lineage/ancestors/descendants modes
+      if (treeMode !== 'full') {
+        edges = edges.filter(e => {
+          const t = e.type;
+          return parentTypes.includes(t) || childTypes.includes(t) || partnerTypes.includes(t)
+            || (treeMode === 'full');
+        });
+      }
     }
 
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
     const levels = new Map();
-    const partners = new Map(); // id → partner id (spouse/partner on same level)
+    const partners = new Map();
 
-    // BFS to assign levels + detect partners
     levels.set(rootId, 0);
     const bfsQ = [rootId];
     const bfsVisited = new Set([rootId]);
@@ -1312,92 +1539,100 @@ async function showFamilyTree(contactUuid) {
       const cid = bfsQ.shift();
       const cLevel = levels.get(cid);
       for (const e of edges) {
-        let otherId, relFromPerspective;
-        if (e.from === cid) {
-          otherId = e.to;
-          relFromPerspective = e.type; // "e.from IS [type] TO e.to" — what is the other person to me?
-        } else if (e.to === cid) {
-          otherId = e.from;
-          // Reverse: if edge says "from is parent of to", and I am "to", then "from" is my parent
-          relFromPerspective = e.type; // Same — e.type is what e.from is, so from "to"'s perspective, e.from IS e.type
-        } else continue;
+        let otherId;
+        if (e.from === cid) otherId = e.to;
+        else if (e.to === cid) otherId = e.from;
+        else continue;
         if (bfsVisited.has(otherId)) continue;
         bfsVisited.add(otherId);
 
-        // Determine level: what is otherId relative to cid?
-        // Edge says "e.from IS [type] of e.to"
-        // If cid === e.from: I am [type] of other → other is BELOW me if I'm parent, ABOVE if I'm child
-        // If cid === e.to: other is [type] of me → other is ABOVE me if parent, BELOW if child
         let level = cLevel;
-        const parentTypes = ['parent', 'stepparent', 'godparent', 'grandparent'];
-        const childTypes = ['child', 'stepchild', 'godchild', 'grandchild'];
-        const partnerTypes = ['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant'];
 
         if (cid === e.from) {
-          // Edge says "from IS [type] of to"
-          // "from is parent of to" → to is child → to goes DOWN (higher level)
-          if (parentTypes.includes(e.type)) level = cLevel - 1; // I'm parent → other is my child → below (was +1, try -1)
-          else if (childTypes.includes(e.type)) level = cLevel + 1; // I'm child → other is my parent → above (was -1, try +1)
+          if (parentTypes.includes(e.type)) level = cLevel - 1;
+          else if (childTypes.includes(e.type)) level = cLevel + 1;
           else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
         } else {
-          // Other IS [e.type] of me
-          if (parentTypes.includes(e.type)) level = cLevel + 1; // Other is parent → above me
-          else if (childTypes.includes(e.type)) level = cLevel - 1; // Other is child → below me
+          if (parentTypes.includes(e.type)) level = cLevel + 1;
+          else if (childTypes.includes(e.type)) level = cLevel - 1;
           else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
         }
 
-        if (e.type === 'sibling') level = cLevel; // Siblings same level
+        if (['sibling', 'friend', 'neighbor', 'classmate', 'colleague'].includes(e.type)) level = cLevel;
 
         levels.set(otherId, level);
         bfsQ.push(otherId);
       }
     }
 
-    // Group by level, place partners adjacent
     const byLevel = new Map();
     for (const [nid, level] of levels) {
       if (!byLevel.has(level)) byLevel.set(level, []);
       byLevel.get(level).push(nid);
     }
 
-    // Sort each level: root first, then partners adjacent
-    for (const [level, ids] of byLevel) {
+    for (const [, ids] of byLevel) {
       const ordered = [];
       const placed = new Set();
-      // Place root first if on this level
       if (ids.includes(rootId)) { ordered.push(rootId); placed.add(rootId); if (partners.has(rootId) && ids.includes(partners.get(rootId))) { ordered.push(partners.get(rootId)); placed.add(partners.get(rootId)); } }
       for (const nid of ids) {
         if (placed.has(nid)) continue;
-        ordered.push(nid);
-        placed.add(nid);
-        if (partners.has(nid) && ids.includes(partners.get(nid)) && !placed.has(partners.get(nid))) {
-          ordered.push(partners.get(nid));
-          placed.add(partners.get(nid));
-        }
+        ordered.push(nid); placed.add(nid);
+        if (partners.has(nid) && ids.includes(partners.get(nid)) && !placed.has(partners.get(nid))) { ordered.push(partners.get(nid)); placed.add(partners.get(nid)); }
       }
-      byLevel.set(level, ordered);
+      ids.length = 0;
+      ids.push(...ordered);
     }
 
     const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
-    const nodeW = 130, nodeH = 64, avatarR = 16, gapX = 20, gapY = 70;
-    const maxPerRow = Math.max(...[...byLevel.values()].map(a => a.length));
-    const svgW = Math.max(400, maxPerRow * (nodeW + gapX) + gapX * 2);
+    const nodeW = 130, nodeH = 64, avatarR = 16, gapX = 20, partnerGapX = 70, gapY = 70;
+
+    // Calculate row widths accounting for wider partner gaps
+    const partnerSet = new Set();
+    for (const [a, b] of partners) partnerSet.add(`${Math.min(a,b)}-${Math.max(a,b)}`);
+
+    function rowWidth(ids) {
+      let w = 0;
+      for (let i = 0; i < ids.length; i++) {
+        if (i > 0) {
+          const prev = ids[i - 1], cur = ids[i];
+          const isPartnerPair = partners.get(prev) === cur || partners.get(cur) === prev;
+          w += isPartnerPair ? partnerGapX : gapX;
+        }
+        w += nodeW;
+      }
+      return w;
+    }
+
+    const maxRowW = Math.max(...[...byLevel.values()].map(ids => rowWidth(ids)));
+    const svgW = Math.max(400, maxRowW + gapX * 4);
     const svgH = sortedLevels.length * (nodeH + gapY) + gapY;
 
     const positions = new Map();
     for (const level of sortedLevels) {
       const ids = byLevel.get(level);
-      const rowW = ids.length * (nodeW + gapX) - gapX;
-      const startX = (svgW - rowW) / 2;
+      const rw = rowWidth(ids);
+      let x = (svgW - rw) / 2;
       const y = (level - sortedLevels[0]) * (nodeH + gapY) + gapY / 2;
-      ids.forEach((nid, i) => { positions.set(nid, { x: startX + i * (nodeW + gapX), y }); });
+      for (let i = 0; i < ids.length; i++) {
+        if (i > 0) {
+          const prev = ids[i - 1], cur = ids[i];
+          const isPartnerPair = partners.get(prev) === cur || partners.get(cur) === prev;
+          x += isPartnerPair ? partnerGapX : gapX;
+        }
+        positions.set(ids[i], { x, y });
+        x += nodeW;
+      }
+    }
+
+    const relLabels = {};
+    for (const key of Object.keys(t('relationships.types') || {})) {
+      relLabels[key] = t('relationships.types.' + key);
     }
 
     // Build SVG
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block;margin:auto">`;
-    svg += `<defs>
-      <clipPath id="clip-circle" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath>
-    </defs>`;
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block">`;
+    svg += `<defs><clipPath id="clip-circle" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath></defs>`;
     svg += `<style>
       .tree-edge { stroke: #d1d5db; stroke-width: 1.5; fill: none; transition: stroke 0.15s, stroke-width 0.15s; }
       .tree-edge.highlight { stroke: #007AFF; stroke-width: 2.5; }
@@ -1410,122 +1645,143 @@ async function showFamilyTree(contactUuid) {
       .tree-node.dim { opacity: 0.3; }
       .tree-name { font-family: -apple-system, sans-serif; font-size: 11px; font-weight: 600; fill: #1f2937; }
       .tree-age { font-family: -apple-system, sans-serif; font-size: 9px; fill: #9ca3af; }
+      .tree-edge-label { font-family: -apple-system, sans-serif; font-size: 8px; fill: #9ca3af; text-anchor: middle; pointer-events: none; }
     </style>`;
 
-    // Draw edges — partner edges (dashed pink, horizontal) and parent-child (solid, curved)
     const drawnPartners = new Set();
     for (const e of edges) {
-      const from = positions.get(e.from);
-      const to = positions.get(e.to);
+      const from = positions.get(e.from), to = positions.get(e.to);
       if (!from || !to) continue;
-
       const isPartner = ['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant'].includes(e.type);
-      const fx = from.x + nodeW / 2, fy = from.y + nodeH / 2;
-      const tx = to.x + nodeW / 2, ty = to.y + nodeH / 2;
+      const fx = from.x + nodeW / 2, tx = to.x + nodeW / 2;
 
       if (isPartner) {
         const key = [Math.min(e.from, e.to), Math.max(e.from, e.to)].join('-');
         if (!drawnPartners.has(key)) {
           drawnPartners.add(key);
-          // Horizontal dashed line between partners
           const y = Math.min(from.y, to.y) + nodeH / 2;
-          const lx = Math.min(from.x, to.x) + nodeW;
-          const rx = Math.max(from.x, to.x);
+          const lx = Math.min(from.x, to.x) + nodeW, rx = Math.max(from.x, to.x);
           svg += `<line class="tree-partner-edge" data-from="${e.from}" data-to="${e.to}" x1="${lx}" y1="${y}" x2="${rx}" y2="${y}" />`;
+          svg += `<text class="tree-edge-label" x="${(lx + rx) / 2}" y="${y - 5}">${relLabels[e.type] || e.type}</text>`;
         }
       } else {
-        // Curved parent-child line
-        const midY = (fy + ty) / 2;
-        svg += `<path class="tree-edge" data-from="${e.from}" data-to="${e.to}" d="M${fx},${fy < ty ? from.y + nodeH : from.y} C${fx},${midY} ${tx},${midY} ${tx},${ty < fy ? to.y + nodeH : to.y}" />`;
+        const startY = from.y < to.y ? from.y + nodeH : from.y;
+        const endY = to.y < from.y ? to.y + nodeH : to.y;
+        const midY = (startY + endY) / 2;
+        svg += `<path class="tree-edge" data-from="${e.from}" data-to="${e.to}" d="M${fx},${startY} C${fx},${midY} ${tx},${midY} ${tx},${endY}" />`;
+        svg += `<text class="tree-edge-label" x="${(fx + tx) / 2}" y="${midY - 4}">${relLabels[e.type] || e.type}</text>`;
       }
     }
 
-    // Draw nodes
     for (const [nid, pos] of positions) {
       const node = nodeMap.get(nid);
       if (!node) continue;
       let name = `${node.first_name} ${(node.last_name || '').charAt(0)}.`.trim();
-      const maxChars = 12;
-      if (name.length > maxChars) name = name.substring(0, maxChars - 1) + '…';
-      const isRoot = node.is_root;
+      if (name.length > 12) name = name.substring(0, 11) + '…';
       const hasAvatar = !!node.avatar;
-      const avatarSize = avatarR * 2;
-      const avatarX = 8;
-      const avatarY = (nodeH - avatarSize) / 2;
-      const textX = avatarX + avatarSize + 6;
+      const avatarSize = avatarR * 2, avatarX = 8, avatarY = (nodeH - avatarSize) / 2, textX = avatarX + avatarSize + 6;
 
-      svg += `<g class="tree-node ${isRoot ? 'root' : ''}" data-uuid="${node.uuid}" transform="translate(${pos.x},${pos.y})">`;
+      svg += `<g class="tree-node ${node.is_root ? 'root' : ''}" data-uuid="${node.uuid}" transform="translate(${pos.x},${pos.y})">`;
       svg += `<rect width="${nodeW}" height="${nodeH}" />`;
-
-      // Avatar (always shown — image or initials)
       if (hasAvatar) {
         svg += `<image href="${authUrl(node.avatar)}" x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-circle)" preserveAspectRatio="xMidYMid slice" />`;
       } else {
         svg += `<circle cx="${avatarX + avatarR}" cy="${nodeH / 2}" r="${avatarR}" fill="#007AFF" />`;
         svg += `<text x="${avatarX + avatarR}" y="${nodeH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="10" font-weight="600" font-family="-apple-system,sans-serif">${(node.first_name[0] || '') + (node.last_name?.[0] || '')}</text>`;
       }
-
-      // Name + age (to the right of avatar)
       svg += `<text class="tree-name" x="${textX}" y="${nodeH / 2 - 2}" text-anchor="start">${escapeHtml(name)}</text>`;
-      if (node.date_of_birth) {
-        const age = new Date().getFullYear() - new Date(node.date_of_birth).getFullYear();
-        svg += `<text class="tree-age" x="${textX}" y="${nodeH / 2 + 12}" text-anchor="start">${age} ${t('contacts.years')}</text>`;
+      if (node.birth_year) {
+        svg += `<text class="tree-age" x="${textX}" y="${nodeH / 2 + 12}" text-anchor="start">${new Date().getFullYear() - node.birth_year} ${t('contacts.years')}</text>`;
       }
       svg += `</g>`;
     }
-
     svg += '</svg>';
 
-    const dlgId = 'tree-' + Date.now();
-    document.body.insertAdjacentHTML('beforeend', `
-      <div class="modal fade" id="${dlgId}" tabindex="-1">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title"><i class="bi bi-diagram-2 me-2"></i>${t('relationships.familyTree')}</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" style="overflow:auto;max-height:70vh;text-align:center">
-              ${svg}
-            </div>
-          </div>
-        </div>
+    // Update SVG content
+    inner.innerHTML = svg;
+
+    // Update controls
+    const allCats = ['family', 'social', 'professional'];
+    const modes = [
+      { id: 'full', label: t('relationships.treeModeFull') },
+      { id: 'lineage', label: t('relationships.treeModeLineage') },
+      { id: 'ancestors', label: t('relationships.treeModeAncestors') },
+      { id: 'descendants', label: t('relationships.treeModeDescendants') },
+    ];
+
+    controlsEl.innerHTML = `
+      <select class="form-select form-select-sm" id="tree-mode" style="width:auto">
+        ${modes.map(m => `<option value="${m.id}" ${treeMode === m.id ? 'selected' : ''}>${m.label}</option>`).join('')}
+      </select>
+      <div class="d-flex align-items-center gap-1">
+        ${allCats.map(c => `<button class="btn btn-sm ${treeCategories.includes(c) ? 'btn-primary' : 'btn-outline-secondary'} tree-cat-btn" data-cat="${c}">${t('relationships.categories.' + c)}</button>`).join('')}
       </div>
-    `);
+      <div class="d-flex align-items-center gap-2">
+        <label class="form-label mb-0 small text-muted">${t('relationships.treeDepth')}</label>
+        <input type="range" class="form-range" id="tree-depth" min="1" max="6" value="${treeDepth}" style="width:80px">
+        <span class="small text-muted" id="tree-depth-val">${treeDepth}</span>
+      </div>
+    `;
 
-    const modalEl = document.getElementById(dlgId);
-    const modal = new bootstrap.Modal(modalEl);
+    // Reset pan/zoom to fit
+    // Store dimensions and fit to view
+    _treeModal._svgW = svgW;
+    _treeModal._svgH = svgH;
+    if (_treeModal._visible) {
+      // Modal already open (re-render from filter/depth change)
+      _treeModal.resetView(svgW, svgH);
+    } else {
+      // First open — hide content until shown.bs.modal fires with correct dimensions
+      inner.style.visibility = 'hidden';
+    }
 
-    // Node interactions
-    const allNodes = modalEl.querySelectorAll('.tree-node');
-    const allEdges = modalEl.querySelectorAll('.tree-edge, .tree-partner-edge');
+    // --- Controls: mode ---
+    controlsEl.querySelector('#tree-mode').addEventListener('change', (e) => {
+      renderTreeContent(contactUuid, treeDepth, treeCategories, e.target.value);
+    });
+
+    // --- Controls: depth ---
+    let depthTimeout;
+    controlsEl.querySelector('#tree-depth').addEventListener('input', (e) => {
+      controlsEl.querySelector('#tree-depth-val').textContent = e.target.value;
+      clearTimeout(depthTimeout);
+      depthTimeout = setTimeout(() => renderTreeContent(contactUuid, parseInt(e.target.value), treeCategories, treeMode), 400);
+    });
+
+    // --- Controls: category filter ---
+    controlsEl.querySelectorAll('.tree-cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cat = btn.dataset.cat;
+        let newCats = [...treeCategories];
+        if (newCats.includes(cat)) { newCats = newCats.filter(c => c !== cat); if (!newCats.length) newCats = [cat]; }
+        else newCats.push(cat);
+        renderTreeContent(contactUuid, treeDepth, newCats, treeMode);
+      });
+    });
+
+    // --- Node interactions ---
+    const modalEl = _treeModal.el;
+    const allNodes = inner.querySelectorAll('.tree-node');
+    const allEdges = inner.querySelectorAll('.tree-edge, .tree-partner-edge');
 
     allNodes.forEach(node => {
-      // Click → navigate
-      node.addEventListener('click', () => {
-        modal.hide();
+      node.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _treeModal.bs.hide();
         navigate(`/contacts/${node.dataset.uuid}`);
       });
 
-      // Hover → highlight connected edges + dim others
-      const nodeId = [...positions.entries()].find(([id, pos]) => nodeMap.get(id)?.uuid === node.dataset.uuid)?.[0];
+      const nodeId = [...positions.entries()].find(([id]) => nodeMap.get(id)?.uuid === node.dataset.uuid)?.[0];
 
       node.addEventListener('mouseenter', () => {
         allEdges.forEach(edge => {
-          const from = parseInt(edge.dataset.from);
-          const to = parseInt(edge.dataset.to);
-          if (from === nodeId || to === nodeId) {
-            edge.classList.add('highlight');
-          }
+          const f = parseInt(edge.dataset.from), tt = parseInt(edge.dataset.to);
+          if (f === nodeId || tt === nodeId) edge.classList.add('highlight');
         });
         allNodes.forEach(n => {
           if (n !== node) {
-            // Check if connected
             const otherId = [...positions.entries()].find(([id]) => nodeMap.get(id)?.uuid === n.dataset.uuid)?.[0];
-            const connected = [...allEdges].some(e => {
-              const f = parseInt(e.dataset.from), t = parseInt(e.dataset.to);
-              return (f === nodeId && t === otherId) || (t === nodeId && f === otherId);
-            });
+            const connected = [...allEdges].some(e => { const f = parseInt(e.dataset.from), tt = parseInt(e.dataset.to); return (f === nodeId && tt === otherId) || (tt === nodeId && f === otherId); });
             if (!connected) n.classList.add('dim');
           }
         });
@@ -1536,11 +1792,8 @@ async function showFamilyTree(contactUuid) {
         allNodes.forEach(n => n.classList.remove('dim'));
       });
     });
-
-    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
-    modal.show();
   } catch (err) {
-    confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+    inner.innerHTML = `<div class="text-center p-4 text-danger">${err.message}</div>`;
   }
 }
 
@@ -1554,15 +1807,18 @@ function escapeAttr(str) {
   return str.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function calcAge(dateStr) {
-  const birth = new Date(dateStr);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const monthDiff = today.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-    age--;
+function formatBirthParts(day, month, year) {
+  const date = new Date(year || 2000, month - 1, day);
+  const opts = year ? { day: 'numeric', month: 'long', year: 'numeric' } : { day: 'numeric', month: 'long' };
+  let str = date.toLocaleDateString(undefined, opts);
+  if (year) {
+    const today = new Date();
+    let age = today.getFullYear() - year;
+    const m = today.getMonth() + 1 - month;
+    if (m < 0 || (m === 0 && today.getDate() < day)) age--;
+    str += ` (${age} ${t('contacts.years')})`;
   }
-  return `${age} years`;
+  return str;
 }
 
 async function loadLeaflet() {

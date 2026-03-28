@@ -1,16 +1,29 @@
+const DOC_TYPES = ['application/pdf', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv'];
+
+function isAllowed(file, acceptDocs) {
+  if (file.type.startsWith('image/')) return true;
+  if (acceptDocs && DOC_TYPES.includes(file.type)) return true;
+  return false;
+}
+
 /**
- * Make an element accept drag-and-drop images (files + URLs from browsers).
+ * Make an element accept drag-and-drop files (images + optionally documents).
  * @param {HTMLElement} el - The drop target element
  * @param {function} onFiles - Callback with array of File objects
+ * @param {{ acceptDocuments?: boolean }} opts
  */
-export function enableDropZone(el, onFiles) {
+export function enableDropZone(el, onFiles, opts = {}) {
+  const acceptDocs = opts.acceptDocuments || false;
+
   el.addEventListener('dragover', (e) => {
     e.preventDefault();
     el.classList.add('drop-active');
   });
 
   el.addEventListener('dragleave', (e) => {
-    // Only remove if actually leaving the element (not entering a child)
     if (!el.contains(e.relatedTarget)) {
       el.classList.remove('drop-active');
     }
@@ -25,7 +38,7 @@ export function enableDropZone(el, onFiles) {
     // 1. Dropped files from filesystem
     if (e.dataTransfer.files?.length) {
       for (const file of e.dataTransfer.files) {
-        if (file.type.startsWith('image/')) files.push(file);
+        if (isAllowed(file, acceptDocs)) files.push(file);
       }
     }
 

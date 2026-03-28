@@ -205,7 +205,7 @@
   padding: 0;
 }
 
-.user-avatar {
+span.user-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -216,6 +216,13 @@
   color: white;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
+}
+
+img.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
 }
 
 /* Notification bell */

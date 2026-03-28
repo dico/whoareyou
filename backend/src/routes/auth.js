@@ -11,6 +11,7 @@ import { AppError } from '../utils/errors.js';
 import { validateEmail, validateRequired, validatePassword } from '../utils/validation.js';
 import { authenticate } from '../middleware/auth.js';
 import { createSession, hashToken, generateAccessToken, revokeSession } from '../utils/session.js';
+import { sendEmail } from '../services/email.js';
 import { isTrustedIp, hasTrustedIpConfig } from '../utils/ip.js';
 import {
   generateRegistrationOptions, verifyRegistrationResponse,
@@ -564,12 +565,22 @@ router.get('/me', authenticate, async (req, res, next) => {
         'users.role',
         'users.is_system_admin',
         'users.language',
+        'users.linked_contact_id',
         'tenants.name as tenant_name',
         'tenants.uuid as tenant_uuid'
       )
       .first();
 
-    res.json({ user });
+    // Fetch linked contact avatar if exists
+    let avatar = null;
+    if (user.linked_contact_id) {
+      const photo = await db('contact_photos')
+        .where({ contact_id: user.linked_contact_id, is_primary: true })
+        .first();
+      if (photo) avatar = photo.thumbnail_path;
+    }
+
+    res.json({ user: { ...user, linked_contact_id: undefined, avatar } });
   } catch (err) {
     next(err);
   }
@@ -809,16 +820,80 @@ router.get('/members', authenticate, async (req, res, next) => {
       .where({ 'users.tenant_id': req.user.tenantId })
       .leftJoin('contacts', 'users.linked_contact_id', 'contacts.id')
       .select(
+        'users.id as _user_id',
         'users.uuid', 'users.email', 'users.first_name', 'users.last_name',
         'users.role', 'users.is_active', 'users.is_system_admin',
         'users.last_login_at', 'users.created_at',
+        'users.linked_contact_id',
         'contacts.uuid as linked_contact_uuid',
         'contacts.first_name as linked_contact_first_name',
-        'contacts.last_name as linked_contact_last_name'
+        'contacts.last_name as linked_contact_last_name',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
       )
       .orderBy('users.first_name');
 
-    res.json({ members });
+    // Find suggested contacts for unlinked members
+    const unlinked = members.filter(m => !m.linked_contact_id);
+    const alreadyLinkedIds = members.filter(m => m.linked_contact_id).map(m => m.linked_contact_id);
+
+    if (unlinked.length) {
+      // Get email field type id
+      const emailType = await db('contact_field_types').where({ name: 'email', is_system: true }).first();
+
+      for (const m of unlinked) {
+        let match = null;
+
+        // 1. Match by email in contact_fields
+        if (m.email && emailType) {
+          match = await db('contacts')
+            .join('contact_fields', 'contacts.id', 'contact_fields.contact_id')
+            .where({
+              'contact_fields.field_type_id': emailType.id,
+              'contacts.tenant_id': req.user.tenantId,
+            })
+            .where('contact_fields.value', 'like', m.email)
+            .whereNull('contacts.deleted_at')
+            .whereNotIn('contacts.id', alreadyLinkedIds)
+            .select(
+              'contacts.uuid as uuid', 'contacts.first_name', 'contacts.last_name',
+              db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
+            )
+            .first();
+        }
+
+        // 2. Fall back to exact name match
+        if (!match) {
+          match = await db('contacts')
+            .where({
+              tenant_id: req.user.tenantId,
+              first_name: m.first_name,
+            })
+            .where(function () {
+              if (m.last_name) {
+                this.where('last_name', m.last_name);
+              } else {
+                this.whereNull('last_name');
+              }
+            })
+            .whereNull('deleted_at')
+            .whereNotIn('id', alreadyLinkedIds)
+            .select(
+              'uuid', 'first_name', 'last_name',
+              db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
+            )
+            .first();
+        }
+
+        if (match) {
+          m.suggested_contact = { uuid: match.uuid, first_name: match.first_name, last_name: match.last_name, avatar: match.avatar };
+        }
+      }
+    }
+
+    // Clean internal fields
+    const result = members.map(({ _user_id, linked_contact_id, ...rest }) => rest);
+
+    res.json({ members: result });
   } catch (err) {
     next(err);
   }
@@ -831,14 +906,27 @@ router.post('/invite', authenticate, async (req, res, next) => {
       throw new AppError('Admin access required', 403);
     }
 
-    validateRequired(['email', 'password', 'first_name', 'last_name'], req.body);
-    const email = validateEmail(req.body.email);
-    validatePassword(req.body.password);
+    validateRequired(['first_name', 'last_name'], req.body);
 
-    const existing = await db('users').where({ email }).first();
-    if (existing) throw new AppError('Email already registered', 409);
+    const loginEnabled = req.body.login_enabled !== false;
+    let email = null;
+    let passwordHash = null;
 
-    const passwordHash = await bcrypt.hash(req.body.password, SALT_ROUNDS);
+    if (loginEnabled) {
+      validateRequired(['email'], req.body);
+      email = validateEmail(req.body.email);
+
+      const existing = await db('users').where({ email }).first();
+      if (existing) throw new AppError('Email already registered', 409);
+
+      // Generate random password if not provided
+      const password = req.body.password?.trim() || crypto.randomBytes(12).toString('base64url');
+      validatePassword(password);
+      req.body._generatedPassword = password;
+
+      passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    }
+
     const userUuid = uuidv4();
 
     const [userId] = await db('users').insert({
@@ -850,9 +938,46 @@ router.post('/invite', authenticate, async (req, res, next) => {
       last_name: req.body.last_name.trim(),
       role: req.body.role === 'admin' ? 'admin' : 'member',
       language: req.body.language || 'en',
+      is_active: loginEnabled,
     });
 
     const user = await db('users').where({ id: userId }).first();
+
+    // Send welcome email if requested
+    const actualPassword = req.body._generatedPassword;
+    if (loginEnabled && req.body.send_email && email && actualPassword) {
+      const tenant = await db('tenants').where({ id: req.user.tenantId }).first();
+      const appUrl = process.env.CORS_ORIGIN || 'http://whoareyou.local';
+      sendEmail({
+        to: email,
+        subject: `Welcome to WhoareYou — ${tenant.name}`,
+        text: [
+          `Hi ${req.body.first_name.trim()},`,
+          '',
+          `You have been added to "${tenant.name}" on WhoareYou.`,
+          '',
+          `Email: ${email}`,
+          `Password: ${actualPassword}`,
+          '',
+          `Log in at: ${appUrl}`,
+          '',
+          'Please change your password after your first login.',
+        ].join('\n'),
+        html: `
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto">
+            <h2 style="color:#1C1C1E">Welcome to WhoareYou</h2>
+            <p>Hi ${req.body.first_name.trim()},</p>
+            <p>You have been added to <strong>${tenant.name}</strong>.</p>
+            <table style="border-collapse:collapse;margin:16px 0">
+              <tr><td style="padding:4px 12px 4px 0;color:#8E8E93">Email</td><td style="padding:4px 0">${email}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;color:#8E8E93">Password</td><td style="padding:4px 0"><code>${actualPassword}</code></td></tr>
+            </table>
+            <p><a href="${appUrl}" style="color:#007AFF">Log in to WhoareYou</a></p>
+            <p style="color:#8E8E93;font-size:13px">Please change your password after your first login.</p>
+          </div>
+        `,
+      }).catch(err => console.error('Failed to send welcome email:', err.message));
+    }
 
     res.status(201).json({
       member: {
@@ -861,6 +986,7 @@ router.post('/invite', authenticate, async (req, res, next) => {
         first_name: user.first_name,
         last_name: user.last_name,
         role: user.role,
+        is_active: !!user.is_active,
       },
     });
   } catch (err) {

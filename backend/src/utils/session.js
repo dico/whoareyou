@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { UAParser } from 'ua-parser-js';
 import { db } from '../db.js';
 import { config } from '../config/index.js';
+import { sendLoginNotification } from '../services/email.js';
 
 /**
  * Hash a refresh token with SHA-256.
@@ -82,6 +83,13 @@ export async function createSession(user, req, activeTenantId = null, { isTruste
   });
 
   const accessToken = generateAccessToken(user, sessionUuid, activeTenantId);
+
+  // Send login notification email (fire-and-forget, never blocks login)
+  sendLoginNotification(user, {
+    ip,
+    device: deviceLabel,
+    time: new Date().toLocaleString('en-GB', { timeZone: 'Europe/Oslo' }),
+  }).catch(() => {});
 
   return { sessionUuid, accessToken, refreshToken };
 }

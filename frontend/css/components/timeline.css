@@ -368,6 +368,68 @@
   border-radius: var(--radius-sm);
 }
 
+.media-preview-doc {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 64px;
+  padding: 0 var(--space-sm);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  max-width: 200px;
+}
+
+.media-preview-doc i {
+  font-size: 1.2rem;
+  color: var(--color-text-secondary);
+}
+
+.media-preview-doc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* Documents in posts */
+.post-documents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.post-document-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  transition: border-color 0.15s;
+}
+
+.post-document-link:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.post-document-link i {
+  font-size: 1.1rem;
+}
+
+.post-document-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Life event card in timeline */
 .life-event-card { border-left: 3px solid var(--color-primary); }
 .life-event-card-inner { display: flex; align-items: center; gap: var(--space-md); }

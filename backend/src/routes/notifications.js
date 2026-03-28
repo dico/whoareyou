@@ -69,19 +69,19 @@ router.post('/generate', async (req, res, next) => {
       .where({ tenant_id: req.tenantId, is_active: true })
       .select('id');
 
-    // 1. Birthday reminders from contacts with date_of_birth
+    // 1. Birthday reminders from contacts with birth_day + birth_month
     const contacts = await db('contacts')
       .where({ tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .whereNotNull('date_of_birth')
-      .select('id', 'uuid', 'first_name', 'last_name', 'date_of_birth');
+      .whereNotNull('birth_day')
+      .whereNotNull('birth_month')
+      .select('id', 'uuid', 'first_name', 'last_name', 'birth_day', 'birth_month', 'birth_year');
 
     let generated = 0;
 
     for (const contact of contacts) {
-      const dob = new Date(contact.date_of_birth);
-      if (dob.getMonth() === todayMonth && dob.getDate() === todayDay) {
-        const age = today.getFullYear() - dob.getFullYear();
+      if ((contact.birth_month - 1) === todayMonth && contact.birth_day === todayDay) {
+        const age = contact.birth_year ? today.getFullYear() - contact.birth_year : null;
         for (const user of users) {
           // Check if already notified today
           const existing = await db('notifications')

@@ -18,6 +18,8 @@ import lifeEventRoutes from './routes/life-events.js';
 import reminderRoutes from './routes/reminders.js';
 import notificationRoutes from './routes/notifications.js';
 import uploadRoutes from './routes/uploads.js';
+import systemRoutes from './routes/system.js';
+import giftRoutes from './routes/gifts.js';
 
 const app = express();
 
@@ -95,7 +97,9 @@ app.use('/api/companies', authenticate, tenantScope, companyRoutes);
 app.use('/api/life-events', authenticate, tenantScope, lifeEventRoutes);
 app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
 app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
+app.use('/api/gifts', authenticate, tenantScope, giftRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
+app.use('/api/system', authenticate, systemRoutes);
 
 // Protected file serving — auth check + tenant validation
 import path from 'path';

@@ -20,7 +20,7 @@ Inspired by the excellent [Monica](https://github.com/monicahq/monica), WhoareYo
 |---------|-------------|
 | **Contacts** | Full contact management with photos, custom fields, social media links, favorites, and soft delete |
 | **Timeline** | Universal post system with @-mention tagging — replaces separate notes, activities, and meetings |
-| **Relationships** | 17 relationship types (family, social, professional) with bidirectional linking and date tracking |
+| **Relationships** | 19 relationship types (family, social, professional) with bidirectional linking and date tracking |
 | **Addresses & Maps** | Geocoded addresses with Leaflet/OpenStreetMap maps, address history, and household views |
 | **Photos** | Multiple profile photos per contact with client-side crop, WebP conversion, and drag-and-drop ordering |
 | **Multi-tenant** | Each family/household gets isolated data — host for multiple families on one instance |
@@ -35,12 +35,13 @@ Inspired by the excellent [Monica](https://github.com/monicahq/monica), WhoareYo
 - **Reminders & notifications** — birthday auto-reminders, custom reminders, in-app notification bell with unread count
 - **Companies** — company directory with employees, job titles, and company detail pages
 - **Life events** — 10 event types with icons, annual anniversary reminders, timeline integration with "together with" links
-- **Family tree** — SVG visualization with profile photos, hover-highlight, clickable nodes, relationship suggestions
+- **Family tree** — SVG visualization with pan/zoom, view modes (full family/direct lineage/ancestors/descendants), depth control, category filter, relationship labels, clickable nodes
+- **Gifts** — gift events (christmas, birthday, wedding), product catalog with URL scraping, status lifecycle, wishlists per family member, planning list, visibility rules (hidden from recipients)
 - **Interests** — reusable label system with group/interest categories
 - **Birthdays** — upcoming birthdays dashboard widget
 - **Address management** — address history (move in/out), household view, duplicate merge tool, share address with one click
 - **Global search** — search contacts, posts, companies, and contact fields from the navbar
-- **User management** — invite, deactivate, promote/demote users within a tenant
+- **User management** — add members with or without login (household members like children), promote/demote, link to contact, auto-suggest contact linking, optional welcome email
 - **Session management** — view active login sessions, revoke individual or all other sessions
 - **Relationship suggestions** — auto-detect missing siblings, grandparents, uncle/aunt from existing data
 
@@ -48,11 +49,13 @@ Inspired by the excellent [Monica](https://github.com/monicahq/monica), WhoareYo
 - **Session-based auth** — short-lived JWT (15 min) with refresh tokens, automatic token renewal
 
 - **Passkeys** — passwordless login with fingerprint, face recognition, or security keys (WebAuthn)
+- **Email notifications** — SMTP config in admin, login alerts via nodemailer
 
 ### Planned
 
 - Export functionality (JSON/CSV)
 - Document attachments (PDF, files)
+- Gift product images
 
 ## Tech Stack
 

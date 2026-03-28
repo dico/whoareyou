@@ -13,13 +13,13 @@ import { authUrl } from '../utils/auth-url.js';
  */
 let currentLimit = {};
 
-export async function renderPostList(containerId, contactUuid, onChanged, loadMore = false) {
+export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false } = {}) {
   const el = document.getElementById(containerId);
   if (!el) return;
 
   const key = containerId + (contactUuid || '');
-  if (!currentLimit[key] || !loadMore) currentLimit[key] = 20;
-  else currentLimit[key] += 20;
+  if (loadMore) currentLimit[key] = (currentLimit[key] || 20) + 20;
+  else if (!keepLimit) currentLimit[key] = 20;
 
   try {
     const params = new URLSearchParams();
@@ -89,11 +89,31 @@ export async function renderPostList(containerId, contactUuid, onChanged, loadMo
               `).join('')}
             </div>
           ` : ''}
-          ${p.media.length ? `
-            <div class="post-media post-media-grid-${Math.min(p.media.length, 4)}" data-post-uuid="${p.uuid}">
-              ${p.media.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""></div>`).join('')}
-            </div>
-          ` : ''}
+          ${(() => {
+            const images = p.media.filter(m => m.file_type?.startsWith('image'));
+            const docs = p.media.filter(m => !m.file_type?.startsWith('image'));
+            let html = '';
+            if (images.length) {
+              html += `<div class="post-media post-media-grid-${Math.min(images.length, 4)}" data-post-uuid="${p.uuid}">
+                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""></div>`).join('')}
+              </div>`;
+            }
+            if (docs.length) {
+              html += `<div class="post-documents">${docs.map(m => {
+                const icon = m.file_type?.includes('pdf') ? 'bi-file-earmark-pdf'
+                  : (m.file_type?.includes('word') || m.file_type?.includes('document')) ? 'bi-file-earmark-word'
+                  : (m.file_type?.includes('excel') || m.file_type?.includes('sheet')) ? 'bi-file-earmark-spreadsheet'
+                  : m.file_type?.includes('text') ? 'bi-file-earmark-text' : 'bi-file-earmark';
+                const name = m.original_name || m.file_path.split('/').pop();
+                const size = m.file_size ? formatFileSize(m.file_size) : '';
+                const canPreview = m.file_type?.includes('pdf') || m.file_type?.includes('text');
+                return `<a href="${authUrl(m.file_path)}" class="post-document-link${canPreview ? ' doc-previewable' : ''}" ${canPreview ? '' : `target="_blank" download="${escapeHtml(name)}"`} data-name="${escapeHtml(name)}" data-type="${m.file_type || ''}">
+                  <i class="bi ${icon}"></i> <span>${escapeHtml(name)}</span>${size ? ` <span class="text-muted small">(${size})</span>` : ''}
+                </a>`;
+              }).join('')}</div>`;
+            }
+            return html;
+          })()}
         </div>
         <div class="post-edit d-none">
           <form class="edit-post-form" data-post-uuid="${p.uuid}">
@@ -144,7 +164,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, loadMo
         </button>
       `);
       el.querySelector('.load-more-btn').addEventListener('click', () => {
-        renderPostList(containerId, contactUuid, onChanged, true);
+        renderPostList(containerId, contactUuid, onChanged, { loadMore: true });
       });
     }
 
@@ -264,8 +284,8 @@ export async function renderPostList(containerId, contactUuid, onChanged, loadMo
             payload.about_contact_uuid = aboutUuid;
           }
           await api.put(`/posts/${uuid}`, payload);
-          if (onChanged) onChanged();
-          else renderPostList(containerId, contactUuid, onChanged);
+          // Reload feed but preserve current pagination limit
+          renderPostList(containerId, contactUuid, onChanged, { keepLimit: true });
         } catch (err) {
           confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
         }
@@ -280,8 +300,23 @@ export async function renderPostList(containerId, contactUuid, onChanged, loadMo
         if (!post) return;
         const newVis = post.visibility === 'private' ? 'shared' : 'private';
         await api.put(`/posts/${btn.dataset.uuid}`, { visibility: newVis });
-        if (onChanged) onChanged();
-        else renderPostList(containerId, contactUuid, onChanged);
+        // Update in-place instead of reloading entire feed
+        post.visibility = newVis;
+        const postEl = el.querySelector(`[data-post-uuid="${btn.dataset.uuid}"]`);
+        if (postEl) {
+          // Update lock icon
+          const iconEl = postEl.querySelector('.post-visibility-icon');
+          if (newVis === 'private' && !iconEl) {
+            const actions = postEl.querySelector('.post-header-actions');
+            actions.insertAdjacentHTML('afterbegin', `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('common.private')}"></i>`);
+          } else if (newVis === 'shared' && iconEl) {
+            iconEl.remove();
+          }
+          // Update menu item text/icon
+          const menuIcon = newVis === 'private' ? 'people-fill' : 'lock-fill';
+          const menuText = newVis === 'private' ? t('posts.makeShared') : t('posts.makePrivate');
+          btn.innerHTML = `<i class="bi bi-${menuIcon} me-2"></i>${menuText}`;
+        }
       });
     });
 
@@ -291,8 +326,19 @@ export async function renderPostList(containerId, contactUuid, onChanged, loadMo
         e.preventDefault();
         if (await confirmDialog(t('posts.deletePostConfirm'), { title: t('posts.deletePost'), confirmText: t('common.delete') })) {
           await api.delete(`/posts/${btn.dataset.uuid}`);
-          if (onChanged) onChanged();
-          else renderPostList(containerId, contactUuid, onChanged);
+          // Remove from DOM instead of reloading entire feed
+          const postEl = el.querySelector(`[data-post-uuid="${btn.dataset.uuid}"]`);
+          if (postEl) postEl.remove();
+          postsMap.delete(btn.dataset.uuid);
+          // Show empty state if no posts left
+          if (el.querySelectorAll('.timeline-post').length === 0) {
+            el.innerHTML = `
+              <div class="empty-state">
+                <i class="bi bi-journal-text"></i>
+                <p>${t('posts.noPosts')}</p>
+              </div>
+            `;
+          }
         }
       });
     });
@@ -307,6 +353,36 @@ export async function renderPostList(containerId, contactUuid, onChanged, loadMo
         showMediaLightbox(images, index);
       });
     });
+    // Document preview (PDF, text)
+    el.querySelectorAll('.doc-previewable').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = link.getAttribute('href');
+        const name = link.dataset.name || 'Document';
+        const dlgId = 'doc-preview-' + Date.now();
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="${dlgId}" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered" style="max-width:90vw;width:90vw">
+              <div class="modal-content" style="height:85vh">
+                <div class="modal-header">
+                  <h5 class="modal-title"><i class="bi bi-file-earmark me-2"></i>${escapeHtml(name)}</h5>
+                  <a href="${url}" download="${escapeHtml(name)}" class="btn btn-outline-primary btn-sm ms-auto me-3"><i class="bi bi-download"></i></a>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0" style="flex:1;overflow:hidden">
+                  <iframe src="${url}" style="width:100%;height:100%;border:none"></iframe>
+                </div>
+              </div>
+            </div>
+          </div>
+        `);
+        const modalEl = document.getElementById(dlgId);
+        const modal = new bootstrap.Modal(modalEl);
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+        modal.show();
+      });
+    });
+
     // Scroll to and highlight specific post if requested via URL param
     const urlPost = new URLSearchParams(window.location.search).get('post');
     if (urlPost) {
@@ -435,6 +511,12 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function linkifyPost(html, contacts) {

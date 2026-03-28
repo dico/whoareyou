@@ -2,6 +2,7 @@ import { api } from '../api/client.js';
 import { state, navigate } from '../app.js';
 import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
 import { t, formatDate } from '../utils/i18n.js';
+import { authUrl } from '../utils/auth-url.js';
 
 export async function renderTenantAdmin() {
   const content = document.getElementById('app-content');
@@ -17,7 +18,7 @@ export async function renderTenantAdmin() {
         <button class="btn btn-link btn-back" id="btn-back"><i class="bi bi-arrow-left"></i></button>
         <h2>${t('admin.manageMembers')}</h2>
         <button class="btn btn-primary btn-sm" id="btn-invite">
-          <i class="bi bi-person-plus-fill"></i> ${t('admin.invite')}
+          <i class="bi bi-person-plus-fill"></i> ${t('admin.addMember')}
         </button>
       </div>
 
@@ -36,7 +37,7 @@ export async function renderTenantAdmin() {
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">${t('admin.inviteMember')}</h5>
+            <h5 class="modal-title">${t('admin.addMember')}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <form id="invite-form">
@@ -55,26 +56,38 @@ export async function renderTenantAdmin() {
                   </div>
                 </div>
               </div>
-              <div class="form-floating mb-3">
-                <input type="email" class="form-control" id="invite-email" required>
-                <label>${t('auth.email')}</label>
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="invite-login-enabled" checked>
+                <label class="form-check-label" for="invite-login-enabled">${t('admin.loginEnabled')}</label>
+                <div class="form-text">${t('admin.loginEnabledHint')}</div>
               </div>
-              <div class="form-floating mb-3">
-                <input type="password" class="form-control" id="invite-password" minlength="8" required>
-                <label>${t('admin.tempPassword')}</label>
-              </div>
-              <div class="mb-3">
-                <label class="form-label small">${t('settings.role')}</label>
-                <select class="form-select form-select-sm" id="invite-role">
-                  <option value="member">${t('admin.roleMember')}</option>
-                  <option value="admin">${t('admin.roleAdmin')}</option>
-                </select>
+              <div id="invite-login-fields">
+                <div class="form-floating mb-3">
+                  <input type="email" class="form-control" id="invite-email">
+                  <label>${t('auth.email')}</label>
+                </div>
+                <div class="form-floating mb-3">
+                  <input type="password" class="form-control" id="invite-password" placeholder="${t('admin.autoGeneratePassword')}">
+                  <label>${t('admin.tempPassword')} <span class="text-muted fw-normal">(${t('admin.autoGeneratePassword')})</span></label>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label small">${t('settings.role')}</label>
+                  <select class="form-select form-select-sm" id="invite-role">
+                    <option value="member">${t('admin.roleMember')}</option>
+                    <option value="admin">${t('admin.roleAdmin')}</option>
+                  </select>
+                </div>
+                <div class="form-check mb-3">
+                  <input class="form-check-input" type="checkbox" id="invite-send-email">
+                  <label class="form-check-label" for="invite-send-email">${t('admin.sendWelcomeEmail')}</label>
+                  <div class="form-text">${t('admin.sendWelcomeEmailHint')}</div>
+                </div>
               </div>
               <div id="invite-error" class="alert alert-danger d-none"></div>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
-              <button type="submit" class="btn btn-primary btn-sm">${t('admin.invite')}</button>
+              <button type="submit" class="btn btn-primary btn-sm">${t('contacts.create')}</button>
             </div>
           </form>
         </div>
@@ -89,21 +102,34 @@ export async function renderTenantAdmin() {
     new bootstrap.Modal(document.getElementById('invite-modal')).show();
   });
 
+  // Toggle login fields visibility
+  document.getElementById('invite-login-enabled').addEventListener('change', (e) => {
+    const fields = document.getElementById('invite-login-fields');
+    fields.style.display = e.target.checked ? '' : 'none';
+  });
+
   // Invite form
   document.getElementById('invite-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById('invite-error');
     errorEl.classList.add('d-none');
+    const loginEnabled = document.getElementById('invite-login-enabled').checked;
     try {
-      await api.post('/auth/invite', {
+      const payload = {
         first_name: document.getElementById('invite-first').value,
         last_name: document.getElementById('invite-last').value,
-        email: document.getElementById('invite-email').value,
-        password: document.getElementById('invite-password').value,
-        role: document.getElementById('invite-role').value,
-      });
+        login_enabled: loginEnabled,
+      };
+      if (loginEnabled) {
+        payload.email = document.getElementById('invite-email').value;
+        payload.password = document.getElementById('invite-password').value;
+        payload.role = document.getElementById('invite-role').value;
+        payload.send_email = document.getElementById('invite-send-email').checked;
+      }
+      await api.post('/auth/invite', payload);
       bootstrap.Modal.getInstance(document.getElementById('invite-modal')).hide();
       e.target.reset();
+      document.getElementById('invite-login-fields').style.display = '';
       loadMembers();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -124,21 +150,31 @@ async function loadMembers() {
     el.innerHTML = members.map(m => `
       <div class="member-row" data-uuid="${m.uuid}">
         <div class="member-avatar">
-          <span>${m.first_name[0]}${m.last_name[0]}</span>
+          ${m.avatar
+            ? `<img src="${authUrl(m.avatar)}" alt="">`
+            : `<span>${m.first_name[0]}${m.last_name[0]}</span>`
+          }
         </div>
         <div class="member-info">
           <strong>${m.first_name} ${m.last_name}</strong>
-          <span class="text-muted small">${m.email}</span>
+          ${m.email ? `<span class="text-muted small">${m.email}</span>` : ''}
           ${m.linked_contact_uuid ? `
             <a href="/contacts/${m.linked_contact_uuid}" data-link class="text-muted small d-block">
               <i class="bi bi-link-45deg"></i> ${m.linked_contact_first_name} ${m.linked_contact_last_name || ''}
             </a>
+          ` : m.suggested_contact ? `
+            <span class="small d-block">
+              <i class="bi bi-lightbulb text-warning"></i>
+              <a href="/contacts/${m.suggested_contact.uuid}" data-link class="text-muted">${m.suggested_contact.first_name} ${m.suggested_contact.last_name || ''}</a>
+              <button class="btn btn-outline-primary btn-sm ms-1 py-0 px-1 btn-accept-suggestion" data-user-uuid="${m.uuid}" data-contact-uuid="${m.suggested_contact.uuid}" style="font-size:0.7rem">${t('admin.linkContact')}</button>
+            </span>
           ` : ''}
         </div>
         <div class="member-badges">
           <span class="badge bg-${m.role === 'admin' ? 'primary' : 'secondary'}">${m.role === 'admin' ? t('admin.roleAdmin') : t('admin.roleMember')}</span>
           ${m.is_system_admin ? `<span class="badge bg-dark">${t('nav.systemAdmin')}</span>` : ''}
-          ${!m.is_active ? `<span class="badge bg-danger">${t('admin.inactive')}</span>` : ''}
+          ${!m.is_active && m.email ? `<span class="badge bg-danger">${t('admin.inactive')}</span>` : ''}
+          ${!m.email ? `<span class="badge bg-info">${t('admin.noLogin')}</span>` : ''}
         </div>
         <div class="member-actions">
           <div class="dropdown">
@@ -150,6 +186,11 @@ async function loadMembers() {
               <li><a class="dropdown-item btn-link-contact" href="#" data-uuid="${m.uuid}">
                 <i class="bi bi-link-45deg me-2"></i>${t('admin.linkContact')}
               </a></li>
+              ${!m.linked_contact_uuid ? `
+              <li><a class="dropdown-item btn-create-contact" href="#" data-uuid="${m.uuid}" data-first="${m.first_name}" data-last="${m.last_name || ''}">
+                <i class="bi bi-person-plus me-2"></i>${t('admin.createAsContact')}
+              </a></li>
+              ` : ''}
               ${m.is_active ? `
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item text-danger btn-deactivate" href="#" data-uuid="${m.uuid}" data-name="${m.first_name}">
@@ -185,6 +226,34 @@ async function loadMembers() {
         if (!contact) return;
         await api.put(`/auth/members/${btn.dataset.uuid}`, { linked_contact_uuid: contact.uuid });
         loadMembers();
+      });
+    });
+
+    // Accept suggested contact link
+    el.querySelectorAll('.btn-accept-suggestion').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await api.put(`/auth/members/${btn.dataset.userUuid}`, { linked_contact_uuid: btn.dataset.contactUuid });
+        loadMembers();
+      });
+    });
+
+    // Create as contact — creates contact + auto-links
+    el.querySelectorAll('.btn-create-contact').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const { contact } = await api.post('/contacts', {
+            first_name: btn.dataset.first,
+            last_name: btn.dataset.last,
+            visibility: 'shared',
+          });
+          await api.put(`/auth/members/${btn.dataset.uuid}`, { linked_contact_uuid: contact.uuid });
+          loadMembers();
+        } catch (err) {
+          confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+        }
       });
     });
 

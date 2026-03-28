@@ -103,6 +103,15 @@
 | Life event card | `js/components/post-list.js`, `css/components/timeline.css` | Tidslinje-kort med ikon, type, dato, beskrivelse og "sammen med"-lenker. Per-type preposisjoner (med/fra/sammen med). Filtrerer bort profil-kontakten |
 | Settings card grid | `css/base.css` (.settings-grid, .settings-card) | Admin-navigasjon med fargerike ikoner i kort-grid. Hover-lift-effekt. Brukes på settings-siden for undersider |
 | Session item | `css/base.css` (.session-item) | Sesjonsliste med enhet-ikon, device-label, IP, tidspunkt. Markerer aktiv sesjon. Brukes i admin/security |
+| Product picker | `js/components/product-picker.js`, `css/components/gifts.css` | Søk/opprett produkter inline med debounced søk, URL-paste auto-hent, "Opprett «X»"-alternativ. Gjenbrukes i gave-form og ønskeliste. Dropdown bruker `.product-picker-dropdown` (solid hvit bakgrunn, som andre dropdowns) |
+| Gift sub-nav | `css/components/gifts.css` (.gift-sub-nav) | Tab-navigasjon innad i gave-seksjonen: Dashboard, Hendelser, Produkter. Pill-stil med aktiv markering |
+| Gift status badge | `css/components/gifts.css` (.gift-status-badge) | Klikkbar badge som cycler status (idea → purchased → given). Fargekodet: idea=grå, reserved=blå, purchased=oransje, wrapped=lilla, given=grønn |
+| Gift modal | Standard Bootstrap modal | Gaveoppretting via modal (erstatter inline quick-add). Produkt-picker, fra/til-chips, pris, status, retning, notater |
+| Gift card | `css/components/gifts.css` (.gift-card) | Kompakt rad: 40px produktbilde/placeholder + tittel + mottaker/giver + pris + status-badge + ellipsis. Idéer har dashed border og lavere opacity |
+| Gift direction tabs | `.filter-tabs` (gjenbrukt fra contacts) | Gir/Mottar-toggle på event-detalj. Bruker eksisterende `.filter-tabs`/`.filter-tab`-komponent. Mottar-visning grupperer gaver per mottaker (familiemedlem) |
+| Gift product card | `css/components/gifts.css` (.gift-product-card) | Følger contact-card-mønsteret: 48px rund avatar (produktbilde eller gave-ikon placeholder) + navn + pris/url meta. Grid med min 280px. Aldri store bildekort for lister som kan bli store |
+| Add contact modal | `js/components/add-contact-modal.js` | Gjenbrukbar ny-kontakt-modal med navn, kallenavn, fødselsdato (dag/måned/år), hvordan vi møttes, visibility. Brukes fra tidslinje og kontaktliste |
+| Family tree modal | `js/pages/contact-detail.js` (showFamilyTree/renderTreeContent) | Persistent SVG-basert slektstre med pan/zoom (drag+scroll+pinch), visningsmodus-dropdown (hele familien/direkte linje/forfedre/etterkommere), kategorifilter (familie/sosialt/jobb), dybde-slider (1-6). 90vw×85vh modal. Inline re-render uten å lukke modal. Relasjonslabels på kanter, hover-highlight, klikk-navigasjon |
 
 ### i18n-arkitektur
 
@@ -162,7 +171,7 @@ css/
 1. **Ingen `alert()`, `confirm()` eller `prompt()`** — bruk dialoger fra `dialogs.js`
 2. **Ingen inline styles** — bruk CSS-klasser og custom properties
 3. **Modaler er hvite** — `background: var(--color-surface)` (backdrop gjør glass grått)
-4. **Dropdowns/søkeresultater** — solid hvit bakgrunn (`var(--color-surface)`), aldri gjennomsiktig. Truncer lange tekster.
+4. **Dropdowns/søkeresultater** — solid hvit bakgrunn (`var(--color-surface)`), aldri gjennomsiktig. Truncer lange tekster. Kontaktresultater bruker ALLTID `contactRowHtml()` (`contact-row.js`) for konsistent visning med 32px avatar + navn. Aldri lag egne avatar+navn-strukturer i dropdowns.
 5. **Keyboard-navigasjon** — alle søk/dropdowns støtter piltaster + Enter + Escape
 6. **Universell utforming** — nok kontrast i overlays, fokus-synlighet
 7. **Konsistente action-knapper** — bruk `.edit-action` / `.edit-action-primary` kun i inline edit-modus (f.eks. post-redigering). I modaler: bruk standard Bootstrap-knapper (`btn btn-outline-secondary btn-sm` for avbryt, `btn btn-primary btn-sm` for primærhandling)
@@ -174,6 +183,12 @@ css/
 13. **Kontaktliste** — individuelle kort (`.contact-card`) i grid-layout, ikke én sammenhengende liste. Hvert kort har avatar, navn, meta, og visibility/favoritt-indikatorer.
 14. **Visibility-pill** — bruk pill-toggle (`visibility-pill`) overalt for shared/private-valg, aldri vanlig knapp. Konsistent design: shared (blå aktiv) | private.
 15. **Bilde-viewer** — alle bilder (profilbilder og post-bilder) åpnes i samme lightbox-design: svart bakgrunn, hvit footer, pil-navigasjon, tastaturstøtte. Aldri åpne bilder i ny tab. Gjenbruk `photo-viewer`-CSS-klassene.
+16. **Aldri modal-i-modal for søk/valg** — Når en modal trenger kontaktvalg, produktvalg eller lignende, bruk et inline søkefelt med dropdown (`.product-picker-dropdown`-mønsteret) direkte i modalen. `contactSearchDialog()` åpner en ny modal og skal ALDRI kalles fra en modal. Eneste unntak: bekreftelsesdialoger (f.eks. "Er du sikker på at du vil slette?") som er korte ja/nei-spørsmål. Regelen: Søk/valg = inline i modalen. Bekreftelse = OK som ny modal.
+17. **Auto-fill på hendelsestype** — ved valg av type (jul, bursdag) fylles dato og navn automatisk med fornuftige standardverdier. Skjul irrelevante felt (f.eks. jubilant for jul).
+18. **Gave-synlighet** — gaver er `private` som standard (ulikt resten av appen). Auto-switches til `shared` når status settes til `given`. Delte gaver skjules automatisk fra mottakere som er brukere.
+19. **Quick-add-mønster** — for rask dataregistrering (gaver, etc.): kompakt inline-form med kun essensielle felt synlige. Avanserte valg bak "Flere valg"-toggle. Etter opprettelse tømmes feltet, klart for neste — gjør det mulig å registrere mange elementer raskt etter hverandre.
+20. **Listevisning for store datasett** — for lister som kan vokse til hundrevis/tusenvis (produkter, kontakter): bruk contact-card-mønsteret (48px rund avatar + navn + meta i én rad, grid med min 280px). Aldri store bildekort/tiles for slike lister — det skalerer ikke.
+21. **Runde avatarer/bilder overalt** — alle miniatyrbilder bruker `border-radius: var(--radius-full)` (sirkulære). Gjelder kontakt-avatarer, produktbilder i lister, gave-kort-bilder, etc. Aldri firkantede miniatyrbilder i rader/kort — kun firkantede bilder i dedikerte gallerier/lightbox.
 
 ## Navigasjonsstruktur (implementert)
 
@@ -181,8 +196,8 @@ css/
 Navbar (sticky top, glass-effect):
 ├── Logo "WhoareYou" (→ dashboard)
 ├── Søkefelt (kontaktsøk, "/" snarvei, autocomplete dropdown)
-├── Timeline | Contacts | Map
-├── Varsler (bjelle, placeholder)
+├── Timeline | Contacts | Map | Companies | Gifts
+├── Varsler (bjelle)
 └── Bruker-avatar (→ dropdown: navn, tenant, settings, system admin, logout)
 
 Sider:
@@ -191,6 +206,12 @@ Sider:
 ├── /contacts/:uuid — profil: poster + sidebar (info, relasjoner, adresse, kart, labels)
 ├── /contacts/:uuid/posts — kontaktens poster
 ├── /map — fullskjerm Leaflet-kart med alle kontakter
+├── /companies — bedriftsliste
+├── /companies/:uuid — bedriftsdetalj med ansatte
+├── /gifts — gave-dashboard (kommende hendelser, siste gaver)
+├── /gifts/events — hendelsesliste gruppert etter år
+├── /gifts/events/:uuid — hendelsesdetalj med gaveliste + quick-add
+├── /gifts/products — produktbibliotek med søk
 ├── /settings — brukerinfo, lenker til admin-sider
 ├── /admin/tenant — administrere medlemmer i tenanten
 ├── /admin/system — tenant-oversikt + bytte tenant (kun system admin)

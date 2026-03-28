@@ -7,6 +7,7 @@ import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { enableDropZone } from '../utils/drop-zone.js';
 import { authUrl } from '../utils/auth-url.js';
+import { addContactModalHtml, initAddContactModal, showAddContactModal } from '../components/add-contact-modal.js';
 
 export async function renderTimeline(contactUuid = null) {
   const content = document.getElementById('app-content');
@@ -17,9 +18,14 @@ export async function renderTimeline(contactUuid = null) {
       <div class="page-header">
         ${contactUuid ? `<button class="btn btn-link btn-back" id="btn-back"><i class="bi bi-arrow-left"></i></button>` : ''}
         <h2>${contactUuid ? t('posts.title') : t('posts.dashboard')}</h2>
-        <button class="btn btn-primary btn-sm" id="btn-new-post">
-          <i class="bi bi-plus-lg"></i> ${t('posts.post')}
-        </button>
+        <div class="d-flex gap-2">
+          ${isDashboard ? `<button class="btn btn-outline-primary btn-sm" id="btn-add-contact-timeline">
+            <i class="bi bi-person-plus"></i> ${t('contacts.newContact')}
+          </button>` : ''}
+          <button class="btn btn-primary btn-sm" id="btn-new-post">
+            <i class="bi bi-plus-lg"></i> ${t('posts.post')}
+          </button>
+        </div>
       </div>
 
       ${isDashboard ? '<div class="dashboard-layout">' : ''}
@@ -39,6 +45,10 @@ export async function renderTimeline(contactUuid = null) {
                 <label class="post-media-btn" id="btn-add-media" title="${t('posts.addMedia')}">
                   <i class="bi bi-image"></i>
                   <input type="file" id="post-media-input" multiple accept="image/*" hidden>
+                </label>
+                <label class="post-media-btn" title="${t('posts.addDocument')}">
+                  <i class="bi bi-paperclip"></i>
+                  <input type="file" id="post-doc-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
                 </label>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-tag-contact">
                   <i class="bi bi-person-plus"></i> ${t('posts.tag')}
@@ -96,6 +106,8 @@ export async function renderTimeline(contactUuid = null) {
         </div>
       </div>
     </div>
+
+    ${isDashboard ? addContactModalHtml() : ''}
   `;
 
   let taggedContacts = [];
@@ -121,6 +133,12 @@ export async function renderTimeline(contactUuid = null) {
   // Back button
   document.getElementById('btn-back')?.addEventListener('click', () => navigate(`/contacts/${contactUuid}`));
 
+  // Add contact button (dashboard only)
+  if (isDashboard) {
+    initAddContactModal();
+    document.getElementById('btn-add-contact-timeline').addEventListener('click', showAddContactModal);
+  }
+
   // Toggle compose area
   document.getElementById('btn-new-post').addEventListener('click', () => {
     const area = document.getElementById('new-post-area');
@@ -140,7 +158,7 @@ export async function renderTimeline(contactUuid = null) {
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
   });
 
-  // Media file handling
+  // Media file handling (images + documents)
   let pendingMedia = [];
   document.getElementById('post-media-input').addEventListener('change', (e) => {
     for (const file of e.target.files) {
@@ -150,16 +168,36 @@ export async function renderTimeline(contactUuid = null) {
     e.target.value = '';
   });
 
+  document.getElementById('post-doc-input').addEventListener('change', (e) => {
+    for (const file of e.target.files) pendingMedia.push(file);
+    renderMediaPreview();
+    e.target.value = '';
+  });
+
+  const docIcons = { 'application/pdf': 'bi-file-earmark-pdf', 'text/plain': 'bi-file-earmark-text', 'text/csv': 'bi-file-earmark-spreadsheet' };
+  function getDocIcon(type) {
+    if (type.includes('word') || type.includes('document')) return 'bi-file-earmark-word';
+    if (type.includes('excel') || type.includes('sheet') || type.includes('csv')) return 'bi-file-earmark-spreadsheet';
+    return docIcons[type] || 'bi-file-earmark';
+  }
+
   function renderMediaPreview() {
     const el = document.getElementById('post-media-preview');
     if (!pendingMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
     el.classList.remove('d-none');
-    el.innerHTML = pendingMedia.map((f, i) => `
-      <div class="media-preview-item">
-        <img src="${URL.createObjectURL(f)}" alt="">
+    el.innerHTML = pendingMedia.map((f, i) => {
+      if (f.type.startsWith('image/')) {
+        return `<div class="media-preview-item">
+          <img src="${URL.createObjectURL(f)}" alt="">
+          <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+        </div>`;
+      }
+      return `<div class="media-preview-item media-preview-doc">
+        <i class="${getDocIcon(f.type)}"></i>
+        <span class="media-preview-doc-name">${f.name}</span>
         <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
     el.querySelectorAll('.media-preview-remove').forEach(btn => {
       btn.addEventListener('click', () => {
         pendingMedia.splice(parseInt(btn.dataset.index), 1);
@@ -175,7 +213,7 @@ export async function renderTimeline(contactUuid = null) {
       pendingMedia.push(...files);
       renderMediaPreview();
       document.getElementById('new-post-area').classList.remove('d-none');
-    });
+    }, { acceptDocuments: true });
   }
 
   // @-mention in compose textarea
@@ -335,11 +373,12 @@ async function loadUpcomingBirthdays() {
     }
 
     el.innerHTML = data.contacts.map((c) => {
+      const agePart = c.turning_age != null ? ` — ${t('sidebar.turnsAge', { age: c.turning_age })}` : '';
       const meta = c.days_until === 0
-        ? `<strong>${t('sidebar.today')}</strong> — ${t('sidebar.turnsAge', { age: c.turning_age })}`
+        ? `<strong>${t('sidebar.today')}</strong>${agePart}`
         : c.days_until === 1
-          ? `${t('sidebar.tomorrow')} — ${t('sidebar.turnsAge', { age: c.turning_age })}`
-          : `${t('sidebar.inDays', { days: c.days_until })} — ${t('sidebar.turnsAge', { age: c.turning_age })}`;
+          ? `${t('sidebar.tomorrow')}${agePart}`
+          : `${t('sidebar.inDays', { days: c.days_until })}${agePart}`;
       return contactRowHtml(c, { meta });
     }).join('');
   } catch {

@@ -16,6 +16,11 @@ import { renderCompanies } from './pages/companies.js';
 import { renderCompanyDetail } from './pages/company-detail.js';
 import { renderLabelAdmin } from './pages/admin-labels.js';
 import { renderRelationshipSuggestions } from './pages/admin-relationships.js';
+import { renderGifts, renderGiftEvents } from './pages/gifts.js';
+import { renderGiftEventDetail } from './pages/gift-event-detail.js';
+import { renderGiftProducts } from './pages/gift-products.js';
+import { renderGiftWishlists } from './pages/gift-wishlists.js';
+import { renderGiftPlanning } from './pages/gift-planning.js';
 import { renderNavbar } from './components/navbar.js';
 
 // Simple router
@@ -37,6 +42,12 @@ const routes = {
   '/admin/addresses': () => renderAddressMerge(),
   '/admin/labels': () => renderLabelAdmin(),
   '/admin/relationships': () => renderRelationshipSuggestions(),
+  '/gifts': () => renderGifts(),
+  '/gifts/events': () => renderGiftEvents(),
+  '/gifts/events/:uuid': (params) => renderGiftEventDetail(params.uuid),
+  '/gifts/products': () => renderGiftProducts(),
+  '/gifts/wishlists': () => renderGiftWishlists(),
+  '/gifts/planning': () => renderGiftPlanning(),
   '/login': () => renderLogin(),
 };
 
