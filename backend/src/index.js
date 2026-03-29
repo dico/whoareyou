@@ -21,6 +21,8 @@ import uploadRoutes from './routes/uploads.js';
 import systemRoutes from './routes/system.js';
 import giftRoutes from './routes/gifts.js';
 import importRoutes from './routes/import.js';
+import portalRoutes from './routes/portal.js';
+import portalAdminRoutes from './routes/portal-admin.js';
 
 const app = express();
 
@@ -87,6 +89,8 @@ app.post('/api/auth/forgot-password', loginLimiter);
 app.post('/api/auth/reset-password', loginLimiter);
 app.post('/api/auth/invite', loginLimiter);
 app.put('/api/auth/members/:uuid', loginLimiter);
+app.post('/api/portal/auth/login', loginLimiter);
+app.post('/api/portal/auth/link', loginLimiter);
 app.use('/api/auth', authRoutes);
 
 // General API rate limit
@@ -108,6 +112,8 @@ app.use('/api/system', (req, res, next) => {
   if (req.path === '/registration-status' && req.method === 'GET') return next();
   authenticate(req, res, next);
 }, systemRoutes);
+app.use('/api/portal', portalRoutes); // Portal has its own auth (portalAuthenticate)
+app.use('/api/portal-admin', authenticate, tenantScope, portalAdminRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
 

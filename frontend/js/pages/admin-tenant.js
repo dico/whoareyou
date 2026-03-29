@@ -16,21 +16,42 @@ export async function renderTenantAdmin() {
     <div class="page-container">
       <div class="page-header">
         <button class="btn btn-link btn-back" id="btn-back"><i class="bi bi-arrow-left"></i></button>
-        <h2>${t('admin.manageMembers')}</h2>
-        <button class="btn btn-primary btn-sm" id="btn-invite">
+        <h2>${state.user?.tenant_name || t('settings.familyHousehold')}</h2>
+        <button class="btn btn-primary btn-sm d-none" id="btn-invite">
           <i class="bi bi-person-plus-fill"></i> ${t('admin.addMember')}
         </button>
       </div>
 
-      <div class="settings-section glass-card">
-        <h4><i class="bi bi-people"></i> ${state.user?.tenant_name || t('settings.familyHousehold')}</h4>
-        <p class="text-muted small">${t('admin.householdDesc')}</p>
-        <div id="members-list" class="mt-3">
-          <div class="loading">${t('admin.loadingMembers')}</div>
+      <div class="filter-tabs mb-3" id="tenant-tabs">
+        <button class="filter-tab active" data-tab="members"><i class="bi bi-people me-1"></i>${t('admin.manageMembers')}</button>
+        <button class="filter-tab" data-tab="security"><i class="bi bi-shield-lock me-1"></i>${t('settings.security')}</button>
+      </div>
+
+      <!-- Members tab -->
+      <div id="tab-members">
+        <div class="settings-section glass-card">
+          <p class="text-muted small">${t('admin.householdDesc')}</p>
+          <div id="members-list" class="mt-3">
+            <div class="loading">${t('admin.loadingMembers')}</div>
+          </div>
         </div>
       </div>
 
-    </div>
+      <!-- Security tab -->
+      <div id="tab-security" class="d-none">
+        <div class="settings-section glass-card">
+          <h4><i class="bi bi-wifi me-2"></i>${t('admin.trustedIpRanges')}</h4>
+          <p class="text-muted small">${t('admin.trustedIpDesc')}</p>
+          <div class="d-flex gap-2 align-items-end">
+            <div class="flex-grow-1">
+              <input type="text" class="form-control form-control-sm" id="trusted-ip-input"
+                placeholder="192.168.1.0/24, 10.0.0.0/8">
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-save-ip">${t('common.save')}</button>
+          </div>
+          <div id="ip-save-status" class="small mt-1"></div>
+        </div>
+      </div>
 
     <!-- Invite modal -->
     <div class="modal fade" id="invite-modal" tabindex="-1">
@@ -96,6 +117,21 @@ export async function renderTenantAdmin() {
   `;
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/settings'));
+
+  // Tab switching
+  const inviteBtn = document.getElementById('btn-invite');
+  document.getElementById('tenant-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.filter-tab');
+    if (!tab) return;
+    document.querySelectorAll('#tenant-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    ['members', 'security'].forEach(id => {
+      document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
+    });
+    inviteBtn.classList.toggle('d-none', tab.dataset.tab !== 'members');
+    if (tab.dataset.tab === 'security') loadTrustedIps();
+  });
+  inviteBtn.classList.remove('d-none');
 
   // Invite button
   document.getElementById('btn-invite').addEventListener('click', () => {
@@ -416,4 +452,25 @@ async function loadMembers() {
   } catch (err) {
     el.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
   }
+}
+
+async function loadTrustedIps() {
+  try {
+    const { trusted_ip_ranges } = await api.get('/auth/tenant/security');
+    document.getElementById('trusted-ip-input').value = trusted_ip_ranges || '';
+  } catch {}
+
+  document.getElementById('btn-save-ip')?.addEventListener('click', async () => {
+    const value = document.getElementById('trusted-ip-input').value.trim();
+    const statusEl = document.getElementById('ip-save-status');
+    try {
+      await api.put('/auth/tenant/security', { trusted_ip_ranges: value });
+      statusEl.textContent = t('common.saved');
+      statusEl.className = 'small mt-1 text-success';
+      setTimeout(() => { statusEl.textContent = ''; }, 3000);
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.className = 'small mt-1 text-danger';
+    }
+  });
 }

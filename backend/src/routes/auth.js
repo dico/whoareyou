@@ -12,7 +12,7 @@ import { validateEmail, validateRequired, validatePassword } from '../utils/vali
 import { authenticate } from '../middleware/auth.js';
 import { createSession, hashToken, generateAccessToken, revokeSession } from '../utils/session.js';
 import { sendEmail } from '../services/email.js';
-import { isTrustedIp, hasTrustedIpConfig } from '../utils/ip.js';
+import { isTrustedIp, hasTrustedIpConfig, isLoginAllowed } from '../utils/ip.js';
 import {
   generateRegistrationOptions, verifyRegistrationResponse,
   generateAuthenticationOptions, verifyAuthenticationResponse,
@@ -172,6 +172,13 @@ router.post('/reset-password', async (req, res, next) => {
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   try {
+    // Check IP restrictions before anything else
+    const clientIpRaw = (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, '');
+    const loginCheck = await isLoginAllowed(clientIpRaw);
+    if (!loginCheck.allowed) {
+      throw new AppError('Access denied', 403);
+    }
+
     validateRequired(['email', 'password'], req.body);
     const email = validateEmail(req.body.email);
 
@@ -300,6 +307,9 @@ router.post('/logout', async (req, res, next) => {
 // POST /api/auth/2fa/verify — verify TOTP code during login (completes 2FA challenge)
 router.post('/2fa/verify', async (req, res, next) => {
   try {
+    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
+
     const { challengeToken, code } = req.body;
     if (!challengeToken || !code) throw new AppError('Challenge token and code required', 400);
 
@@ -757,11 +767,15 @@ router.get('/sessions', authenticate, async (req, res, next) => {
       .select('uuid', 'device_label', 'ip_address', 'last_activity_at', 'created_at')
       .orderBy('last_activity_at', 'desc');
 
-    // Mark current session
+    // Mark current session + add country code if geolocation is configured
     const currentSid = req.user.sessionId;
-    const result = sessions.map(s => ({
-      ...s,
-      is_current: s.uuid === currentSid,
+    const { getCountryForIp } = await import('../services/geolocation.js');
+    const result = await Promise.all(sessions.map(async (s) => {
+      let country_code = null;
+      if (s.ip_address) {
+        country_code = await getCountryForIp(s.ip_address);
+      }
+      return { ...s, is_current: s.uuid === currentSid, country_code };
     }));
 
     res.json({ sessions: result });

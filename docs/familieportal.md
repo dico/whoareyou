@@ -1,68 +1,55 @@
 # Familieportal — konsept og implementeringsplan
 
-> Planlagt feature. Ikke implementert ennå. Denne dokumentasjonen beskriver konsept, arkitektur og implementeringsplan for fremtidig utvikling.
+> Planlagt feature. Denne dokumentasjonen beskriver konsept, arkitektur og implementeringsplan.
 
 ## Bakgrunn
 
 WhoareYou brukes i dag kun av husstandsmedlemmer med full tilgang. Utvidet familie (besteforeldre, tanter, onkler etc.) har ingen måte å se bilder eller interagere med barnas/kjæledyrenes tidslinjer.
 
-MomentGarden/Minnehagen løser dette i dag, men er en ekstern tjeneste. Målet er å bygge en tilsvarende funksjonalitet direkte i WhoareYou — en enkel, mobilfokusert portal der utvidet familie kan:
+MomentGarden/Minnehagen løser dette — en privat delingsplattform der foreldre deler barnets milepæler med utvidet familie. "Så enkelt som e-post." Målet er å bygge tilsvarende funksjonalitet direkte i WhoareYou.
 
-- Se tidslinjen til spesifikke barn/kjæledyr
-- Like og kommentere på innlegg
-- Legge til egne innlegg med bilder/videoer
-- Bytte mellom flere barn/kjæledyr de har tilgang til
+## Kjernebruk
+
+Besteforeldre mottar en lenke (SMS/e-post), klikker, ser barnebarna vokse opp — bilder, videoer, milepæler. Kan like og kommentere. Ingen installasjon, ingen passord (valgfritt).
 
 ## Designprinsipper
 
-- **Helt separat UI** — egen side (`/portal`), eget design, ingen navbar/søk/admin
+- **Portal-ruter i eksisterende app** — `/portal/*` i samme SPA, ingen separat HTML-entrypoint
 - **Mobilfokusert** — portalen er primært for telefon/nettbrett
 - **Foto-album-estetikk** — store bildekort, ikke CRM-layout
-- **Null risiko** — portalgjester har ingen tilgang til hovedappen
-- **To tilgangsmoduser** — gjestekonto (e-post+passord) eller delelenke (token i URL)
+- **Null risiko** — portalgjester er isolert i egen tabell, contactIds-filtrering server-side
+- **To tilgangsmoduser** — gjestekonto (e-post+passord) eller delelenke (lang-levd token)
+- **Global + tenant-kontroll** — systemadmin kan deaktivere portal globalt, husstandsadmin per tenant
 
-## Brukeropplevelse
+## Sikkerhet — defense in depth
 
-### For familien (admin)
+### Isolering
+- **Separat `portal_guests`-tabell** — portalgjester er ALDRI i `users`-tabellen. Selv med middleware-bug finnes ingen bruker å eskalere til.
+- **Separat JWT-type** (`type: 'portal'`) — kan ikke brukes mot vanlige API-endepunkter. `authenticate`-middleware avviser portal-tokens eksplisitt.
+- **contactIds er eneste tilgang** — alle portal-queries filtrerer på contactIds-array. Ingen måte å omgå.
 
-Administreres via Settings → Portal i hovedappen:
+### Tilgangskontroll
+- **Global toggle** (`system_settings: portal_enabled`) — systemadmin kan skru av portal for hele deployment
+- **Tenant toggle** (`tenants.portal_enabled`) — husstandsadmin kan skru av for sin husstand
+- **Per-gjest deaktivering** — admin kan deaktivere enkeltgjester
+- **Per-lenke deaktivering/utløp** — delelenker kan trekkes tilbake eller utløpe
 
-1. **Velg hvilke kontakter som eksponeres** — f.eks. "Ailo", "Enya" (barn/kjæledyr)
-2. **Opprett portalgjester** — "Bestemor Vigdis", "Farmor Anne Lisbeth" — med valgfri e-post+passord
-3. **Styr tilgang** — hvem ser hvem (Bestemor ser begge barn, Farmor ser bare det ene)
-4. **Generer delelenker** — midlertidige eller permanente URL-er som gir tilgang uten innlogging
-5. **Trekk tilbake** — deaktiver gjester eller lenker
+### Overvåking
+- **Portal-sesjoner synlig for admin** — se hvem som er logget inn, IP, enhet, siste aktivitet
+- **Aktivitetslogg** — portal-gjest-kommentarer og reaksjoner logges med IP
+- **E-postvarsling** — admin kan få varsel når en gjest logger inn (valgfritt)
 
-### For gjester (portalbrukere)
+### Delelenker
+- Token: 48 byte random, lagres som SHA-256 hash i DB
+- Konfigurerbar utløpstid (standard: 1 år, kan settes til permanent)
+- Oppretter automatisk en ephemeral gjeste-sesjon ved bruk
+- Lenke i URL-format: `/portal/s/{token}` → validerer → oppretter sesjon → redirect til portal
 
-1. **Åpne portal** — via delelenke eller innlogging på `/portal/login`
-2. **Se kontakter** — horisontalt scrollbar med avatarer øverst (som Instagram Stories)
-3. **Bla i tidslinje** — store bildekort med tekst, dato, likes, kommentarer
-4. **Interagere** — like (hjerte), kommentere, se andres kommentarer
-5. **Legge til innlegg** — bilde/video + tekst, tagge flere barn (innlegget vises på alle taggede barns tidslinjer)
+## Database-skjema
 
-## Arkitektur
+### Nye tabeller
 
-### Separasjon fra hovedappen
-
-Portalen er en **helt separat SPA** med egen HTML-entrypoint, egen router, egen API-klient og egne CSS-stiler. Den deler ingen frontend-kode med hovedappen (utenom eventuell gjenbruk av utility-funksjoner).
-
-Backend-ruter er under `/api/portal/` med egen autentiserings-middleware. Portalgjester har **ingen tilgang** til standard API-endepunkter.
-
-### Tilgangsmodell
-
-Kjernen er en **contactIds-array** — listen over kontakt-IDer en gjest har tilgang til. Alle portal-API-endepunkter filtrerer data basert på denne listen. Det finnes ingen måte å omgå dette.
-
-```
-Portal-gjest "Bestemor" → contactIds: [870, 851] → kan se poster for Ailo og Enya
-Delelenke "for Farmor" → contactIds: [870] → kan kun se poster for Ailo
-```
-
-### Database-skjema
-
-#### Nye tabeller
-
-**`portal_guests`** — portalgjester (separat fra `users`-tabellen)
+**`portal_guests`** — portalgjester (SEPARAT fra `users`)
 
 | Kolonne | Type | Beskrivelse |
 |---------|------|-------------|
@@ -95,19 +82,12 @@ Delelenke "for Farmor" → contactIds: [870] → kan kun se poster for Ailo
 | token_hash | VARCHAR(64) UNIQUE | SHA-256 av token |
 | label | VARCHAR(255) NULL | "Lenke for Farmor" |
 | portal_guest_id | INT FK → portal_guests NULL | Kobles til gjest for samme tilgang |
+| contact_ids | JSON | Direkte contactIds for standalone lenker |
 | created_by | INT FK → users | |
 | expires_at | TIMESTAMP NULL | Null = permanent |
 | is_active | BOOLEAN | Kan trekkes tilbake |
 | last_used_at | TIMESTAMP NULL | |
-| created_at | TIMESTAMPS | |
-
-**`portal_link_contacts`** — når en lenke IKKE er knyttet til en gjest
-
-| Kolonne | Type | Beskrivelse |
-|---------|------|-------------|
-| link_id | INT FK → portal_share_links | |
-| contact_id | INT FK → contacts | |
-| PK | (link_id, contact_id) | |
+| created_at | TIMESTAMP | |
 
 **`portal_sessions`** — sesjoner for portalgjester
 
@@ -119,163 +99,152 @@ Delelenke "for Farmor" → contactIds: [870] → kan kun se poster for Ailo
 | refresh_token_hash | VARCHAR(64) | |
 | ip_address | VARCHAR(45) | |
 | user_agent | VARCHAR(500) | |
+| device_label | VARCHAR(255) | |
 | is_active | BOOLEAN | |
 | expires_at | TIMESTAMP | |
+| last_activity_at | TIMESTAMP | |
 | created_at | TIMESTAMP | |
 
-#### Endringer i eksisterende tabeller
+### Endringer i eksisterende tabeller
 
-**`post_comments`** — legg til `portal_guest_id` (nullable), gjør `user_id` nullable
+**`post_comments`** — legg til `portal_guest_id` (nullable). `user_id` forblir NOT NULL for eksisterende kommentarer. Nye portal-kommentarer: `user_id = NULL`, `portal_guest_id = gjest-ID`.
 
-**`post_reactions`** — legg til `portal_guest_id` (nullable), gjør `user_id` nullable, oppdater unique constraint
+**`post_reactions`** — legg til `portal_guest_id` (nullable). Oppdater unique constraint.
 
-**`posts`** — legg til `portal_guest_id` (nullable), gjør `created_by` nullable (for portal-opprettede poster)
+**`tenants`** — legg til `portal_enabled` (BOOLEAN, default false)
+
+**Merk:** `posts.created_by` endres IKKE — portal-MVP har ikke posting. Defer til v2.
+
+## Arkitektur
+
+### Frontend — portal-ruter i eksisterende app
+
+Portalen bruker eksisterende SPA med `/portal/*`-ruter. Ingen separat HTML-entrypoint.
+
+- `app.js` sjekker om path starter med `/portal` → setter `portalMode` flagg
+- I portal-modus: ingen navbar, ingen sidebar, portal-spesifikk layout
+- Gjenbruker `post-list.js` med `{ portalMode: true }` → skjuler edit/delete/visibility
+- Gjenbruker `photo-viewer.js`, `dialogs.js`, `i18n.js`, `auth-url.js`
+- Én `portal.css` for foto-album-estetikk
+
+```
+frontend/js/pages/
+├── portal-login.js          — innlogging + delelenke-validering
+└── portal-timeline.js       — kontaktvelger + tidslinje + galleri
+
+frontend/css/
+└── portal.css               — portal-spesifikke stiler
+```
+
+### Backend
+
+```
+backend/src/
+├── middleware/portal-auth.js  — portal JWT-validering + contactIds
+├── routes/portal.js           — portal API (tidslinje, reaksjoner, kommentarer)
+└── routes/portal-admin.js     — admin API (gjester, lenker)
+```
 
 ### Autentisering
 
 #### Gjestekonto-innlogging
 1. Gjest åpner `/portal/login`
-2. Sender e-post+passord til `POST /api/portal/auth/login`
-3. Backend verifiserer mot `portal_guests`, oppretter `portal_sessions`
-4. Returnerer JWT: `{ portalGuestId, tenantId, type: 'portal', sid }`
-5. Frontend lagrer i localStorage (`portalToken`)
+2. `POST /api/portal/auth/login` → verifiserer mot `portal_guests`
+3. Oppretter `portal_sessions`, returnerer JWT: `{ portalGuestId, tenantId, type: 'portal', sid }`
+4. Frontend lagrer i localStorage (`portalToken`)
 
 #### Delelenke
 1. Gjest åpner `/portal/s/{token}`
-2. Backend slår opp `portal_share_links` via `SHA256(token)`
-3. Validerer: aktiv, ikke utløpt
-4. Returnerer JWT: `{ linkId, tenantId, type: 'portal_link', contactIds: [...] }`
-5. Frontend lagrer i sessionStorage (ephemeral)
+2. `POST /api/portal/auth/link` → SHA-256 oppslag i `portal_share_links`
+3. Validerer aktiv + ikke utløpt
+4. Oppretter ephemeral portal-sesjon
+5. Returnerer JWT som over
+6. contactIds resolves fra gjest eller direkte fra lenke
 
 #### Middleware: `portalAuthenticate`
-Ny middleware (`backend/src/middleware/portal-auth.js`), helt separat fra `authenticate`:
-- Aksepterer portal-JWT fra `Authorization`-header
-- Sjekker `type === 'portal'` eller `type === 'portal_link'`
-- Setter `req.portal = { type, guestId, tenantId, contactIds }`
-- **contactIds** er den fundamentale tilgangskontrollen
+- Aksepterer portal-JWT
+- Sjekker `type === 'portal'`
+- Laster contactIds fra `portal_guest_contacts` (alltid ferskt fra DB)
+- Setter `req.portal = { guestId, tenantId, contactIds, displayName }`
 
-### Backend API-endepunkter
+### API-endepunkter
 
-#### Portal-ruter (`/api/portal/`)
-
+#### Portal (`/api/portal/`) — krever portalAuthenticate
 | Metode | Endepunkt | Beskrivelse |
 |--------|-----------|-------------|
 | POST | `/auth/login` | Gjeste-innlogging |
-| POST | `/auth/refresh` | Forny portal-sesjon |
-| GET | `/auth/link/:token` | Valider delelenke |
-| GET | `/contacts` | Liste kontakter gjesten har tilgang til |
-| GET | `/contacts/:uuid/timeline` | Tidslinje for kontakt (paginert) |
-| POST | `/posts` | Opprett innlegg (med tagging av flere kontakter) |
-| POST | `/posts/:uuid/media` | Last opp media til innlegg |
-| GET | `/posts/:uuid/comments` | Hent kommentarer |
+| POST | `/auth/link` | Valider delelenke → sesjon |
+| POST | `/auth/refresh` | Forny sesjon |
+| GET | `/contacts` | Kontakter gjesten har tilgang til (avatar, navn) |
+| GET | `/contacts/:uuid/timeline` | Tidslinje for kontakt (paginert, kun shared) |
+| GET | `/contacts/:uuid/gallery` | Bilder for kontakt |
+| GET | `/posts/:uuid/comments` | Kommentarer |
 | POST | `/posts/:uuid/comments` | Legg til kommentar |
 | POST | `/posts/:uuid/reactions` | Toggle reaksjon |
-| GET | `/me` | Gjesteprofil + tilgjengelige kontakter |
+| GET | `/me` | Gjesteprofil |
 
-#### Admin-ruter (`/api/portal-admin/`)
-
+#### Portal-admin (`/api/portal-admin/`) — krever authenticate + admin
 | Metode | Endepunkt | Beskrivelse |
 |--------|-----------|-------------|
 | GET | `/guests` | Liste portalgjester |
-| POST | `/guests` | Opprett portalgjest |
+| POST | `/guests` | Opprett gjest |
 | PUT | `/guests/:uuid` | Oppdater gjest |
 | DELETE | `/guests/:uuid` | Slett gjest |
 | PUT | `/guests/:uuid/contacts` | Sett tilgjengelige kontakter |
 | POST | `/links` | Opprett delelenke |
 | GET | `/links` | Liste delelenker |
 | DELETE | `/links/:uuid` | Trekk tilbake delelenke |
-
-### Frontend-struktur
-
-#### Portal (egen SPA)
-
-```
-frontend/
-├── portal.html                    — Separat HTML-entrypoint
-├── css/
-│   └── portal.css                 — Portal-spesifikke stiler
-└── js/
-    ├── portal-app.js              — Router + state
-    ├── api/portal-client.js       — API-klient for portal
-    └── pages/
-        ├── portal-login.js        — Innloggingsside
-        └── portal-timeline.js     — Hovedvisning (kontakter + tidslinje)
-```
-
-#### Admin (i hovedappen)
-
-```
-frontend/js/pages/admin-portal.js  — Gjeste-/lenke-administrasjon
-```
-
-#### Nginx
-
-```nginx
-location /portal {
-    root /app/frontend;
-    try_files /portal.html /portal.html;
-}
-```
+| GET | `/sessions` | Aktive portal-sesjoner |
+| DELETE | `/sessions/:uuid` | Revokér portal-sesjon |
 
 ### Mediafiler
 
-Portal-gjester trenger tilgang til bilder/videoer. Eksisterende `/uploads/`-rute bruker `authenticate`-middleware. Løsning:
+Portal-gjester trenger tilgang til bilder/videoer. Løsning:
+- Utvid `/uploads/`-handler til å akseptere portal-JWT via `?token=`
+- Sjekk at filen tilhører en kontakt i guestens `contactIds`
+- Portal-frontend bruker `authUrl()` med portal-token
 
-- Legg til `?ptoken=`-parameter i `/uploads/`-handleren
-- Ny `portalMediaAuth`-middleware som validerer portal-JWT og sjekker at filen tilhører en tillatt kontakt
-- Portal-frontend bruker `ptoken` i stedet for `token` i bilde-URLer
+## Implementeringsfaser — MVP
 
-### Post-tagging og multi-kontakt-innlegg
-
-Eksisterende system støtter allerede:
-- `posts.contact_id` = "dette innlegget handler om kontakt X" (profilpost)
-- `post_contacts` junction = "dette innlegget tagger kontakt X, Y, Z"
-- Tidslinje-query henter poster hvor `contact_id = X ELLER X finnes i post_contacts`
-
-For portalen:
-- Når gjest poster på et barns tidslinje → `contact_id = barnet`
-- Når gjest tagger flere barn → rader i `post_contacts`
-- Poster opprettet av gjest: `portal_guest_id = gjest-ID`, `created_by = NULL`
-- Synlighet: alltid `shared` for portal-poster
-
-Hovedappens tidslinje viser automatisk portal-poster fordi de er vanlige `posts`-rader. Eneste endring: vis "Postet av {guest display_name}" i stedet for bruker-navn når `portal_guest_id` er satt.
-
-## Implementeringsfaser
-
-### Fase 1: Database og backend (3-4 dager)
-- Migrasjon med alle nye tabeller og kolonneendringer
+### Fase 1: Database + backend (~3 dager)
+- Migrasjoner (nye tabeller + kolonneendringer)
 - Portal-auth middleware
-- Portal API-endepunkter (les først, skriv etterpå)
-- Portal-admin API-endepunkter
+- Portal API (les: kontakter, tidslinje, galleri)
+- Portal-admin API (gjester, lenker, sesjoner)
 - Media-tilgang for portal
+- Global + tenant portal-toggle
 
-### Fase 2: Admin-UI (2-3 dager)
-- Admin-side for gjester og lenker
-- Kontaktvelger for tilgangsstyring
-- Kopier-til-utklippstavle for delelenker
+### Fase 2: Admin-UI (~2 dager)
+- Settings → Portal admin-side
+- Gjeste-administrasjon med kontaktvelger
+- Delelenke-generering med kopier-knapp
+- Portal-sesjoner (overvåking)
+- Global/tenant toggle
 
-### Fase 3: Portal-frontend (4-5 dager)
-- Egen HTML + router + API-klient
-- Innloggingsside + delelenke-håndtering
-- Tidslinjevisning med kontaktvelger
+### Fase 3: Portal-frontend (~3 dager)
+- Portal-login + delelenke-håndtering
+- Kontaktvelger (horisontalt scrollbar med avatarer)
+- Tidslinjevisning (gjenbruk post-list.js i portal-modus)
+- Galleri-visning
 - Like/kommentar-interaksjon
+- Mobilresponsivt foto-album-design
 
-### Fase 4: Skriveoperasjoner (2-3 dager)
-- Innleggsopprettelse med foto/video-opplasting
-- Multi-kontakt-tagging
-- Kommentarer fra portal
+**Estimert total: ~8 dager**
 
-### Fase 5: Integrasjon og polish (2 dager)
-- Vis portalgjest-navn i hovedappens tidslinje
-- Mobilresponsiv testing
-- E-postvarsler ved nye innlegg/kommentarer (valgfritt)
+### Fase 4: v2 (senere)
+- Posting fra portal (upload, tagging, moderering)
+- E-postvarsler ved nye innlegg
+- Push-notifikasjoner
 
-**Estimert total: 13-17 dager**
+## Sikkerhetskrav — sjekkliste
 
-## Sikkerhet
-
-- Portalgjester lagres i **separat tabell** — ingen risiko for at de får hovedapp-tilgang
-- JWT inneholder `type: 'portal'` — kan ikke brukes mot vanlige API-endepunkter
-- Delelenke-tokens er **opaque** (ikke JWT) — trekkes tilbake umiddelbart ved sletting fra DB
-- All datatilgang filtreres gjennom **contactIds-array** — ingen omgåelse mulig
-- Portal-sesjoner har egen tabell og livssyklus
+- [ ] Portal-JWT kan IKKE brukes mot vanlige API-endepunkter
+- [ ] contactIds filtreres server-side på ALLE portal-queries
+- [ ] Portal-gjester kan IKKE se private poster
+- [ ] Portal-gjester kan IKKE se kontakter de ikke har tilgang til
+- [ ] Mediefiler valideres mot contactIds
+- [ ] Delelenke-tokens er kryptografisk sterke (48 byte random)
+- [ ] Portal kan deaktiveres globalt og per tenant
+- [ ] Portal-sesjoner er synlige for admin
+- [ ] Rate limiting på portal-endepunkter (strengere enn hovedapp)
+- [ ] Kommentarer fra portal-gjester kan slettes av admin

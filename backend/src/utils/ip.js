@@ -1,5 +1,7 @@
 import { config } from '../config/index.js';
 import { db } from '../db.js';
+import { getSetting } from './settings.js';
+import { getCountryForIp } from '../services/geolocation.js';
 
 /**
  * Check if an IP address is trusted for a specific user's tenant.
@@ -72,4 +74,40 @@ function ipToInt(ip) {
   const parts = ip.split('.');
   if (parts.length !== 4) return 0;
   return parts.reduce((sum, octet) => (sum << 8) + parseInt(octet), 0) >>> 0;
+}
+
+/**
+ * Check if an IP is allowed to attempt login at all.
+ * Checks system-wide login IP whitelist and country whitelist.
+ * Returns { allowed: true } or { allowed: false, reason: string }.
+ */
+export async function isLoginAllowed(ip) {
+  const normalizedIp = ip?.replace(/^::ffff:/, '') || '';
+
+  // 1. Check login IP whitelist (if configured)
+  const loginIpWhitelist = await getSetting('login_ip_whitelist', '');
+  if (loginIpWhitelist.trim()) {
+    // If whitelist is configured, IP must be in it
+    if (!ipInRanges(normalizedIp, loginIpWhitelist)) {
+      return { allowed: false, reason: 'ip_blocked' };
+    }
+    // IP is whitelisted — skip country check
+    return { allowed: true };
+  }
+
+  // 2. Check country whitelist (if configured + API key present)
+  const countryWhitelist = await getSetting('login_country_whitelist', '');
+  if (countryWhitelist.trim()) {
+    const country = await getCountryForIp(normalizedIp);
+    if (country === 'LOCAL') return { allowed: true };
+    if (country) {
+      const allowed = countryWhitelist.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+      if (!allowed.includes(country.toUpperCase())) {
+        return { allowed: false, reason: 'country_blocked' };
+      }
+    }
+    // If geolocation failed (no API key or network error), allow through
+  }
+
+  return { allowed: true };
 }

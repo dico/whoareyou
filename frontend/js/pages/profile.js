@@ -11,10 +11,17 @@ export async function renderProfile() {
   content.innerHTML = `
     <div class="page-container">
       <div class="page-header">
-        <h2>${t('profile.title')}</h2>
+        <h2>${t('nav.accountSettings')}</h2>
       </div>
 
-      <!-- Account -->
+      <div class="filter-tabs mb-3" id="profile-tabs">
+        <button class="filter-tab active" data-tab="account"><i class="bi bi-person-circle me-1"></i>${t('settings.account')}</button>
+        <button class="filter-tab" data-tab="security"><i class="bi bi-shield-check me-1"></i>${t('settings.security')}</button>
+        <button class="filter-tab" data-tab="sessions"><i class="bi bi-laptop me-1"></i>${t('settings.activeSessions')}</button>
+      </div>
+
+      <!-- Account tab -->
+      <div id="tab-account">
       <div class="settings-section glass-card">
         <h4><i class="bi bi-person-circle"></i> ${t('settings.account')}</h4>
         <div id="profile-view">
@@ -88,7 +95,10 @@ export async function renderProfile() {
         </form>
       </div>
 
-      <!-- Two-factor authentication -->
+      </div>
+
+      <!-- Security tab (2FA + passkeys) -->
+      <div id="tab-security" class="d-none">
       <div class="settings-section glass-card">
         <h4><i class="bi bi-shield-check"></i> ${t('settings.twoFactor')}</h4>
         <p class="text-muted small">${t('settings.twoFactorDesc')}</p>
@@ -96,8 +106,6 @@ export async function renderProfile() {
           <div class="loading small">${t('app.loading')}</div>
         </div>
       </div>
-
-      <!-- Passkeys -->
       <div class="settings-section glass-card">
         <h4><i class="bi bi-fingerprint"></i> ${t('settings.passkeys')}</h4>
         <p class="text-muted small">${t('settings.passkeysDesc')}</p>
@@ -105,8 +113,39 @@ export async function renderProfile() {
           <div class="loading small">${t('app.loading')}</div>
         </div>
       </div>
+      </div>
+
+      <!-- Sessions tab -->
+      <div id="tab-sessions" class="d-none">
+      <div class="settings-section glass-card">
+        <h4><i class="bi bi-laptop"></i> ${t('settings.activeSessions')}</h4>
+        <p class="text-muted small">${t('settings.sessionsDesc')}</p>
+        <div id="sessions-list" class="mt-2">
+          <div class="loading small">${t('app.loading')}</div>
+        </div>
+        <button class="btn btn-outline-danger btn-sm mt-2 d-none" id="btn-revoke-all">
+          <i class="bi bi-box-arrow-right me-1"></i>${t('settings.revokeAllSessions')}
+        </button>
+      </div>
+      </div>
+
     </div>
   `;
+
+  // Tab switching
+  document.getElementById('profile-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.filter-tab');
+    if (!tab) return;
+    document.querySelectorAll('#profile-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    ['account', 'security', 'sessions'].forEach(id => {
+      document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
+    });
+    if (tab.dataset.tab === 'sessions' && !document.getElementById('sessions-list').dataset.loaded) {
+      document.getElementById('sessions-list').dataset.loaded = 'true';
+      loadSessions();
+    }
+  });
 
   // Language switcher
   document.getElementById('language-select').addEventListener('change', async (e) => {
@@ -391,6 +430,61 @@ export async function renderProfile() {
       el.innerHTML = '';
     }
   }
+
+  // ── Sessions ──
+  async function loadSessions() {
+    try {
+      const { sessions } = await api.get('/auth/sessions');
+      const list = document.getElementById('sessions-list');
+
+      if (!sessions.length) {
+        list.innerHTML = `<p class="text-muted small">${t('settings.noSessions')}</p>`;
+        return;
+      }
+
+      list.innerHTML = sessions.map(s => {
+        const icon = s.device_label?.toLowerCase().includes('mobile') ? 'phone' :
+                     s.device_label?.toLowerCase().includes('tablet') ? 'tablet' : 'laptop';
+        const timeAgo = formatTimeAgo(s.last_activity_at);
+        const countryFlag = s.country_code && s.country_code !== 'LOCAL'
+          ? `<img src="/img/flags/${s.country_code.toLowerCase()}.svg" alt="${s.country_code}" style="width:16px;height:12px;margin-right:4px;vertical-align:middle">`
+          : '';
+        return `
+          <div class="session-item ${s.is_current ? 'session-current' : ''}">
+            <div class="session-icon"><i class="bi bi-${icon}"></i></div>
+            <div class="session-info">
+              <div class="session-device">${s.device_label || t('settings.unknownDevice')}</div>
+              <div class="session-meta">${countryFlag}${s.ip_address || ''} · ${timeAgo}</div>
+            </div>
+            ${s.is_current
+              ? `<span class="badge bg-primary">${t('settings.thisDevice')}</span>`
+              : `<button class="btn btn-outline-danger btn-sm btn-revoke-session" data-uuid="${s.uuid}">${t('settings.revoke')}</button>`
+            }
+          </div>
+        `;
+      }).join('');
+
+      if (sessions.length > 1) {
+        document.getElementById('btn-revoke-all')?.classList.remove('d-none');
+      }
+
+      list.querySelectorAll('.btn-revoke-session').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await api.delete(`/auth/sessions/${btn.dataset.uuid}`);
+          loadSessions();
+        });
+      });
+    } catch {
+      document.getElementById('sessions-list').innerHTML = '';
+    }
+  }
+
+  document.getElementById('btn-revoke-all')?.addEventListener('click', async () => {
+    if (await confirmDialog(t('settings.revokeAllConfirm'), { title: t('settings.security'), confirmText: t('settings.revokeAllSessions') })) {
+      await api.delete('/auth/sessions');
+      loadSessions();
+    }
+  });
 }
 
 function formatTimeAgo(dateStr) {

@@ -18,11 +18,6 @@ export async function renderSettings() {
       </div>
 
       <div class="settings-grid">
-        <a href="/admin/security" data-link class="settings-card glass-card">
-          <div class="settings-card-icon" style="background:rgba(255,59,48,0.1);color:#FF3B30"><i class="bi bi-shield-lock"></i></div>
-          <div class="settings-card-label">${t('settings.security')}</div>
-          <div class="settings-card-desc">${t('settings.securityCardDesc')}</div>
-        </a>
         <a href="/admin/tenant" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(0,122,255,0.1);color:#007AFF"><i class="bi bi-people"></i></div>
           <div class="settings-card-label">${t('settings.manageMembers')}</div>

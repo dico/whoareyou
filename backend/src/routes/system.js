@@ -119,6 +119,7 @@ router.get('/settings', async (req, res, next) => {
     res.json({
       registration_enabled: (await getSetting('registration_enabled', 'true')) === 'true',
       password_reset_enabled: (await getSetting('password_reset_enabled', 'false')) === 'true',
+      portal_enabled: (await getSetting('portal_enabled', 'true')) === 'true',
     });
   } catch (err) { next(err); }
 });
@@ -131,6 +132,9 @@ router.put('/settings', async (req, res, next) => {
     }
     if (req.body.password_reset_enabled !== undefined) {
       await setSetting('password_reset_enabled', req.body.password_reset_enabled ? 'true' : 'false');
+    }
+    if (req.body.portal_enabled !== undefined) {
+      await setSetting('portal_enabled', req.body.portal_enabled ? 'true' : 'false');
     }
     res.json({ message: 'Settings updated' });
   } catch (err) { next(err); }
@@ -293,6 +297,34 @@ router.post('/tenants/:uuid/delete', async (req, res, next) => {
     // Files will be orphaned but not a security risk — can be cleaned manually
 
     res.json({ message: 'Tenant deleted' });
+  } catch (err) { next(err); }
+});
+
+// ── IP Security Settings ──
+
+// GET /api/system/ip-security — get IP security config
+router.get('/ip-security', async (req, res, next) => {
+  try {
+    if (!req.user.isSystemAdmin) throw new AppError('System admin required', 403);
+    res.json({
+      ipgeo_api_key: await getSetting('ipgeo_api_key', ''),
+      login_country_whitelist: await getSetting('login_country_whitelist', ''),
+      login_ip_whitelist: await getSetting('login_ip_whitelist', ''),
+      client_ip: (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''),
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/system/ip-security — update IP security config
+router.put('/ip-security', async (req, res, next) => {
+  try {
+    if (!req.user.isSystemAdmin) throw new AppError('System admin required', 403);
+
+    if (req.body.ipgeo_api_key !== undefined) await setSetting('ipgeo_api_key', req.body.ipgeo_api_key.trim());
+    if (req.body.login_country_whitelist !== undefined) await setSetting('login_country_whitelist', req.body.login_country_whitelist.trim().toUpperCase());
+    if (req.body.login_ip_whitelist !== undefined) await setSetting('login_ip_whitelist', req.body.login_ip_whitelist.trim());
+
+    res.json({ message: 'IP security settings updated' });
   } catch (err) { next(err); }
 });
 

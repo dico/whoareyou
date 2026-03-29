@@ -23,6 +23,7 @@ export async function renderSystemAdmin() {
         <button class="filter-tab active" data-tab="tenants"><i class="bi bi-buildings me-1"></i>${t('admin.tenants')}</button>
         <button class="filter-tab" data-tab="settings"><i class="bi bi-gear me-1"></i>${t('admin.systemSettings')}</button>
         <button class="filter-tab" data-tab="email"><i class="bi bi-envelope me-1"></i>${t('admin.emailConfig')}</button>
+        <button class="filter-tab" data-tab="ip-security"><i class="bi bi-shield-lock me-1"></i>${t('admin.ipSecurity')}</button>
       </div>
 
       <!-- Tenants tab -->
@@ -113,6 +114,62 @@ export async function renderSystemAdmin() {
       </div>
       </div>
     </div>
+
+      <!-- IP Security tab -->
+      <div id="tab-ip-security" class="d-none">
+        <div class="settings-section glass-card">
+          <h4><i class="bi bi-shield-lock me-2"></i>${t('admin.ipSecurity')}</h4>
+          <p class="text-muted small">${t('admin.ipSecurityDesc')}</p>
+
+          <!-- Login IP whitelist -->
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="ip-whitelist-enabled">
+            <label class="form-check-label" for="ip-whitelist-enabled"><strong>${t('admin.loginIpWhitelist')}</strong></label>
+            <div class="form-text">${t('admin.loginIpWhitelistHint')}</div>
+          </div>
+          <div id="ip-whitelist-fields" class="mb-3 d-none">
+            <textarea class="form-control form-control-sm" id="ip-login-whitelist" rows="2" placeholder="${t('admin.loginIpWhitelistPlaceholder')}"></textarea>
+            <div class="mt-1">
+              <span class="small text-muted" id="ip-current-ip"></span>
+              <button class="btn btn-outline-secondary btn-sm ms-2" id="ip-add-current" type="button">${t('admin.addCurrentIp')}</button>
+              <button class="btn btn-outline-secondary btn-sm" id="ip-add-range" type="button">${t('admin.addCurrentRange')}</button>
+            </div>
+          </div>
+
+          <hr>
+
+          <!-- Country whitelist -->
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="ip-country-enabled">
+            <label class="form-check-label" for="ip-country-enabled"><strong>${t('admin.countryWhitelist')}</strong></label>
+            <div class="form-text">${t('admin.countryWhitelistHint')}</div>
+          </div>
+          <div id="ip-country-fields" class="mb-3 d-none">
+            <div class="mb-2">
+              <label class="form-label small">${t('admin.ipgeoApiKey')}</label>
+              <input type="text" class="form-control form-control-sm" id="ip-geo-key" placeholder="${t('admin.ipgeoApiKeyPlaceholder')}">
+              <div class="form-text">${t('admin.ipgeoApiKeyHint')}</div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">${t('admin.countryWhitelist')}</label>
+              <div class="d-flex gap-2">
+                <input type="text" class="form-control form-control-sm" id="ip-country-whitelist" placeholder="${t('admin.countryWhitelistPlaceholder')}" readonly>
+                <button class="btn btn-outline-secondary btn-sm" id="ip-country-picker-btn" type="button">${t('admin.selectCountries')}</button>
+              </div>
+              <div id="ip-country-tags" class="mt-1 d-flex flex-wrap gap-1"></div>
+            </div>
+            <div id="ip-country-picker" class="d-none mb-2" style="position:relative">
+              <input type="text" class="form-control form-control-sm" id="ip-country-search" placeholder="${t('common.search')}">
+              <div id="ip-country-list" class="mt-1" style="max-height:200px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-surface)"></div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-sm" id="ip-save">${t('common.save')}</button>
+          <span id="ip-feedback" class="ms-2"></span>
+        </div>
+      </div>
+
+    </div>
   `;
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/settings'));
@@ -123,9 +180,10 @@ export async function renderSystemAdmin() {
     if (!tab) return;
     document.querySelectorAll('#system-tabs .filter-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    ['tenants', 'settings', 'email'].forEach(id => {
+    ['tenants', 'settings', 'email', 'ip-security'].forEach(id => {
       document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
     });
+    if (tab.dataset.tab === 'ip-security') loadIpSecurity();
   });
 
   await Promise.all([loadSettings(), loadTenants(), loadSmtp()]);
@@ -504,6 +562,135 @@ async function loadSmtp() {
       feedback.innerHTML = `<span class="text-danger small">${err.message}</span>`;
     }
   });
+}
+
+const COUNTRIES = [
+  ['AF','Afghanistan'],['AL','Albania'],['DZ','Algeria'],['AD','Andorra'],['AO','Angola'],['AR','Argentina'],['AM','Armenia'],['AU','Australia'],['AT','Austria'],['AZ','Azerbaijan'],
+  ['BS','Bahamas'],['BH','Bahrain'],['BD','Bangladesh'],['BY','Belarus'],['BE','Belgium'],['BO','Bolivia'],['BA','Bosnia'],['BR','Brazil'],['BG','Bulgaria'],['CA','Canada'],
+  ['CL','Chile'],['CN','China'],['CO','Colombia'],['HR','Croatia'],['CU','Cuba'],['CY','Cyprus'],['CZ','Czechia'],['DK','Denmark'],['DO','Dominican Republic'],['EC','Ecuador'],
+  ['EG','Egypt'],['EE','Estonia'],['ET','Ethiopia'],['FI','Finland'],['FR','France'],['GE','Georgia'],['DE','Germany'],['GH','Ghana'],['GR','Greece'],['GT','Guatemala'],
+  ['HK','Hong Kong'],['HU','Hungary'],['IS','Iceland'],['IN','India'],['ID','Indonesia'],['IR','Iran'],['IQ','Iraq'],['IE','Ireland'],['IL','Israel'],['IT','Italy'],
+  ['JP','Japan'],['JO','Jordan'],['KZ','Kazakhstan'],['KE','Kenya'],['KR','South Korea'],['KW','Kuwait'],['LV','Latvia'],['LB','Lebanon'],['LT','Lithuania'],['LU','Luxembourg'],
+  ['MY','Malaysia'],['MX','Mexico'],['MD','Moldova'],['MC','Monaco'],['MA','Morocco'],['NL','Netherlands'],['NZ','New Zealand'],['NG','Nigeria'],['NO','Norway'],['PK','Pakistan'],
+  ['PA','Panama'],['PE','Peru'],['PH','Philippines'],['PL','Poland'],['PT','Portugal'],['QA','Qatar'],['RO','Romania'],['RU','Russia'],['SA','Saudi Arabia'],['RS','Serbia'],
+  ['SG','Singapore'],['SK','Slovakia'],['SI','Slovenia'],['ZA','South Africa'],['ES','Spain'],['SE','Sweden'],['CH','Switzerland'],['TW','Taiwan'],['TH','Thailand'],['TR','Turkey'],
+  ['UA','Ukraine'],['AE','UAE'],['GB','United Kingdom'],['US','United States'],['UY','Uruguay'],['VN','Vietnam'],
+];
+
+async function loadIpSecurity() {
+  try {
+    const data = await api.get('/system/ip-security');
+    const ipWhitelistEl = document.getElementById('ip-login-whitelist');
+    const countryWhitelistEl = document.getElementById('ip-country-whitelist');
+
+    document.getElementById('ip-geo-key').value = data.ipgeo_api_key || '';
+    countryWhitelistEl.value = data.login_country_whitelist || '';
+    ipWhitelistEl.value = data.login_ip_whitelist || '';
+    document.getElementById('ip-current-ip').textContent = `${t('admin.yourIp')}: ${data.client_ip}`;
+
+    // Toggle states
+    const ipEnabled = document.getElementById('ip-whitelist-enabled');
+    const countryEnabled = document.getElementById('ip-country-enabled');
+
+    ipEnabled.checked = !!(data.login_ip_whitelist?.trim());
+    countryEnabled.checked = !!(data.login_country_whitelist?.trim());
+    document.getElementById('ip-whitelist-fields').classList.toggle('d-none', !ipEnabled.checked);
+    document.getElementById('ip-country-fields').classList.toggle('d-none', !countryEnabled.checked);
+
+    ipEnabled.addEventListener('change', () => {
+      document.getElementById('ip-whitelist-fields').classList.toggle('d-none', !ipEnabled.checked);
+      if (!ipEnabled.checked) ipWhitelistEl.value = '';
+    });
+    countryEnabled.addEventListener('change', () => {
+      document.getElementById('ip-country-fields').classList.toggle('d-none', !countryEnabled.checked);
+      if (!countryEnabled.checked) countryWhitelistEl.value = '';
+    });
+
+    // Country tags
+    function renderCountryTags() {
+      const codes = countryWhitelistEl.value.split(',').map(c => c.trim()).filter(Boolean);
+      const tagsEl = document.getElementById('ip-country-tags');
+      tagsEl.innerHTML = codes.map(code => {
+        const name = COUNTRIES.find(c => c[0] === code)?.[1] || code;
+        return `<span class="contact-chip">
+          <span class="contact-chip-avatar"><img src="/img/flags/${code.toLowerCase()}.svg" alt="${code}" style="width:100%;height:100%;object-fit:cover"></span>
+          ${name}
+          <button class="contact-chip-remove ip-rm-country" data-code="${code}" type="button"><i class="bi bi-x"></i></button>
+        </span>`;
+      }).join('');
+      tagsEl.querySelectorAll('.ip-rm-country').forEach(btn => {
+        btn.addEventListener('click', () => {
+          countryWhitelistEl.value = countryWhitelistEl.value.split(',').map(c => c.trim()).filter(c => c && c !== btn.dataset.code).join(', ');
+          renderCountryTags();
+        });
+      });
+    }
+    renderCountryTags();
+
+    // Country picker
+    document.getElementById('ip-country-picker-btn').addEventListener('click', () => {
+      const picker = document.getElementById('ip-country-picker');
+      picker.classList.toggle('d-none');
+      if (!picker.classList.contains('d-none')) {
+        document.getElementById('ip-country-search').value = '';
+        renderCountryList('');
+        document.getElementById('ip-country-search').focus();
+      }
+    });
+
+    document.getElementById('ip-country-search').addEventListener('input', (e) => renderCountryList(e.target.value.trim().toLowerCase()));
+
+    function renderCountryList(filter) {
+      const selected = countryWhitelistEl.value.split(',').map(c => c.trim()).filter(Boolean);
+      const filtered = COUNTRIES.filter(([code, name]) => !selected.includes(code) && (name.toLowerCase().includes(filter) || code.toLowerCase().includes(filter))).slice(0, 15);
+      const listEl = document.getElementById('ip-country-list');
+      listEl.innerHTML = filtered.map(([code, name]) =>
+        `<div class="px-2 py-1 d-flex align-items-center gap-2" style="cursor:pointer" data-code="${code}">
+          <img src="/img/flags/${code.toLowerCase()}.svg" alt="${code}" style="width:20px;height:15px">
+          ${name} <span class="text-muted">(${code})</span>
+        </div>`
+      ).join('') || `<div class="px-2 py-1 text-muted">${t('common.noResults')}</div>`;
+      listEl.querySelectorAll('[data-code]').forEach(item => {
+        item.addEventListener('click', () => {
+          const current = countryWhitelistEl.value.trim();
+          countryWhitelistEl.value = current ? `${current}, ${item.dataset.code}` : item.dataset.code;
+          renderCountryTags();
+          document.getElementById('ip-country-picker').classList.add('d-none');
+        });
+        item.addEventListener('mouseenter', () => item.style.background = 'rgba(0,0,0,0.04)');
+        item.addEventListener('mouseleave', () => item.style.background = '');
+      });
+    }
+
+    // Add current IP buttons
+    document.getElementById('ip-add-current').addEventListener('click', () => {
+      const current = ipWhitelistEl.value.trim();
+      if (!current.includes(data.client_ip)) ipWhitelistEl.value = current ? `${current}, ${data.client_ip}` : data.client_ip;
+    });
+    document.getElementById('ip-add-range').addEventListener('click', () => {
+      const current = ipWhitelistEl.value.trim();
+      const parts = data.client_ip.split('.');
+      if (parts.length === 4) {
+        const range = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        if (!current.includes(range)) ipWhitelistEl.value = current ? `${current}, ${range}` : range;
+      }
+    });
+
+    // Save button
+    document.getElementById('ip-save').addEventListener('click', async () => {
+      try {
+        await api.put('/system/ip-security', {
+          ipgeo_api_key: document.getElementById('ip-geo-key').value,
+          login_country_whitelist: countryEnabled.checked ? countryWhitelistEl.value : '',
+          login_ip_whitelist: ipEnabled.checked ? ipWhitelistEl.value : '',
+        });
+        document.getElementById('ip-feedback').innerHTML = `<span class="text-success small">${t('common.saved')}</span>`;
+        setTimeout(() => { document.getElementById('ip-feedback').innerHTML = ''; }, 3000);
+      } catch (err) {
+        document.getElementById('ip-feedback').innerHTML = `<span class="text-danger small">${err.message}</span>`;
+      }
+    });
+  } catch {}
 }
 
 function escapeHtml(str) {

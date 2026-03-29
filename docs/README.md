@@ -191,6 +191,8 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Kommentarer på poster — kommentar-seksjon under hvert innlegg, avatar fra koblet kontakt, slett egne kommentarer
 - [x] Likes/reaksjoner — hjerte-toggle per innlegg, telling vises, backend med emoji-støtte (utvidbart)
 - [x] MomentGarden-import — settings → integrasjoner → MomentGarden-side. ZIP-upload med duplikat-deteksjon (original_name), forhåndsvisning, progress bar. Synk loves/kommentarer fra MG API med session cookie. Moment-ID lagres som external_id for kobling
+- [x] IP-sikkerhet — login IP-whitelist (CIDR), land-whitelist via ipgeolocation.io (valgfri API-nøkkel), "Legg til min IP"/"Legg til mitt /24-range"-knapper, sjekkes før passord-verifisering
+- [x] Navbar-profil — "Min profil" lenker til kontaktprofilen når bruker er koblet, "Kontoinnstillinger" for passord/2FA
 
 ### Senere
 
