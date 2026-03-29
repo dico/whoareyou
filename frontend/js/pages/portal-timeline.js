@@ -153,17 +153,9 @@ async function loadPortalGallery(contactUuid) {
   el.innerHTML = `<div class="loading">${t('app.loading')}</div>`;
 
   try {
-    const { posts } = await portalApi.get(`/contacts/${contactUuid}/timeline?limit=200`);
-    const allImages = [];
-    for (const p of posts) {
-      for (const m of (p.media || [])) {
-        if (m.file_type?.startsWith('image/')) {
-          allImages.push({ file_path: m.file_path, thumbnail_path: m.thumbnail_path });
-        }
-      }
-    }
+    const { images: allImages } = await portalApi.get(`/contacts/${contactUuid}/gallery`);
 
-    if (!allImages.length) {
+    if (!allImages?.length) {
       el.innerHTML = `<div class="portal-empty"><i class="bi bi-image"></i><p>${t('posts.noPhotos')}</p></div>`;
       return;
     }

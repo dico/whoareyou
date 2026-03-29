@@ -170,6 +170,36 @@ router.get('/contacts', portalAuthenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/portal/contacts/:uuid/gallery — all images for a contact
+router.get('/contacts/:uuid/gallery', portalAuthenticate, async (req, res, next) => {
+  try {
+    const contact = await db('contacts').where({ uuid: req.params.uuid }).whereNull('deleted_at').first();
+    if (!contact || !req.portal.contactIds.includes(contact.id)) {
+      throw new AppError('Contact not found', 404);
+    }
+
+    const postIds = await db('posts')
+      .where('posts.tenant_id', req.portal.tenantId)
+      .whereNull('posts.deleted_at')
+      .where('posts.visibility', 'shared')
+      .where(function () {
+        this.where('posts.contact_id', contact.id)
+          .orWhereIn('posts.id', db('post_contacts').where('contact_id', contact.id).select('post_id'));
+      })
+      .select('posts.id');
+
+    const images = await db('post_media')
+      .whereIn('post_id', postIds.map(p => p.id))
+      .where('file_type', 'like', 'image/%')
+      .join('posts', 'post_media.post_id', 'posts.id')
+      .select('post_media.file_path', 'post_media.thumbnail_path', 'posts.post_date')
+      .orderBy('posts.post_date', 'desc')
+      .orderBy('post_media.sort_order');
+
+    res.json({ images });
+  } catch (err) { next(err); }
+});
+
 // GET /api/portal/contacts/:uuid/timeline — timeline for a contact
 router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next) => {
   try {
