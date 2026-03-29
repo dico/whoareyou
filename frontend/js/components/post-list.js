@@ -60,13 +60,20 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             </div>
           `}
           <div class="post-header-actions">
-            ${p.visibility === 'private' ? `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('common.private')}"></i>` : ''}
+            ${p.visibility === 'private' ? `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('visibility.private')}"></i>` : ''}
+            ${p.visibility === 'family' ? `<i class="bi bi-people-fill text-muted post-visibility-icon" title="${t('visibility.family')}"></i>` : ''}
             <div class="dropdown">
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
                 <li><a class="dropdown-item btn-edit-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
-                <li><a class="dropdown-item btn-toggle-visibility" href="#" data-uuid="${p.uuid}">
-                  <i class="bi bi-${p.visibility === 'private' ? 'people-fill' : 'lock-fill'} me-2"></i>${p.visibility === 'private' ? t('posts.makeShared') : t('posts.makePrivate')}
+                <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="shared">
+                  <i class="bi bi-globe2 me-2"></i>${t('visibility.shared')} ${p.visibility === 'shared' ? '<i class="bi bi-check"></i>' : ''}
+                </a></li>
+                <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="family">
+                  <i class="bi bi-people-fill me-2"></i>${t('visibility.family')} ${p.visibility === 'family' ? '<i class="bi bi-check"></i>' : ''}
+                </a></li>
+                <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="private">
+                  <i class="bi bi-lock-fill me-2"></i>${t('visibility.private')} ${p.visibility === 'private' ? '<i class="bi bi-check"></i>' : ''}
                 </a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger btn-delete-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
@@ -317,30 +324,28 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       });
     });
 
-    // Toggle visibility handlers
-    el.querySelectorAll('.btn-toggle-visibility').forEach((btn) => {
+    // Set visibility handlers
+    el.querySelectorAll('.btn-set-visibility').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
-        const post = postsMap.get(btn.dataset.uuid);
-        if (!post) return;
-        const newVis = post.visibility === 'private' ? 'shared' : 'private';
+        const newVis = btn.dataset.vis;
         await api.put(`/posts/${btn.dataset.uuid}`, { visibility: newVis });
-        // Update in-place instead of reloading entire feed
-        post.visibility = newVis;
+        // Update in-place
+        const post = postsMap.get(btn.dataset.uuid);
+        if (post) post.visibility = newVis;
         const postEl = el.querySelector(`[data-post-uuid="${btn.dataset.uuid}"]`);
         if (postEl) {
-          // Update lock icon
-          const iconEl = postEl.querySelector('.post-visibility-icon');
-          if (newVis === 'private' && !iconEl) {
-            const actions = postEl.querySelector('.post-header-actions');
-            actions.insertAdjacentHTML('afterbegin', `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('common.private')}"></i>`);
-          } else if (newVis === 'shared' && iconEl) {
-            iconEl.remove();
-          }
-          // Update menu item text/icon
-          const menuIcon = newVis === 'private' ? 'people-fill' : 'lock-fill';
-          const menuText = newVis === 'private' ? t('posts.makeShared') : t('posts.makePrivate');
-          btn.innerHTML = `<i class="bi bi-${menuIcon} me-2"></i>${menuText}`;
+          // Update visibility icon
+          postEl.querySelectorAll('.post-visibility-icon').forEach(i => i.remove());
+          const actions = postEl.querySelector('.post-header-actions');
+          if (newVis === 'private') actions.insertAdjacentHTML('afterbegin', `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('visibility.private')}"></i>`);
+          if (newVis === 'family') actions.insertAdjacentHTML('afterbegin', `<i class="bi bi-people-fill text-muted post-visibility-icon" title="${t('visibility.family')}"></i>`);
+          // Update check marks in menu
+          postEl.querySelectorAll('.btn-set-visibility').forEach(b => {
+            const check = b.querySelector('.bi-check');
+            if (check) check.remove();
+            if (b.dataset.vis === newVis) b.insertAdjacentHTML('beforeend', ' <i class="bi bi-check"></i>');
+          });
         }
       });
     });

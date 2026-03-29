@@ -114,9 +114,11 @@
     "send": "Send"
   },
   "visibility": {
-    "shared": "Delt",
-    "private": "Privat",
-    "sharedHint": "Synlig for familien din",
+    "shared": "Alle",
+    "family": "Familie",
+    "private": "Bare meg",
+    "sharedHint": "Synlig for familie og portalgjester",
+    "familyHint": "Kun synlig for familien, ikke portalgjester",
     "privateHint": "Bare synlig for deg"
   },
   "fields": {

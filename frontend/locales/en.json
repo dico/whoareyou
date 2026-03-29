@@ -114,9 +114,11 @@
     "send": "Send"
   },
   "visibility": {
-    "shared": "Shared",
-    "private": "Private",
-    "sharedHint": "Visible to your family",
+    "shared": "Everyone",
+    "family": "Family",
+    "private": "Only me",
+    "sharedHint": "Visible to family and portal guests",
+    "familyHint": "Visible to family only, not portal guests",
     "privateHint": "Only visible to you"
   },
   "fields": {

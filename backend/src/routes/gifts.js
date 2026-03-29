@@ -12,7 +12,7 @@ function applyVisibilityFilter(query, userId, userLinkedContactId) {
       this.where('gift_orders.visibility', 'private')
         .where('gift_orders.created_by', userId);
     }).orWhere(function () {
-      this.where('gift_orders.visibility', 'shared');
+      this.whereIn('gift_orders.visibility', ['shared', 'family']);
       if (userLinkedContactId) {
         this.whereNotExists(function () {
           this.select(db.raw(1))

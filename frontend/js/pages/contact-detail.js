@@ -90,7 +90,8 @@ export async function renderContactDetail(uuid) {
                 <div id="quick-post-media-preview" class="post-media-preview d-none"></div>
                 <div class="post-compose-bar">
                   <div class="visibility-pill" id="quick-post-visibility-btn" data-visibility="shared" title="${t('visibility.sharedHint')}">
-                    <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
+                    <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-globe2"></i> ${t('visibility.shared')}</span>
+                    <span class="visibility-pill-option" data-val="family"><i class="bi bi-people-fill"></i> ${t('visibility.family')}</span>
                     <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
                   </div>
                   <div class="post-compose-actions">

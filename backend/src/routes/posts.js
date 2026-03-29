@@ -17,7 +17,7 @@ router.get('/', async (req, res, next) => {
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
       .where(function () {
-        this.where('posts.visibility', 'shared')
+        this.whereIn('posts.visibility', ['shared', 'family'])
           .orWhere('posts.created_by', req.user.id);
       });
 
@@ -340,7 +340,7 @@ router.put('/:uuid', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
@@ -405,7 +405,7 @@ router.delete('/:uuid', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 

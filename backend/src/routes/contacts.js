@@ -97,7 +97,7 @@ router.get('/:uuid', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
@@ -290,7 +290,7 @@ router.put('/:uuid', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
@@ -358,7 +358,7 @@ router.delete('/:uuid', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
@@ -389,7 +389,7 @@ router.get('/search/global', async (req, res, next) => {
       .where('contacts.tenant_id', req.tenantId)
       .whereNull('contacts.deleted_at')
       .where(function () {
-        this.where('contacts.visibility', 'shared').orWhere('contacts.created_by', req.user.id);
+        this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
       })
       .where(function () {
         this.where('contacts.first_name', 'like', like)
@@ -412,7 +412,7 @@ router.get('/search/global', async (req, res, next) => {
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
       .where(function () {
-        this.where('posts.visibility', 'shared').orWhere('posts.created_by', req.user.id);
+        this.whereIn('posts.visibility', ['shared', 'family']).orWhere('posts.created_by', req.user.id);
       })
       .where('posts.body', 'like', like)
       .select('posts.uuid', 'posts.body', 'posts.post_date', 'posts.contact_id')
@@ -463,7 +463,7 @@ router.get('/upcoming-birthdays/list', async (req, res, next) => {
       .whereNotNull('contacts.birth_day')
       .whereNotNull('contacts.birth_month')
       .where(function () {
-        this.where('contacts.visibility', 'shared').orWhere('contacts.created_by', req.user.id);
+        this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
       })
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
@@ -514,7 +514,7 @@ router.post('/:uuid/fields', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
@@ -570,7 +570,7 @@ router.put('/:uuid/fields/:fieldId', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
@@ -617,7 +617,7 @@ router.delete('/:uuid/fields/:fieldId', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .where(function () {
-        this.where('visibility', 'shared').orWhere('created_by', req.user.id);
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
       .first();
 
