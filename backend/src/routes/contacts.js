@@ -247,7 +247,7 @@ router.post('/', async (req, res, next) => {
       how_we_met: req.body.how_we_met?.trim() || null,
       notes: req.body.notes?.trim() || null,
       is_favorite: !!req.body.is_favorite,
-      visibility: req.body.visibility === 'private' ? 'private' : 'shared',
+      visibility: ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared',
     });
 
     // Add labels if provided (validate they belong to this tenant)

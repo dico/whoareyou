@@ -300,7 +300,7 @@ router.post('/', async (req, res, next) => {
         body: body.trim(),
         post_date: post_date || new Date(),
         contact_id: aboutContactId,
-        visibility: visibility === 'private' ? 'private' : 'shared',
+        visibility: ['shared', 'family', 'private'].includes(visibility) ? visibility : 'shared',
       });
 
       // Tag contacts (for activity posts, or additional tags on profile posts)
@@ -352,7 +352,7 @@ router.put('/:uuid', async (req, res, next) => {
       const updates = {};
       if (req.body.body !== undefined) updates.body = req.body.body.trim();
       if (req.body.post_date !== undefined) updates.post_date = req.body.post_date;
-      if (req.body.visibility !== undefined) updates.visibility = req.body.visibility === 'private' ? 'private' : 'shared';
+      if (req.body.visibility !== undefined) updates.visibility = ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared';
 
       // Change "about" contact (profile post)
       if (req.body.about_contact_uuid !== undefined) {
