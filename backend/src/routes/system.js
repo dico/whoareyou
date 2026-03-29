@@ -328,4 +328,29 @@ router.put('/ip-security', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/system/ip-security/test — test geolocation lookup
+router.post('/ip-security/test', async (req, res, next) => {
+  try {
+    if (!req.user.isSystemAdmin) throw new AppError('System admin required', 403);
+
+    const apiKey = req.body.api_key || await getSetting('ipgeo_api_key');
+    if (!apiKey) throw new AppError('No API key configured', 400);
+
+    // Use provided IP, or fall back to client IP, or use 8.8.8.8 for local IPs
+    let ip = req.body.ip || (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, '');
+    const isLocal = !ip || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.');
+
+    if (isLocal && !req.body.ip) {
+      // Can't test local IP — use a known external IP to verify the API key works
+      ip = '8.8.8.8';
+    }
+
+    const { lookupIp } = await import('../services/geolocation.js');
+    const result = await lookupIp(ip, apiKey);
+
+    if (!result) throw new AppError('Lookup failed — check your API key', 400);
+    res.json({ ...result, is_local_network: isLocal, tested_ip: ip });
+  } catch (err) { next(err); }
+});
+
 export default router;

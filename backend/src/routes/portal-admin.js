@@ -145,7 +145,7 @@ router.put('/guests/:uuid/contacts', async (req, res, next) => {
 router.get('/links', async (req, res, next) => {
   try {
     const links = await db('portal_share_links')
-      .where({ tenant_id: req.tenantId })
+      .where({ 'portal_share_links.tenant_id': req.tenantId })
       .leftJoin('portal_guests', 'portal_share_links.portal_guest_id', 'portal_guests.id')
       .select(
         'portal_share_links.uuid', 'portal_share_links.label',

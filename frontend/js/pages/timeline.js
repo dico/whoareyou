@@ -93,7 +93,7 @@ export async function renderTimeline(contactUuid = null) {
 
     <!-- Tag contact modal -->
     <div class="modal fade" id="tag-modal" tabindex="-1">
-      <div class="modal-dialog modal-sm">
+      <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content glass-card">
           <div class="modal-header">
             <h5 class="modal-title">${t('posts.tagContact')}</h5>

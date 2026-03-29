@@ -147,7 +147,10 @@ export async function renderSystemAdmin() {
           <div id="ip-country-fields" class="mb-3 d-none">
             <div class="mb-2">
               <label class="form-label small">${t('admin.ipgeoApiKey')}</label>
-              <input type="text" class="form-control form-control-sm" id="ip-geo-key" placeholder="${t('admin.ipgeoApiKeyPlaceholder')}">
+              <div class="d-flex gap-2">
+                <input type="text" class="form-control form-control-sm" id="ip-geo-key" placeholder="${t('admin.ipgeoApiKeyPlaceholder')}">
+                <button class="btn btn-outline-secondary btn-sm" id="ip-geo-test" type="button">${t('admin.testGeo')}</button>
+              </div>
               <div class="form-text">${t('admin.ipgeoApiKeyHint')}</div>
             </div>
             <div class="mb-2">
@@ -662,6 +665,38 @@ async function loadIpSecurity() {
       });
     }
 
+    // Test geolocation
+    document.getElementById('ip-geo-test').addEventListener('click', async () => {
+      const btn = document.getElementById('ip-geo-test');
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const result = await api.post('/system/ip-security/test', {
+          api_key: document.getElementById('ip-geo-key').value.trim(),
+        });
+
+        const flag = result.country_code && result.country_code !== 'LOCAL'
+          ? `<img src="/img/flags/${result.country_code.toLowerCase()}.svg" alt="" style="width:48px;height:36px;border-radius:4px;margin-bottom:8px"><br>` : '';
+
+        let html = '';
+        if (result.is_local_network) {
+          html += `<div class="alert alert-info small mb-2">${t('admin.geoLocalInfo')}</div>`;
+        }
+        html += `${flag}<strong>${result.country_name || result.country_code}</strong><br>`;
+        html += `<span class="text-muted">IP: ${result.tested_ip}</span><br>`;
+        if (result.city) html += `<span class="text-muted">${t('admin.geoCity')}: ${result.city}</span><br>`;
+        if (result.isp) html += `<span class="text-muted">ISP: ${result.isp}</span><br>`;
+        html += `<span class="badge bg-success mt-1">${t('admin.geoKeyValid')}</span>`;
+
+        await confirmDialog(html, { title: t('admin.testGeoResult'), confirmText: t('common.ok'), confirmClass: 'btn-primary', size: '' });
+      } catch (err) {
+        await confirmDialog(`<div class="alert alert-danger mb-0">${t('admin.geoKeyInvalid')}</div><p class="small text-muted mt-2">${err.message}</p>`,
+          { title: t('admin.testGeoResult'), confirmText: t('common.ok'), confirmClass: 'btn-primary', size: '' });
+      }
+      btn.disabled = false;
+      btn.textContent = t('admin.testGeo');
+    });
+
     // Add current IP buttons
     document.getElementById('ip-add-current').addEventListener('click', () => {
       const current = ipWhitelistEl.value.trim();
@@ -678,16 +713,58 @@ async function loadIpSecurity() {
 
     // Save button
     document.getElementById('ip-save').addEventListener('click', async () => {
+      const feedbackEl = document.getElementById('ip-feedback');
       try {
+        // Safety check: verify current IP would still be allowed
+        const newIpWhitelist = ipEnabled.checked ? ipWhitelistEl.value.trim() : '';
+        const newCountryWhitelist = countryEnabled.checked ? countryWhitelistEl.value.trim() : '';
+        const apiKey = document.getElementById('ip-geo-key').value.trim();
+
+        if (newIpWhitelist && !newIpWhitelist.includes(data.client_ip)) {
+          // Check if current IP is in any of the ranges
+          const inRange = newIpWhitelist.split(',').some(range => {
+            const r = range.trim();
+            if (!r.includes('/')) return r === data.client_ip;
+            const [rangeIp, bits] = r.split('/');
+            const mask = ~(2 ** (32 - parseInt(bits)) - 1);
+            const ipToInt = ip => ip.split('.').reduce((s, o) => (s << 8) + parseInt(o), 0) >>> 0;
+            return (ipToInt(data.client_ip) & mask) === (ipToInt(rangeIp) & mask);
+          });
+          if (!inRange) {
+            const proceed = await confirmDialog(t('admin.ipLockoutWarning', { ip: data.client_ip }), {
+              title: t('admin.ipSecurity'), confirmText: t('admin.saveAnyway'),
+            });
+            if (!proceed) return;
+          }
+        }
+
+        if (newCountryWhitelist && apiKey) {
+          // Test current IP against country whitelist
+          feedbackEl.innerHTML = `<span class="text-muted small">${t('admin.verifyingCountry')}</span>`;
+          try {
+            const result = await api.post('/system/ip-security/test', { api_key: apiKey });
+            if (result.country_code && result.country_code !== 'LOCAL') {
+              const allowed = newCountryWhitelist.split(',').map(c => c.trim().toUpperCase());
+              if (!allowed.includes(result.country_code.toUpperCase())) {
+                const countryName = COUNTRIES.find(c => c[0] === result.country_code)?.[1] || result.country_code;
+                const proceed = await confirmDialog(t('admin.countryLockoutWarning', { country: countryName, code: result.country_code }), {
+                  title: t('admin.ipSecurity'), confirmText: t('admin.saveAnyway'),
+                });
+                if (!proceed) { feedbackEl.innerHTML = ''; return; }
+              }
+            }
+          } catch {}
+        }
+
         await api.put('/system/ip-security', {
-          ipgeo_api_key: document.getElementById('ip-geo-key').value,
-          login_country_whitelist: countryEnabled.checked ? countryWhitelistEl.value : '',
-          login_ip_whitelist: ipEnabled.checked ? ipWhitelistEl.value : '',
+          ipgeo_api_key: apiKey,
+          login_country_whitelist: newCountryWhitelist,
+          login_ip_whitelist: newIpWhitelist,
         });
-        document.getElementById('ip-feedback').innerHTML = `<span class="text-success small">${t('common.saved')}</span>`;
-        setTimeout(() => { document.getElementById('ip-feedback').innerHTML = ''; }, 3000);
+        feedbackEl.innerHTML = `<span class="text-success small">${t('common.saved')}</span>`;
+        setTimeout(() => { feedbackEl.innerHTML = ''; }, 3000);
       } catch (err) {
-        document.getElementById('ip-feedback').innerHTML = `<span class="text-danger small">${err.message}</span>`;
+        feedbackEl.innerHTML = `<span class="text-danger small">${err.message}</span>`;
       }
     });
   } catch {}

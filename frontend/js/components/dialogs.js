@@ -13,13 +13,14 @@ export function confirmDialog(message, options = {}) {
     title = t('common.confirm'),
     confirmText = t('common.confirm'),
     confirmClass = 'btn-danger',
+    size = 'modal-sm',
   } = options;
 
   return new Promise((resolve) => {
     const id = 'dialog-confirm-' + Date.now();
     const html = `
       <div class="modal fade" id="${id}" tabindex="-1">
-        <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-dialog ${size} modal-dialog-centered">
           <div class="modal-content glass-card">
             <div class="modal-header">
               <h5 class="modal-title">${title}</h5>

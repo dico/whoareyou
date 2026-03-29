@@ -25,6 +25,9 @@ const SALT_ROUNDS = 12;
 // Creates a new tenant + admin user (first user in a household)
 router.post('/register', async (req, res, next) => {
   try {
+    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
+
     // Check if registration is disabled (always allow first user)
     const userCount = await db('users').count('id as count').first();
     const isFirstUser = userCount.count === 0;
@@ -556,6 +559,9 @@ router.delete('/passkeys/:id', authenticate, async (req, res, next) => {
 // POST /api/auth/passkey/login-options — start passkey authentication (no auth required)
 router.post('/passkey/login-options', async (req, res, next) => {
   try {
+    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
+
     // If email provided, get user's passkeys for allowCredentials
     let allowCredentials;
     if (req.body.email) {
@@ -586,6 +592,9 @@ router.post('/passkey/login-options', async (req, res, next) => {
 // POST /api/auth/passkey/login — verify passkey and create session
 router.post('/passkey/login', async (req, res, next) => {
   try {
+    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
+
     const { credential } = req.body;
     if (!credential) throw new AppError('Credential required', 400);
 
@@ -824,7 +833,7 @@ router.get('/tenants', authenticate, async (req, res, next) => {
     }
 
     const tenants = await db('tenants')
-      .select('tenants.uuid', 'tenants.name', 'tenants.created_at')
+      .select('tenants.uuid', 'tenants.name', 'tenants.portal_enabled', 'tenants.created_at')
       .select(db.raw('(SELECT COUNT(*) FROM users WHERE users.tenant_id = tenants.id) as user_count'))
       .select(db.raw('(SELECT COUNT(*) FROM contacts WHERE contacts.tenant_id = tenants.id AND contacts.deleted_at IS NULL) as contact_count'))
       .orderBy('tenants.name');
@@ -893,13 +902,15 @@ router.put('/tenant/security', authenticate, async (req, res, next) => {
       throw new AppError('Admin access required', 403);
     }
 
-    const { trusted_ip_ranges } = req.body;
+    const updates = {};
+    if (req.body.trusted_ip_ranges !== undefined) updates.trusted_ip_ranges = req.body.trusted_ip_ranges || null;
+    if (req.body.portal_enabled !== undefined) updates.portal_enabled = !!req.body.portal_enabled;
 
-    await db('tenants').where({ id: req.user.tenantId }).update({
-      trusted_ip_ranges: trusted_ip_ranges || null,
-    });
+    if (Object.keys(updates).length) {
+      await db('tenants').where({ id: req.user.tenantId }).update(updates);
+    }
 
-    res.json({ message: 'Security settings updated', trusted_ip_ranges: trusted_ip_ranges || '' });
+    res.json({ message: 'Settings updated' });
   } catch (err) {
     next(err);
   }
