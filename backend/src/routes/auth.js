@@ -25,6 +25,18 @@ const SALT_ROUNDS = 12;
 // Creates a new tenant + admin user (first user in a household)
 router.post('/register', async (req, res, next) => {
   try {
+    // Check if registration is disabled (always allow first user)
+    const userCount = await db('users').count('id as count').first();
+    const isFirstUser = userCount.count === 0;
+
+    if (!isFirstUser) {
+      const { getSetting } = await import('../utils/settings.js');
+      const regEnabled = await getSetting('registration_enabled', 'true');
+      if (regEnabled !== 'true') {
+        throw new AppError('Registration is disabled. Contact your administrator.', 403);
+      }
+    }
+
     validateRequired(['email', 'password', 'first_name', 'last_name'], req.body);
     const email = validateEmail(req.body.email);
     validatePassword(req.body.password);
@@ -36,10 +48,6 @@ router.post('/register', async (req, res, next) => {
     if (existing) {
       throw new AppError('Email already registered', 409);
     }
-
-    // First user ever becomes system admin
-    const userCount = await db('users').count('id as count').first();
-    const isFirstUser = userCount.count === 0;
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const tenantUuid = uuidv4();
@@ -571,16 +579,20 @@ router.get('/me', authenticate, async (req, res, next) => {
       )
       .first();
 
-    // Fetch linked contact avatar if exists
+    // Fetch linked contact avatar + uuid if exists
     let avatar = null;
+    let linked_contact_uuid = null;
     if (user.linked_contact_id) {
-      const photo = await db('contact_photos')
-        .where({ contact_id: user.linked_contact_id, is_primary: true })
-        .first();
-      if (photo) avatar = photo.thumbnail_path;
+      const contact = await db('contacts').where({ id: user.linked_contact_id }).select('uuid', 'id').first();
+      if (contact) {
+        linked_contact_uuid = contact.uuid;
+        const photo = await db('contact_photos')
+          .where({ contact_id: contact.id, is_primary: true }).first();
+        if (photo) avatar = photo.thumbnail_path;
+      }
     }
 
-    res.json({ user: { ...user, linked_contact_id: undefined, avatar } });
+    res.json({ user: { ...user, linked_contact_id: undefined, avatar, linked_contact_uuid } });
   } catch (err) {
     next(err);
   }

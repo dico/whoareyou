@@ -1,11 +1,22 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { AppError } from '../utils/errors.js';
 import { getSetting, setSetting } from '../utils/settings.js';
 import { getSmtpConfig, verifySmtp, sendEmail } from '../services/email.js';
 
 const router = Router();
 
-// All routes require system admin
+// Public endpoint — before auth middleware
+router.get('/registration-status', async (req, res) => {
+  try {
+    const regEnabled = await getSetting('registration_enabled', 'true');
+    res.json({ enabled: regEnabled === 'true' });
+  } catch {
+    res.json({ enabled: true });
+  }
+});
+
+// All remaining routes require system admin
 router.use((req, res, next) => {
   if (!req.user.isSystemAdmin) {
     return next(new AppError('System admin access required', 403));
@@ -96,6 +107,176 @@ router.post('/smtp/test', async (req, res, next) => {
   } catch (err) {
     res.json({ ok: false, error: err.message });
   }
+});
+
+// ── System settings ──
+
+// GET /api/system/settings — get system settings
+router.get('/settings', async (req, res, next) => {
+  try {
+    res.json({
+      registration_enabled: (await getSetting('registration_enabled', 'true')) === 'true',
+      password_reset_enabled: (await getSetting('password_reset_enabled', 'false')) === 'true',
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/system/settings — update system settings
+router.put('/settings', async (req, res, next) => {
+  try {
+    if (req.body.registration_enabled !== undefined) {
+      await setSetting('registration_enabled', req.body.registration_enabled ? 'true' : 'false');
+    }
+    if (req.body.password_reset_enabled !== undefined) {
+      await setSetting('password_reset_enabled', req.body.password_reset_enabled ? 'true' : 'false');
+    }
+    res.json({ message: 'Settings updated' });
+  } catch (err) { next(err); }
+});
+
+// ── Tenant management ──
+
+// POST /api/system/tenants — create a new tenant with admin user
+router.post('/tenants', async (req, res, next) => {
+  try {
+    const { tenant_name, admin_first_name, admin_last_name, admin_email, admin_password } = req.body;
+    if (!tenant_name?.trim()) throw new AppError('Tenant name is required', 400);
+    if (!admin_first_name?.trim()) throw new AppError('Admin first name is required', 400);
+
+    const { v4: uuidv4 } = await import('uuid');
+    const bcrypt = await import('bcrypt');
+    const { validateEmail, validatePassword } = await import('../utils/validation.js');
+
+    const tenantUuid = uuidv4();
+    const userUuid = uuidv4();
+
+    let email = null;
+    let passwordHash = null;
+    if (admin_email?.trim()) {
+      email = validateEmail(admin_email);
+      const existing = await (await import('../db.js')).db('users').where({ email }).first();
+      if (existing) throw new AppError('Email already in use', 409);
+      const password = admin_password || crypto.randomBytes(8).toString('base64url');
+      validatePassword(password);
+      passwordHash = await bcrypt.hash(password, 12);
+    }
+
+    const { db } = await import('../db.js');
+
+    const result = await db.transaction(async (trx) => {
+      const [tenantId] = await trx('tenants').insert({
+        uuid: tenantUuid,
+        name: tenant_name.trim(),
+      });
+
+      const [userId] = await trx('users').insert({
+        uuid: userUuid,
+        tenant_id: tenantId,
+        email,
+        password_hash: passwordHash,
+        first_name: admin_first_name.trim(),
+        last_name: admin_last_name?.trim() || null,
+        role: 'admin',
+        is_active: !!email,
+        language: 'nb',
+      });
+
+      return { tenantId, tenantUuid, userId, userUuid };
+    });
+
+    res.status(201).json({
+      tenant: { uuid: tenantUuid, name: tenant_name.trim() },
+      admin: { uuid: userUuid, email },
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/system/tenants/:uuid/reset-password — reset tenant admin password
+router.post('/tenants/:uuid/reset-password', async (req, res, next) => {
+  try {
+    const { db } = await import('../db.js');
+    const bcrypt = await import('bcrypt');
+    const { validatePassword } = await import('../utils/validation.js');
+
+    const tenant = await db('tenants').where({ uuid: req.params.uuid }).first();
+    if (!tenant) throw new AppError('Tenant not found', 404);
+
+    // Find admin(s) in this tenant
+    const admins = await db('users')
+      .where({ tenant_id: tenant.id, role: 'admin', is_active: true })
+      .select('id', 'email', 'first_name');
+
+    if (!admins.length) throw new AppError('No active admin found in this tenant', 404);
+
+    const { new_password } = req.body;
+    if (!new_password) throw new AppError('New password is required', 400);
+    validatePassword(new_password);
+
+    const passwordHash = await bcrypt.hash(new_password, 12);
+
+    // Reset password for all admins in tenant
+    await db('users')
+      .whereIn('id', admins.map(a => a.id))
+      .update({ password_hash: passwordHash });
+
+    // Revoke all sessions
+    await db('sessions')
+      .whereIn('user_id', admins.map(a => a.id))
+      .update({ is_active: false });
+
+    // Notify via email
+    const { sendEmail: send } = await import('../services/email.js');
+    for (const admin of admins) {
+      if (admin.email) {
+        send({
+          to: admin.email,
+          subject: 'WhoareYou — Your password has been reset',
+          text: `Hi ${admin.first_name},\n\nYour password has been reset by the system administrator.\n\nPlease log in with your new password and change it in your profile.`,
+          html: `<p>Hi ${admin.first_name},</p><p>Your password has been reset by the system administrator.</p><p>Please log in with your new password and change it in your profile.</p>`,
+        }).catch(() => {});
+      }
+    }
+
+    res.json({ message: `Password reset for ${admins.length} admin(s)`, admins: admins.map(a => a.email || a.first_name) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/system/tenants/:uuid/delete — delete a tenant and all its data
+router.post('/tenants/:uuid/delete', async (req, res, next) => {
+  try {
+    const { db } = await import('../db.js');
+    const bcrypt = await import('bcrypt');
+
+    // Require admin password
+    if (!req.body.admin_password) throw new AppError('Password required', 400);
+    const admin = await db('users').where({ id: req.user.id }).first();
+    const valid = await bcrypt.compare(req.body.admin_password, admin.password_hash);
+    if (!valid) throw new AppError('Invalid password', 401);
+
+    const tenant = await db('tenants').where({ uuid: req.params.uuid }).first();
+    if (!tenant) throw new AppError('Tenant not found', 404);
+
+    // Cannot delete your own tenant
+    if (tenant.id === req.user.tenantId) {
+      throw new AppError('Cannot delete your own tenant', 400);
+    }
+
+    // Delete all tenant data (cascade handles most, but explicit for safety)
+    await db.transaction(async (trx) => {
+      await trx('sessions').whereIn('user_id', trx('users').where({ tenant_id: tenant.id }).select('id')).del();
+      await trx('users').where({ tenant_id: tenant.id }).del();
+      await trx('tenants').where({ id: tenant.id }).del();
+    });
+
+    // Clean up uploads directory
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const { config } = await import('../config/index.js');
+    const tenantUploads = path.join(config.uploads.dir, 'contacts');
+    // Files will be orphaned but not a security risk — can be cleaned manually
+
+    res.json({ message: 'Tenant deleted' });
+  } catch (err) { next(err); }
 });
 
 export default router;

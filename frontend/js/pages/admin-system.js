@@ -20,11 +20,31 @@ export async function renderSystemAdmin() {
       </div>
 
       <div class="settings-section glass-card">
+        <h4><i class="bi bi-gear"></i> ${t('admin.systemSettings')}</h4>
+        <div id="system-settings">
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="setting-registration" checked>
+            <label class="form-check-label" for="setting-registration">${t('admin.allowRegistration')}</label>
+            <div class="form-text">${t('admin.allowRegistrationHint')}</div>
+          </div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="setting-password-reset">
+            <label class="form-check-label" for="setting-password-reset">${t('admin.allowPasswordReset')}</label>
+            <div class="form-text">${t('admin.allowPasswordResetHint')}</div>
+          </div>
+          <div id="settings-feedback" class="mt-2"></div>
+        </div>
+      </div>
+
+      <div class="settings-section glass-card">
         <h4><i class="bi bi-buildings"></i> ${t('admin.tenants')}</h4>
         <p class="text-muted small">${t('admin.tenantsDesc')}</p>
         <div id="tenants-list" class="mt-3">
           <div class="loading">${t('admin.loadingTenants')}</div>
         </div>
+        <button class="btn btn-outline-primary btn-sm mt-3" id="btn-create-tenant">
+          <i class="bi bi-plus-lg me-1"></i>${t('admin.createTenant')}
+        </button>
       </div>
 
       <div class="settings-section glass-card">
@@ -83,7 +103,111 @@ export async function renderSystemAdmin() {
   `;
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/settings'));
-  await Promise.all([loadTenants(), loadSmtp()]);
+  await Promise.all([loadSettings(), loadTenants(), loadSmtp()]);
+}
+
+async function loadSettings() {
+  try {
+    const data = await api.get('/system/settings');
+    document.getElementById('setting-registration').checked = data.registration_enabled;
+    document.getElementById('setting-password-reset').checked = data.password_reset_enabled;
+  } catch { /* ignore */ }
+
+  // Save on change
+  for (const id of ['setting-registration', 'setting-password-reset']) {
+    document.getElementById(id).addEventListener('change', async () => {
+      const feedback = document.getElementById('settings-feedback');
+      try {
+        await api.put('/system/settings', {
+          registration_enabled: document.getElementById('setting-registration').checked,
+          password_reset_enabled: document.getElementById('setting-password-reset').checked,
+        });
+        feedback.innerHTML = `<span class="text-success small">${t('common.saved')}</span>`;
+        setTimeout(() => { feedback.innerHTML = ''; }, 2000);
+      } catch (err) {
+        feedback.innerHTML = `<span class="text-danger small">${err.message}</span>`;
+      }
+    });
+  }
+
+  // Create tenant
+  document.getElementById('btn-create-tenant').addEventListener('click', () => showCreateTenantModal());
+}
+
+function showCreateTenantModal() {
+  const mid = 'create-tenant-' + Date.now();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('admin.createTenant')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="${mid}-form">
+            <div class="modal-body">
+              <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="${mid}-name" required>
+                <label>${t('admin.tenantName')}</label>
+              </div>
+              <hr>
+              <p class="text-muted small">${t('admin.tenantAdminDesc')}</p>
+              <div class="row g-2 mb-3">
+                <div class="col">
+                  <div class="form-floating">
+                    <input type="text" class="form-control" id="${mid}-first" required>
+                    <label>${t('auth.firstName')}</label>
+                  </div>
+                </div>
+                <div class="col">
+                  <div class="form-floating">
+                    <input type="text" class="form-control" id="${mid}-last">
+                    <label>${t('auth.lastName')}</label>
+                  </div>
+                </div>
+              </div>
+              <div class="form-floating mb-3">
+                <input type="email" class="form-control" id="${mid}-email">
+                <label>${t('auth.email')}</label>
+              </div>
+              <div class="form-floating mb-3">
+                <input type="password" class="form-control" id="${mid}-password">
+                <label>${t('auth.password')}</label>
+              </div>
+              <div id="${mid}-error" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="submit" class="btn btn-primary btn-sm">${t('contacts.create')}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `);
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+  document.getElementById(`${mid}-form`).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById(`${mid}-error`);
+    errorEl.classList.add('d-none');
+    try {
+      await api.post('/system/tenants', {
+        tenant_name: document.getElementById(`${mid}-name`).value.trim(),
+        admin_first_name: document.getElementById(`${mid}-first`).value.trim(),
+        admin_last_name: document.getElementById(`${mid}-last`).value.trim(),
+        admin_email: document.getElementById(`${mid}-email`).value.trim() || null,
+        admin_password: document.getElementById(`${mid}-password`).value || null,
+      });
+      modal.hide();
+      loadTenants();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('d-none');
+    }
+  });
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
 }
 
 async function loadTenants() {
@@ -102,18 +226,24 @@ async function loadTenants() {
       <div class="tenant-row">
         <div class="tenant-info">
           <strong>${escapeHtml(tn.name)}</strong>
+          ${state.user.tenant_uuid === tn.uuid ? `<span class="badge bg-success ms-2">${t('admin.active')}</span>` : ''}
           <div class="text-muted small">
             ${tn.user_count} member${tn.user_count !== 1 ? 's' : ''} &middot;
             ${tn.contact_count} contact${tn.contact_count !== 1 ? 's' : ''}
           </div>
         </div>
         <div class="tenant-actions">
-          ${state.user.tenant_uuid === tn.uuid
-            ? `<span class="badge bg-success">${t('admin.active')}</span>`
-            : `<button class="btn btn-outline-primary btn-sm btn-switch-tenant" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}">
-                <i class="bi bi-arrow-left-right"></i> ${t('admin.switch')}
-              </button>`
-          }
+          <div class="dropdown">
+            <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+              ${state.user.tenant_uuid !== tn.uuid ? `
+                <li><a class="dropdown-item btn-switch-tenant" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-arrow-left-right me-2"></i>${t('admin.switch')}</a></li>
+              ` : ''}
+              <li><a class="dropdown-item btn-reset-pw" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-key me-2"></i>${t('admin.resetTenantPassword')}</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item text-danger btn-delete-tenant" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-trash me-2"></i>${t('admin.deleteTenant')}</a></li>
+            </ul>
+          </div>
         </div>
       </div>
     `).join('');
@@ -135,6 +265,104 @@ async function loadTenants() {
         } catch (err) {
           confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
         }
+      });
+    });
+
+    // Reset tenant admin password
+    el.querySelectorAll('.btn-reset-pw').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const mid = 'reset-pw-' + Date.now();
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="${mid}" tabindex="-1">
+            <div class="modal-dialog modal-sm modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">${t('admin.resetTenantPassword')}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <form id="${mid}-form">
+                  <div class="modal-body">
+                    <p class="text-muted small">${t('admin.resetTenantPasswordDesc', { name: btn.dataset.name })}</p>
+                    <div class="form-floating mb-3">
+                      <input type="text" class="form-control" id="${mid}-password" required>
+                      <label>${t('admin.newPassword')}</label>
+                    </div>
+                    <div id="${mid}-error" class="alert alert-danger d-none"></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+                    <button type="submit" class="btn btn-warning btn-sm">${t('admin.resetPassword')}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        `);
+        const modalEl = document.getElementById(mid);
+        const modal = new bootstrap.Modal(modalEl);
+        document.getElementById(`${mid}-form`).addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const errorEl = document.getElementById(`${mid}-error`);
+          try {
+            const result = await api.post(`/system/tenants/${btn.dataset.uuid}/reset-password`, { new_password: document.getElementById(`${mid}-password`).value });
+            modal.hide();
+            confirmDialog(result.message, { title: t('admin.resetTenantPassword'), confirmText: 'OK', confirmClass: 'btn-primary' });
+          } catch (err) { errorEl.textContent = err.message; errorEl.classList.remove('d-none'); }
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+        modal.show();
+      });
+    });
+
+    // Delete tenant
+    el.querySelectorAll('.btn-delete-tenant').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const mid = 'delete-tenant-' + Date.now();
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="${mid}" tabindex="-1">
+            <div class="modal-dialog modal-sm modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title text-danger">${t('admin.deleteTenant')}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <form id="${mid}-form">
+                  <div class="modal-body">
+                    <p class="text-danger small">${t('admin.deleteTenantWarning', { name: btn.dataset.name })}</p>
+                    <div class="form-floating mb-3">
+                      <input type="text" class="form-control" id="${mid}-name" required>
+                      <label>${t('admin.typeTenantName')}</label>
+                    </div>
+                    <div class="form-floating mb-3">
+                      <input type="password" class="form-control" id="${mid}-password" required>
+                      <label>${t('admin.yourPassword')}</label>
+                    </div>
+                    <div id="${mid}-error" class="alert alert-danger d-none"></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+                    <button type="submit" class="btn btn-danger btn-sm">${t('admin.deleteTenant')}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        `);
+        const modalEl = document.getElementById(mid);
+        const modal = new bootstrap.Modal(modalEl);
+        document.getElementById(`${mid}-form`).addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const errorEl = document.getElementById(`${mid}-error`);
+          const typedName = document.getElementById(`${mid}-name`).value.trim();
+          if (typedName !== btn.dataset.name) {
+            errorEl.textContent = t('admin.tenantNameMismatch');
+            errorEl.classList.remove('d-none');
+            return;
+          }
+          try {
+            await api.post(`/system/tenants/${btn.dataset.uuid}/delete`, { admin_password: document.getElementById(`${mid}-password`).value });
+            modal.hide();
+            loadTenants();
+          } catch (err) { errorEl.textContent = err.message; errorEl.classList.remove('d-none'); }
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+        modal.show();
       });
     });
   } catch (err) {

@@ -103,7 +103,12 @@ app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api/gifts', authenticate, tenantScope, giftRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
-app.use('/api/system', authenticate, systemRoutes);
+// System routes — registration-status is public (handled inside router before auth middleware)
+app.use('/api/system', (req, res, next) => {
+  // Skip auth for public endpoints
+  if (req.path === '/registration-status' && req.method === 'GET') return next();
+  authenticate(req, res, next);
+}, systemRoutes);
 
 // Protected file serving — auth check + tenant validation
 import path from 'path';

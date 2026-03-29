@@ -14,9 +14,9 @@ export function renderLogin() {
           <p>${t('app.tagline')}</p>
         </div>
 
-        <div class="auth-tabs">
+        <div class="auth-tabs" id="auth-tabs">
           <button class="auth-tab active" data-tab="login">${t('auth.login')}</button>
-          <button class="auth-tab" data-tab="register">${t('auth.register')}</button>
+          <button class="auth-tab" data-tab="register" id="register-tab">${t('auth.register')}</button>
         </div>
 
         <!-- Login form -->
@@ -73,6 +73,14 @@ export function renderLogin() {
       </div>
     </div>
   `;
+
+  // Check if registration is enabled
+  fetch('/api/system/registration-status').then(r => r.json()).then(({ enabled }) => {
+    if (!enabled) {
+      document.getElementById('register-tab')?.remove();
+      document.getElementById('register-form')?.remove();
+    }
+  }).catch(() => {});
 
   // Tab switching
   app.querySelectorAll('.auth-tab').forEach((tab) => {
