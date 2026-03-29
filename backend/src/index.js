@@ -55,6 +55,14 @@ const apiLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
+// Stricter rate limiting for portal (guests)
+const portalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: { error: 'Too many requests, try again later' },
+  validate: { xForwardedForHeader: false },
+});
+
 // Health check (no auth)
 app.get('/api/health', async (req, res) => {
   try {
@@ -112,7 +120,7 @@ app.use('/api/system', (req, res, next) => {
   if (req.path === '/registration-status' && req.method === 'GET') return next();
   authenticate(req, res, next);
 }, systemRoutes);
-app.use('/api/portal', portalRoutes); // Portal has its own auth (portalAuthenticate)
+app.use('/api/portal', portalLimiter, portalRoutes); // Portal has own auth + stricter rate limit
 app.use('/api/portal-admin', authenticate, tenantScope, portalAdminRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);

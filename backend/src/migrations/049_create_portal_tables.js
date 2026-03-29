@@ -1,7 +1,8 @@
-export function up(knex) {
-  return knex.schema
-    // Portal guests — completely separate from users table
-    .createTable('portal_guests', (table) => {
+export async function up(knex) {
+  // Idempotent — safe to re-run if migration failed partway through
+
+  if (!await knex.schema.hasTable('portal_guests')) {
+    await knex.schema.createTable('portal_guests', (table) => {
       table.increments('id');
       table.string('uuid', 36).notNullable().unique();
       table.integer('tenant_id').unsigned().notNullable()
@@ -14,22 +15,23 @@ export function up(knex) {
         .references('id').inTable('users');
       table.timestamp('last_login_at').nullable();
       table.timestamps(true, true);
-
       table.index('tenant_id');
       table.index(['tenant_id', 'email']);
-    })
+    });
+  }
 
-    // Which contacts a portal guest can see
-    .createTable('portal_guest_contacts', (table) => {
+  if (!await knex.schema.hasTable('portal_guest_contacts')) {
+    await knex.schema.createTable('portal_guest_contacts', (table) => {
       table.integer('portal_guest_id').unsigned().notNullable()
         .references('id').inTable('portal_guests').onDelete('CASCADE');
       table.integer('contact_id').unsigned().notNullable()
         .references('id').inTable('contacts').onDelete('CASCADE');
       table.primary(['portal_guest_id', 'contact_id']);
-    })
+    });
+  }
 
-    // Share links — long-lived tokens for passwordless access
-    .createTable('portal_share_links', (table) => {
+  if (!await knex.schema.hasTable('portal_share_links')) {
+    await knex.schema.createTable('portal_share_links', (table) => {
       table.increments('id');
       table.string('uuid', 36).notNullable().unique();
       table.integer('tenant_id').unsigned().notNullable()
@@ -38,19 +40,19 @@ export function up(knex) {
       table.string('label', 255).nullable();
       table.integer('portal_guest_id').unsigned().nullable()
         .references('id').inTable('portal_guests').onDelete('SET NULL');
-      table.json('contact_ids').nullable(); // for standalone links not tied to a guest
+      table.json('contact_ids').nullable();
       table.integer('created_by').unsigned().notNullable()
         .references('id').inTable('users');
-      table.timestamp('expires_at').nullable(); // null = permanent
+      table.timestamp('expires_at').nullable();
       table.boolean('is_active').defaultTo(true);
       table.timestamp('last_used_at').nullable();
       table.timestamp('created_at').defaultTo(knex.fn.now());
-
       table.index('tenant_id');
-    })
+    });
+  }
 
-    // Portal sessions — separate from main sessions
-    .createTable('portal_sessions', (table) => {
+  if (!await knex.schema.hasTable('portal_sessions')) {
+    await knex.schema.createTable('portal_sessions', (table) => {
       table.increments('id');
       table.string('uuid', 36).notNullable().unique();
       table.integer('portal_guest_id').unsigned().notNullable()
@@ -63,27 +65,39 @@ export function up(knex) {
       table.timestamp('expires_at').notNullable();
       table.timestamp('last_activity_at').defaultTo(knex.fn.now());
       table.timestamp('created_at').defaultTo(knex.fn.now());
-
       table.index(['portal_guest_id', 'is_active']);
       table.index('refresh_token_hash');
-    })
+    });
+  }
 
-    // Add portal_guest_id to comments and reactions, make user_id nullable
-    .alterTable('post_comments', (table) => {
+  // Add portal_guest_id to comments and reactions (check if column exists)
+  const commentsHasCol = await knex.schema.hasColumn('post_comments', 'portal_guest_id');
+  if (!commentsHasCol) {
+    await knex.schema.alterTable('post_comments', (table) => {
       table.integer('portal_guest_id').unsigned().nullable()
         .references('id').inTable('portal_guests').onDelete('CASCADE');
-    })
-    .alterTable('post_reactions', (table) => {
+    });
+  }
+
+  const reactionsHasCol = await knex.schema.hasColumn('post_reactions', 'portal_guest_id');
+  if (!reactionsHasCol) {
+    await knex.schema.alterTable('post_reactions', (table) => {
       table.integer('portal_guest_id').unsigned().nullable()
         .references('id').inTable('portal_guests').onDelete('CASCADE');
-    })
-    .then(() => knex.raw('ALTER TABLE post_comments MODIFY user_id INT UNSIGNED NULL'))
-    .then(() => knex.raw('ALTER TABLE post_reactions MODIFY user_id INT UNSIGNED NULL'))
+    });
+  }
 
-    // Add portal_enabled to tenants
-    .alterTable('tenants', (table) => {
+  // Make user_id nullable on comments and reactions
+  await knex.raw('ALTER TABLE post_comments MODIFY user_id INT UNSIGNED NULL').catch(() => {});
+  await knex.raw('ALTER TABLE post_reactions MODIFY user_id INT UNSIGNED NULL').catch(() => {});
+
+  // Add portal_enabled to tenants
+  const tenantsHasCol = await knex.schema.hasColumn('tenants', 'portal_enabled');
+  if (!tenantsHasCol) {
+    await knex.schema.alterTable('tenants', (table) => {
       table.boolean('portal_enabled').defaultTo(false);
     });
+  }
 }
 
 export function down(knex) {

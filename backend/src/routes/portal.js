@@ -75,25 +75,25 @@ router.post('/auth/link', async (req, res, next) => {
       guest = await db('portal_guests').where({ id: link.portal_guest_id, is_active: true }).first();
       if (!guest) throw new AppError('Guest account inactive', 401);
     } else {
-      // Create or find ephemeral guest for this link
-      guest = await db('portal_guests').where({ tenant_id: link.tenant_id, display_name: `Link: ${link.label || link.uuid}` }).first();
-      if (!guest) {
-        const [guestId] = await db('portal_guests').insert({
-          uuid: uuidv4(),
-          tenant_id: link.tenant_id,
-          display_name: link.label || 'Guest',
-          is_active: true,
-          created_by: link.created_by,
-        });
-        guest = await db('portal_guests').where({ id: guestId }).first();
+      // Create ephemeral guest for this standalone link (linked back to the link for cleanup)
+      const [guestId] = await db('portal_guests').insert({
+        uuid: uuidv4(),
+        tenant_id: link.tenant_id,
+        display_name: link.label || 'Guest',
+        is_active: true,
+        created_by: link.created_by,
+      });
+      guest = await db('portal_guests').where({ id: guestId }).first();
 
-        // Set contacts from link
-        const contactIds = typeof link.contact_ids === 'string' ? JSON.parse(link.contact_ids) : link.contact_ids;
-        if (contactIds?.length) {
-          await db('portal_guest_contacts').insert(
-            contactIds.map(cid => ({ portal_guest_id: guest.id, contact_id: cid }))
-          );
-        }
+      // Link the share link to this guest for traceability
+      await db('portal_share_links').where({ id: link.id }).update({ portal_guest_id: guest.id });
+
+      // Set contacts from link
+      const contactIds = typeof link.contact_ids === 'string' ? JSON.parse(link.contact_ids) : link.contact_ids;
+      if (contactIds?.length) {
+        await db('portal_guest_contacts').insert(
+          contactIds.map(cid => ({ portal_guest_id: guest.id, contact_id: cid }))
+        );
       }
     }
 
@@ -230,9 +230,11 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
         .select('file_path', 'thumbnail_path', 'file_type', 'file_size')
         .orderBy('sort_order');
 
+      // Only return tagged contacts the guest has access to
       post.contacts = await db('post_contacts')
         .join('contacts', 'post_contacts.contact_id', 'contacts.id')
         .where('post_contacts.post_id', post.id)
+        .whereIn('post_contacts.contact_id', req.portal.contactIds)
         .select('contacts.uuid', 'contacts.first_name', 'contacts.last_name');
 
       const [reactions] = await db('post_reactions').where({ post_id: post.id }).count('id as count');
@@ -246,11 +248,11 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
       const [comments] = await db('post_comments').where({ post_id: post.id }).count('id as count');
       post.comment_count = comments.count;
 
-      // About contact
-      if (post.contact_id) {
+      // About contact — only include if guest has access
+      if (post.contact_id && req.portal.contactIds.includes(post.contact_id)) {
         const about = await db('contacts').where({ id: post.contact_id }).select('uuid', 'first_name', 'last_name').first();
         if (about) {
-          const photo = await db('contact_photos').where({ contact_id: about.id || post.contact_id, is_primary: true }).select('thumbnail_path').first();
+          const photo = await db('contact_photos').where({ contact_id: post.contact_id, is_primary: true }).select('thumbnail_path').first();
           post.about = { ...about, avatar: photo?.thumbnail_path || null };
         }
       }
