@@ -671,7 +671,8 @@
     "neverUsed": "Aldri brukt",
     "expired": "Utløpt",
     "activeSessions": "Aktive sesjoner",
-    "noSessions": "Ingen aktive portalsesjoner"
+    "noSessions": "Ingen aktive portalsesjoner",
+    "linkInvalid": "Denne lenken er ugyldig eller utløpt"
   },
   "gifts": {
     "title": "Gaver",

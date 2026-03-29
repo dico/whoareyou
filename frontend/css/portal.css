@@ -1,0 +1,269 @@
+/* ── Portal — photo-album aesthetic, mobile-first ── */
+
+.portal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* ── Login ── */
+.portal-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-md);
+  background: var(--color-bg);
+}
+
+.portal-login-card {
+  max-width: 400px;
+  width: 100%;
+  padding: var(--space-2xl);
+}
+
+.portal-logo {
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--space-sm);
+}
+
+/* ── App shell ── */
+.portal-app {
+  max-width: 600px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--color-surface);
+}
+
+.portal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 10;
+}
+
+.portal-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.portal-header-logo {
+  width: 28px;
+  height: 28px;
+}
+
+.portal-header-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* ── Contact picker (horizontal scroll like Instagram Stories) ── */
+.portal-contacts {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.portal-contacts::-webkit-scrollbar { display: none; }
+
+.portal-contact-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  min-width: 64px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.portal-contact-pill:hover { background: rgba(0, 0, 0, 0.04); }
+
+.portal-contact-pill.active .portal-contact-avatar {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.portal-contact-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.portal-contact-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.portal-contact-pill span:last-child {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Timeline ── */
+.portal-timeline {
+  padding: var(--space-md);
+}
+
+.portal-empty {
+  text-align: center;
+  padding: var(--space-2xl);
+  color: var(--color-text-secondary);
+}
+
+.portal-empty i { font-size: 3rem; opacity: 0.3; }
+
+/* ── Post cards ── */
+.portal-post {
+  margin-bottom: var(--space-lg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.portal-post-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.portal-post-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.portal-post-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.portal-post-date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.portal-post-date-only {
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.portal-post-body {
+  padding: 0 var(--space-md) var(--space-sm);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* ── Media grid — large photos ── */
+.portal-post-media {
+  display: grid;
+  gap: 2px;
+}
+
+.portal-media-grid-1 { grid-template-columns: 1fr; }
+.portal-media-grid-2 { grid-template-columns: 1fr 1fr; }
+.portal-media-grid-3 { grid-template-columns: 1fr 1fr; }
+.portal-media-grid-4 { grid-template-columns: 1fr 1fr; }
+
+.portal-media-item {
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.portal-media-grid-1 .portal-media-item { aspect-ratio: 4/3; }
+.portal-media-grid-2 .portal-media-item,
+.portal-media-grid-3 .portal-media-item,
+.portal-media-grid-4 .portal-media-item { aspect-ratio: 1; }
+
+.portal-media-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.portal-post-video {
+  width: 100%;
+  max-height: 500px;
+  background: #000;
+}
+
+/* ── Actions (like, comment) ── */
+.portal-post-actions {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.portal-react-btn,
+.portal-comments-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  transition: var(--transition-fast);
+}
+
+.portal-react-btn:hover { color: #e74c3c; }
+.portal-comments-toggle:hover { color: var(--color-primary); }
+
+/* ── Comments ── */
+.portal-comments-section {
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+.portal-comment {
+  padding: var(--space-xs) 0;
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.portal-comment-form {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.portal-comment-form input { flex: 1; }

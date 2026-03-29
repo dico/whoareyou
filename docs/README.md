@@ -178,6 +178,7 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Systeminnstillinger — deaktiver offentlig registrering, selvbetjent passordtilbakestilling (toggle)
 - [x] Husstandsadministrasjon — opprett husstand med admin, nullstill admin-passord, slett husstand (med navnbekreftelse + admin-passord)
 - [x] Glemt passord — e-postbasert passord-reset med hashet token (1t utløp), rate limited, konfigurerbar toggle i systeminnstillinger
+- [x] Familieportal — gjestebrukere med contactIds-tilgang, delelenker, portal-login, tidslinje med likes/kommentarer, kontaktvelger (Instagram Stories-stil), foto-album-design, global+tenant toggle, sesjonsovervåking
 
 #### Gjenstår (sikkerhet)
 - [x] E-post ved ny pålogging — SMTP-konfigurasjon i system admin, nodemailer, login-varsel fire-and-forget

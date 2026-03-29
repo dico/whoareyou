@@ -671,7 +671,8 @@
     "neverUsed": "Never used",
     "expired": "Expired",
     "activeSessions": "Active sessions",
-    "noSessions": "No active portal sessions"
+    "noSessions": "No active portal sessions",
+    "linkInvalid": "This link is invalid or has expired"
   },
   "gifts": {
     "title": "Gifts",

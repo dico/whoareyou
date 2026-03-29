@@ -124,7 +124,23 @@ app.use('/uploads/', (req, res, next) => {
     req.headers.authorization = `Bearer ${req.query.token}`;
   }
   next();
-}, authenticate, tenantScope, async (req, res, next) => {
+}, (req, res, next) => {
+  // Try main auth first, fall back to portal auth
+  authenticate(req, res, (err) => {
+    if (err || !req.user) {
+      // Try portal auth
+      import('./middleware/portal-auth.js').then(({ portalAuthenticate }) => {
+        portalAuthenticate(req, res, (portalErr) => {
+          if (portalErr || !req.portal) return res.status(401).json({ error: 'Authentication required' });
+          req.tenantId = req.portal.tenantId;
+          next();
+        });
+      });
+    } else {
+      tenantScope(req, res, next);
+    }
+  });
+}, async (req, res, next) => {
   // Validate that the requested file belongs to the user's tenant
   const filePath = req.path; // e.g. /contacts/{uuid}/photo.webp or /posts/{uuid}/media.webp
   const match = filePath.match(/^\/(contacts|posts|products)\/([a-f0-9-]+)\//);
@@ -134,6 +150,17 @@ app.use('/uploads/', (req, res, next) => {
     const record = await db(table).where({ uuid, tenant_id: req.tenantId }).first();
     if (!record) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+    // Portal guests: verify the file belongs to an allowed contact
+    if (req.portal && type === 'contacts' && !req.portal.contactIds.includes(record.id)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (req.portal && type === 'posts') {
+      const postContact = record.contact_id;
+      const tagged = await db('post_contacts').where({ post_id: record.id }).whereIn('contact_id', req.portal.contactIds).first();
+      if (!req.portal.contactIds.includes(postContact) && !tagged) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
   }
   next();
