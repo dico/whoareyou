@@ -66,8 +66,9 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             const name = showAuthor ? p.posted_by.name : `${p.about.first_name} ${p.about.last_name || ''}`;
             const initials = showAuthor ? (p.posted_by.name?.[0] || '?') : (p.about.first_name[0] || '') + (p.about.last_name?.[0] || '');
             const target = !contactUuid && hasAuthor ? ` <i class="bi bi-arrow-right-short"></i> ${p.about.first_name}` : '';
+            const headerLink = showAuthor && p.posted_by.contact_uuid ? p.posted_by.contact_uuid : p.about.uuid;
             return `
-            <a href="/contacts/${p.about.uuid}" data-link class="post-about-header">
+            <a href="/contacts/${headerLink}" data-link class="post-about-header">
               <div class="post-about-avatar">
                 ${avatar
                   ? `<img src="${authUrl(avatar)}" alt="">`
