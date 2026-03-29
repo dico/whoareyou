@@ -108,6 +108,24 @@ Posts show an **engagement bar** between media and action buttons:
 ### 20. Contact identity principle
 All reactions and comments are attributed to a **contact** (not a user or guest). Users and portal guests are linked to contacts via `linked_contact_id`. Backend always resolves to `contact_id` for display. Only first names are shown in social contexts (likes, comments).
 
+### 21. Post author display
+Posts show **who posted** (author) rather than just the contact the post is about:
+- **Contact profile** (`/contacts/:uuid`): Author name + avatar in header (you already know which contact it's about)
+- **Global feed** (`/`): "Author → Contact" format with author avatar
+- **Portal**: Author with display_name for guests ("Bestefar Roger"), first name for users ("Robert")
+- Posts without a known author fall back to showing the contact name
+
+### 22. Link preview
+When a URL is typed/pasted in post compose or edit, a link preview card is fetched and shown:
+- Debounced detection (600ms) on input, immediate on paste
+- Preview card: image (if og:image), site name, title, description — clickable
+- Dismiss button (X) to remove preview — stays dismissed until next post
+- Preview data saved to `post_link_previews` table (persists if URL goes offline)
+- Auto-fetched when editing old posts that have URLs but no saved preview
+
+### 23. Portal post creation
+Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
+
 ## i18n
 
 ### Usage

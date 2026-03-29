@@ -151,6 +151,14 @@ POST /api/auth/login (email + password)
 - **Portal guests**: additional check that file belongs to an accessible contact
 - **Portal thumbnail exception**: Thumbnail avatars (`photo_*_thumb.*`) are accessible to all portal guests within the same tenant — needed for comment/reaction avatars from users outside the guest's contactIds. Full-size contact photos remain restricted to contactIds.
 
+## URL Scraping (SSRF Protection)
+- Link preview and product scrape endpoints fetch external URLs server-side
+- **Protocol whitelist**: only `http:` and `https:` allowed
+- **Host blocklist**: localhost, 127.0.0.1, ::1, 169.254.169.254, *.local, *.internal
+- **Private IP ranges blocked**: 10.x, 172.16-31.x, 192.168.x
+- **Timeout**: 8 seconds with AbortController
+- **Bot-detection**: discards results from Cloudflare/captcha pages
+
 ## Rate Limiting
 - All API: 1000 req/15 min
 - Auth endpoints: 20 req/15 min (login, register, 2FA, forgot-password, invite, member-edit)
@@ -172,3 +180,4 @@ POST /api/auth/login (email + password)
 - Round 3: Admin security — password validation, session revocation, rate limiting on admin routes, 2FA reset requires password
 - Round 4: Portal security — contact leakage fix, rate limiting, ephemeral guest traceability, idempotent migrations
 - Round 5: Comments/reactions overhaul — XSS fix in data-people attribute (JSON in HTML), tenant_id check on portal comment deletion, thumbnail regex tightened to match only photo files (not arbitrary paths with `_thumb`)
+- Round 6: Portal posts + link preview — SSRF protection on URL scrape endpoints (blocklist for internal hosts/IPs, protocol whitelist), post_date validation (reject non-date values), portal post creation enforces tenant_id + contactIds access, portal media upload restricted to own posts

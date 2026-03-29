@@ -379,6 +379,17 @@ router.get('/link-preview', async (req, res, next) => {
     const { url } = req.query;
     if (!url) throw new AppError('URL is required', 400);
 
+    // SSRF protection: only allow public http(s) URLs
+    let urlObj;
+    try { urlObj = new URL(url); } catch { throw new AppError('Invalid URL', 400); }
+    if (!['http:', 'https:'].includes(urlObj.protocol)) throw new AppError('Invalid URL scheme', 400);
+    const hostname = urlObj.hostname.toLowerCase();
+    const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '169.254.169.254', 'metadata.google.internal'];
+    if (blockedHosts.includes(hostname) || hostname.endsWith('.local') || hostname.endsWith('.internal')
+      || /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) {
+      throw new AppError('URL not allowed', 400);
+    }
+
     const result = { url, title: '', description: '', image_url: '', site_name: '' };
     try {
       const controller = new AbortController();
@@ -505,7 +516,11 @@ router.put('/:uuid', async (req, res, next) => {
     await db.transaction(async (trx) => {
       const updates = {};
       if (req.body.body !== undefined) updates.body = req.body.body.trim();
-      if (req.body.post_date !== undefined) updates.post_date = req.body.post_date;
+      if (req.body.post_date !== undefined) {
+        const d = new Date(req.body.post_date);
+        if (isNaN(d.getTime())) throw new AppError('Invalid post_date', 400);
+        updates.post_date = d;
+      }
       if (req.body.visibility !== undefined) updates.visibility = ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared';
 
       // Change "about" contact (profile post)

@@ -65,6 +65,17 @@ router.get('/products/scrape', async (req, res, next) => {
     const { url } = req.query;
     if (!url) throw new AppError('URL is required', 400);
 
+    // SSRF protection: only allow public http(s) URLs
+    let urlObj;
+    try { urlObj = new URL(url); } catch { throw new AppError('Invalid URL', 400); }
+    if (!['http:', 'https:'].includes(urlObj.protocol)) throw new AppError('Invalid URL scheme', 400);
+    const hostname = urlObj.hostname.toLowerCase();
+    const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '169.254.169.254', 'metadata.google.internal'];
+    if (blockedHosts.includes(hostname) || hostname.endsWith('.local') || hostname.endsWith('.internal')
+      || /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) {
+      throw new AppError('URL not allowed', 400);
+    }
+
     const result = { url, title: '', image_url: '', price: null };
 
     try {
