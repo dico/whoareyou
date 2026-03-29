@@ -24,6 +24,7 @@ import { renderGiftProducts } from './pages/gift-products.js';
 import { renderGiftWishlists } from './pages/gift-wishlists.js';
 import { renderGiftPlanning } from './pages/gift-planning.js';
 import { renderNavbar } from './components/navbar.js';
+import { renderPortalLogin, renderPortalTimeline, handleShareLink } from './pages/portal-timeline.js';
 
 // Simple router
 const routes = {
@@ -117,8 +118,29 @@ async function render() {
   const locale = state.user?.language || localStorage.getItem('locale') || (['nb', 'nn', 'no'].includes(browserLocale) ? 'nb' : 'en');
   await setLocale(locale);
 
+  // Portal routes — completely separate from main app auth
+  if (path.startsWith('/portal')) {
+    app.innerHTML = '<div id="portal-root"></div>';
+    if (path === '/portal/login') {
+      renderPortalLogin();
+    } else if (path.startsWith('/portal/s/')) {
+      const token = path.split('/portal/s/')[1];
+      handleShareLink(token);
+    } else {
+      // Check portal auth
+      const portalToken = localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken');
+      if (!portalToken) {
+        window.history.replaceState({}, '', '/portal/login');
+        renderPortalLogin();
+      } else {
+        renderPortalTimeline();
+      }
+    }
+    return;
+  }
+
   // Redirect to login if not authenticated
-  if (!state.token && path !== '/login') {
+  if (!state.token && path !== '/login' && path !== '/reset-password') {
     window.history.replaceState({}, '', '/login');
     app.innerHTML = '';
     renderLogin();

@@ -103,6 +103,9 @@ router.post('/register', async (req, res, next) => {
 // POST /api/auth/forgot-password — request password reset email
 router.post('/forgot-password', async (req, res, next) => {
   try {
+    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
+
     const { getSetting } = await import('../utils/settings.js');
     const enabled = await getSetting('password_reset_enabled', 'false');
     if (enabled !== 'true') throw new AppError('Password reset is disabled', 403);
@@ -144,6 +147,9 @@ router.post('/forgot-password', async (req, res, next) => {
 // POST /api/auth/reset-password — set new password with token
 router.post('/reset-password', async (req, res, next) => {
   try {
+    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
+
     const { token, password } = req.body;
     if (!token || !password) throw new AppError('Token and password are required', 400);
     validatePassword(password);

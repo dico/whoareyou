@@ -191,8 +191,9 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Kommentarer på poster — kommentar-seksjon under hvert innlegg, avatar fra koblet kontakt, slett egne kommentarer
 - [x] Likes/reaksjoner — hjerte-toggle per innlegg, telling vises, backend med emoji-støtte (utvidbart)
 - [x] MomentGarden-import — settings → integrasjoner → MomentGarden-side. ZIP-upload med duplikat-deteksjon (original_name), forhåndsvisning, progress bar. Synk loves/kommentarer fra MG API med session cookie. Moment-ID lagres som external_id for kobling
-- [x] IP-sikkerhet — login IP-whitelist (CIDR), land-whitelist via ipgeolocation.io (valgfri API-nøkkel), "Legg til min IP"/"Legg til mitt /24-range"-knapper, sjekkes før passord-verifisering
+- [x] IP-sikkerhet — login IP-whitelist (CIDR) + land-whitelist via ipgeolocation.io (valgfri). Sjekkes på alle 7 uautentiserte auth-ruter (login, register, 2FA, passkey, reset). DB-cache (30d), test-knapp med lockout-varsel, flagg-ikoner (271 SVG)
 - [x] Navbar-profil — "Min profil" lenker til kontaktprofilen når bruker er koblet, "Kontoinnstillinger" for passord/2FA
+- [x] Profil-reorganisering — 3 faner (Konto/Sikkerhet/Sesjoner), sesjoner med flagg. Tenant admin med 2 faner (Medlemmer/Sikkerhet). Sikkerhetskort fjernet fra settings-grid
 
 ### Senere
 
