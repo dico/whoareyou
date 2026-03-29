@@ -97,6 +97,53 @@ export function formatDateLong(dateStr) {
   return formatDate(dateStr, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+/**
+ * Format a date with time — "29. mars 2026 kl. 14:32"
+ * @param {string} dateStr
+ * @returns {string}
+ */
+export function formatDateTime(dateStr) {
+  if (!dateStr) return '';
+  const localeMap = { nb: 'nb-NO', en: 'en-GB' };
+  const intlLocale = localeMap[currentLocale] || currentLocale;
+  return new Date(dateStr).toLocaleString(intlLocale, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/**
+ * Relative time string — "3 minutter siden", "om 5 dager", etc.
+ * Works both directions (past and future).
+ * Falls back to formatted date for anything > 30 days.
+ *
+ * @param {string|Date} dateInput - ISO date string or Date object
+ * @returns {string}
+ */
+export function timeAgo(dateInput) {
+  if (!dateInput) return '';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  const now = new Date();
+  const diffMs = now - date;
+  const absDiff = Math.abs(diffMs);
+  const isPast = diffMs > 0;
+
+  const seconds = Math.floor(absDiff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  const u = (key, n) => t(`time.${key}`, { n });
+
+  let text;
+  if (seconds < 60) text = t('time.justNow');
+  else if (minutes < 60) text = u(minutes === 1 ? 'oneMinute' : 'minutes', minutes);
+  else if (hours < 24) text = u(hours === 1 ? 'oneHour' : 'hours', hours);
+  else if (days < 30) text = u(days === 1 ? 'oneDay' : 'days', days);
+  else return formatDate(dateInput);
+
+  return isPast ? t('time.ago', { time: text }) : t('time.in', { time: text });
+}
+
 function resolve(obj, path) {
   return path.split('.').reduce((o, k) => o?.[k], obj);
 }

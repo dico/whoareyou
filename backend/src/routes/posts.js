@@ -92,9 +92,10 @@ router.get('/', async (req, res, next) => {
         .leftJoin('users', 'post_reactions.user_id', 'users.id')
         .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
         .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
-        .select('post_reactions.post_id', 'post_reactions.emoji', 'post_reactions.user_id',
-          'users.first_name as user_first', 'users.last_name as user_last',
-          'rc.first_name as contact_first', 'rc.last_name as contact_last',
+        .select('post_reactions.post_id', 'post_reactions.emoji',
+          'post_reactions.user_id', 'post_reactions.contact_id',
+          'users.first_name as user_first', 'users.linked_contact_id as user_linked_contact_id',
+          'rc.first_name as contact_first', 'rc.uuid as contact_uuid',
           'portal_guests.display_name as guest_name'),
     ]) : [[], [], new Map(), [], []];
 
@@ -125,15 +126,31 @@ router.get('/', async (req, res, next) => {
     const commentCountByPost = {};
     for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
 
+    // Get user's linked contact for matching contact-based reactions
+    const currentUser = await db('users').where({ id: req.user.id }).select('linked_contact_id').first();
+    const userLinkedContactId = currentUser?.linked_contact_id;
+
+    // Resolve linked contact UUIDs for users who reacted
+    const userLinkedIds = reactions.map(r => r.user_linked_contact_id).filter(Boolean);
+    const linkedUuidMap = new Map();
+    if (userLinkedIds.length) {
+      const contacts = await db('contacts').whereIn('id', [...new Set(userLinkedIds)]).select('id', 'uuid');
+      for (const c of contacts) linkedUuidMap.set(c.id, c.uuid);
+    }
+
     const reactionsByPost = {};
     for (const r of reactions) {
-      if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false, names: [] };
+      if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false, names: [], people: [] };
       reactionsByPost[r.post_id].count++;
-      if (r.user_id === req.user.id) reactionsByPost[r.post_id].reacted = true;
-      const name = (r.contact_first ? `${r.contact_first} ${r.contact_last || ''}`.trim() : null)
-        || r.guest_name
-        || (r.user_first ? `${r.user_first} ${r.user_last || ''}`.trim() : null);
-      if (name) reactionsByPost[r.post_id].names.push(name);
+      if (r.user_id === req.user.id || (userLinkedContactId && r.contact_id === userLinkedContactId)) {
+        reactionsByPost[r.post_id].reacted = true;
+      }
+      const name = r.contact_first || r.guest_name || r.user_first;
+      const contactUuid = r.contact_uuid || linkedUuidMap.get(r.user_linked_contact_id) || null;
+      if (name) {
+        reactionsByPost[r.post_id].names.push(name);
+        reactionsByPost[r.post_id].people.push({ name, contact_uuid: contactUuid });
+      }
     }
 
     const result = posts.map((p) => {
@@ -157,6 +174,7 @@ router.get('/', async (req, res, next) => {
         comment_count: commentCountByPost[p.id] || 0,
         reaction_count: reactionsByPost[p.id]?.count || 0,
         reaction_names: reactionsByPost[p.id]?.names || [],
+        reaction_people: reactionsByPost[p.id]?.people || [],
         reacted: reactionsByPost[p.id]?.reacted || false,
       };
     });
@@ -481,18 +499,21 @@ router.get('/:uuid/comments', async (req, res, next) => {
     const comments = await db('post_comments')
       .leftJoin('users', 'post_comments.user_id', 'users.id')
       .leftJoin('contacts as cc', 'post_comments.contact_id', 'cc.id')
+      .leftJoin('portal_guests', 'post_comments.portal_guest_id', 'portal_guests.id')
       .where({ 'post_comments.post_id': post.id })
       .select(
         'post_comments.id', 'post_comments.body', 'post_comments.created_at',
-        'post_comments.user_id', 'post_comments.contact_id',
+        'post_comments.user_id', 'post_comments.contact_id', 'post_comments.portal_guest_id',
         'users.uuid as user_uuid', 'users.first_name', 'users.last_name',
         'users.linked_contact_id',
-        'cc.first_name as contact_first', 'cc.last_name as contact_last', 'cc.id as contact_id_resolved'
+        'cc.first_name as contact_first', 'cc.last_name as contact_last',
+        'cc.id as contact_id_resolved', 'cc.uuid as contact_uuid',
+        'portal_guests.display_name as guest_name', 'portal_guests.linked_contact_id as guest_linked_contact_id'
       )
       .orderBy('post_comments.created_at', 'asc');
 
-    // Get avatars — from linked contacts (users) or direct contacts
-    const contactIdsForAvatar = comments.map(c => c.contact_id_resolved || c.linked_contact_id).filter(Boolean);
+    // Get avatars — from linked contacts (users), direct contacts, or portal guest linked contacts
+    const contactIdsForAvatar = comments.map(c => c.contact_id_resolved || c.linked_contact_id || c.guest_linked_contact_id).filter(Boolean);
     const linkedIds = [...new Set(contactIdsForAvatar)];
     const avatarMap = new Map();
     if (linkedIds.length) {
@@ -500,20 +521,30 @@ router.get('/:uuid/comments', async (req, res, next) => {
       for (const p of photos) avatarMap.set(p.contact_id, p.thumbnail_path);
     }
 
+    // Also get contact info for portal guests and users with linked_contact_id
+    const linkedContactIds = comments.map(c => c.guest_linked_contact_id || c.linked_contact_id).filter(Boolean);
+    const linkedContactMap = new Map();
+    if (linkedContactIds.length) {
+      const contacts = await db('contacts').whereIn('id', [...new Set(linkedContactIds)]).select('id', 'uuid', 'first_name', 'last_name');
+      for (const c of contacts) linkedContactMap.set(c.id, c);
+    }
+
     res.json({
       comments: comments.map(c => {
-        // Prioritize: direct contact > user's linked contact > user
-        const avatarContactId = c.contact_id_resolved || c.linked_contact_id;
+        // Prioritize: direct contact > guest/user linked contact > portal guest display name > user
+        const linkedContact = linkedContactMap.get(c.guest_linked_contact_id) || linkedContactMap.get(c.linked_contact_id);
+        const avatarContactId = c.contact_id_resolved || c.linked_contact_id || c.guest_linked_contact_id;
+        const firstName = c.contact_first || linkedContact?.first_name || c.first_name || c.guest_name || '?';
+        const contactUuid = c.contact_uuid || linkedContact?.uuid || null;
         return {
           id: c.id,
           body: c.body,
           created_at: c.created_at,
           user: {
-            uuid: c.user_uuid,
-            first_name: c.contact_first || c.first_name,
-            last_name: c.contact_last || c.last_name,
+            first_name: firstName,
             avatar: avatarMap.get(avatarContactId) || null,
           },
+          contact_uuid: contactUuid,
           is_own: c.user_id === req.user.id,
         };
       }),
@@ -551,16 +582,35 @@ router.post('/:uuid/comments', async (req, res, next) => {
       .where('post_comments.id', id)
       .select(
         'post_comments.id', 'post_comments.body', 'post_comments.created_at',
-        'users.uuid as user_uuid', 'users.first_name', 'users.last_name'
+        'users.first_name', 'users.linked_contact_id'
       )
       .first();
+
+    // Resolve contact UUID for linking
+    let commentContactUuid = null;
+    if (contactId) {
+      const c = await db('contacts').where({ id: contactId }).select('uuid').first();
+      commentContactUuid = c?.uuid || null;
+    } else if (comment.linked_contact_id) {
+      const c = await db('contacts').where({ id: comment.linked_contact_id }).select('uuid').first();
+      commentContactUuid = c?.uuid || null;
+    }
+
+    // Get avatar
+    const avatarId = contactId || comment.linked_contact_id;
+    let avatar = null;
+    if (avatarId) {
+      const photo = await db('contact_photos').where({ contact_id: avatarId, is_primary: true }).select('thumbnail_path').first();
+      avatar = photo?.thumbnail_path || null;
+    }
 
     res.status(201).json({
       comment: {
         id: comment.id,
         body: comment.body,
         created_at: comment.created_at,
-        user: { uuid: comment.user_uuid, first_name: comment.first_name, last_name: comment.last_name },
+        user: { first_name: comment.first_name, avatar },
+        contact_uuid: commentContactUuid,
         is_own: true,
       },
     });
@@ -604,13 +654,17 @@ router.post('/:uuid/reactions', async (req, res, next) => {
     const user = await db('users').where({ id: req.user.id }).first();
     const contactId = user?.linked_contact_id || null;
 
+    // Match by user_id OR by contact_id (for MG-imported reactions)
     const existing = await db('post_reactions')
-      .where({ post_id: post.id, user_id: req.user.id, emoji })
+      .where({ post_id: post.id, emoji })
+      .where(function () {
+        this.where({ user_id: req.user.id });
+        if (contactId) this.orWhere({ contact_id: contactId });
+      })
       .first();
 
     if (existing) {
       await db('post_reactions').where({ id: existing.id }).del();
-      res.json({ action: 'removed', emoji });
     } else {
       await db('post_reactions').insert({
         post_id: post.id,
@@ -619,8 +673,41 @@ router.post('/:uuid/reactions', async (req, res, next) => {
         tenant_id: req.tenantId,
         emoji,
       });
-      res.json({ action: 'added', emoji });
     }
+
+    // Return updated reaction info
+    const allReactions = await db('post_reactions')
+      .where({ post_id: post.id })
+      .leftJoin('users', 'post_reactions.user_id', 'users.id')
+      .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
+      .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
+      .select('rc.first_name as contact_first', 'rc.uuid as contact_uuid',
+        'users.first_name as user_first', 'users.linked_contact_id as user_linked_contact_id',
+        'portal_guests.display_name as guest_name');
+    // Resolve linked contact UUIDs for users
+    const toggleLinkedIds = allReactions.map(r => r.user_linked_contact_id).filter(Boolean);
+    const toggleLinkedMap = new Map();
+    if (toggleLinkedIds.length) {
+      const lc = await db('contacts').whereIn('id', [...new Set(toggleLinkedIds)]).select('id', 'uuid');
+      for (const c of lc) toggleLinkedMap.set(c.id, c.uuid);
+    }
+    const names = [];
+    const people = [];
+    for (const r of allReactions) {
+      const name = r.contact_first || r.guest_name || r.user_first;
+      const cuuid = r.contact_uuid || toggleLinkedMap.get(r.user_linked_contact_id) || null;
+      if (name) {
+        names.push(name);
+        people.push({ name, contact_uuid: cuuid });
+      }
+    }
+    res.json({
+      action: existing ? 'removed' : 'added',
+      emoji,
+      reaction_count: allReactions.length,
+      reaction_names: names,
+      reaction_people: people,
+    });
   } catch (err) {
     next(err);
   }

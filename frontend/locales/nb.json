@@ -110,6 +110,10 @@
     "viewPost": "Se innlegg",
     "like": "Lik",
     "comment": "Kommenter",
+    "commentSingular": "kommentar",
+    "commentPlural": "kommentarer",
+    "andOthers": "og {count} andre",
+    "deleteCommentConfirm": "Slette denne kommentaren?",
     "commentPlaceholder": "Skriv en kommentar...",
     "send": "Send"
   },
@@ -568,7 +572,19 @@
     "saved": "Lagret",
     "select": "Velg",
     "open": "Åpne",
-    "done": "Ferdig"
+    "done": "Ferdig",
+    "and": "og"
+  },
+  "time": {
+    "justNow": "akkurat nå",
+    "oneMinute": "1 minutt",
+    "minutes": "{n} minutter",
+    "oneHour": "1 time",
+    "hours": "{n} timer",
+    "oneDay": "1 dag",
+    "days": "{n} dager",
+    "ago": "{time} siden",
+    "in": "om {time}"
   },
   "cropper": {
     "title": "Beskjær bilde",

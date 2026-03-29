@@ -149,6 +149,7 @@ POST /api/auth/login (email + password)
 - Token can be passed as `?token=` query param (for embedded images)
 - File paths validated against tenant ownership (contact UUID or post UUID)
 - **Portal guests**: additional check that file belongs to an accessible contact
+- **Portal thumbnail exception**: Thumbnail avatars (`photo_*_thumb.*`) are accessible to all portal guests within the same tenant — needed for comment/reaction avatars from users outside the guest's contactIds. Full-size contact photos remain restricted to contactIds.
 
 ## Rate Limiting
 - All API: 1000 req/15 min
@@ -170,3 +171,4 @@ POST /api/auth/login (email + password)
 - Round 2: Route-by-route review — fixed HIGH/MEDIUM issues (label-tenant injection, file-tenant bypass, type-validation)
 - Round 3: Admin security — password validation, session revocation, rate limiting on admin routes, 2FA reset requires password
 - Round 4: Portal security — contact leakage fix, rate limiting, ephemeral guest traceability, idempotent migrations
+- Round 5: Comments/reactions overhaul — XSS fix in data-people attribute (JSON in HTML), tenant_id check on portal comment deletion, thumbnail regex tightened to match only photo files (not arbitrary paths with `_thumb`)

@@ -458,13 +458,41 @@
   white-space: nowrap;
 }
 
+/* Engagement bar (likes summary + comment count) */
+.post-engagement-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.post-engagement-likes,
+.post-engagement-comments {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.post-engagement-likes:hover,
+.post-engagement-comments:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
 /* Post actions bar (like, comment) */
 .post-actions-bar {
   display: flex;
   gap: var(--space-sm);
   padding-top: var(--space-sm);
   border-top: 1px solid var(--color-border);
-  margin-top: var(--space-sm);
 }
 
 .post-action-btn {
@@ -530,23 +558,56 @@
   object-fit: cover;
 }
 
-.post-comment-content {
+.post-comment-bubble {
   background: var(--color-bg);
   border-radius: var(--radius-md);
   padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-size-sm);
-  flex: 1;
+  display: inline-block;
 }
 
-.post-comment-content strong {
-  margin-right: var(--space-xs);
+.post-comment-author {
+  display: block;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+a.post-comment-author:hover {
+  text-decoration: underline;
+}
+
+.post-comment-bubble > span {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.post-comment-meta {
+  display: flex;
+  gap: var(--space-sm);
+  padding-left: var(--space-sm);
+  align-items: center;
+}
+
+.post-comment-time {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
 }
 
 .post-comment-delete {
+  background: none;
+  border: none;
   padding: 0;
+  font-size: 0.7rem;
   color: var(--color-text-secondary);
+  cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
+}
+
+.post-comment-delete:hover {
+  color: var(--color-danger);
 }
 
 .post-comment:hover .post-comment-delete {
@@ -556,6 +617,13 @@
 .post-comment-form {
   display: flex;
   gap: var(--space-xs);
+  align-items: flex-end;
+}
+
+.post-comment-form textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 32px;
 }
 
 .post-comment-form input {

@@ -1,4 +1,4 @@
-import { t, formatDate, setLocale } from '../utils/i18n.js';
+import { t, formatDate, timeAgo, formatDateTime, setLocale } from '../utils/i18n.js';
 import { navigate } from '../app.js';
 
 // Portal API client — separate from main app
@@ -38,6 +38,7 @@ const portalApi = {
   },
   get: (path) => portalApi.request('GET', path),
   post: (path, body) => portalApi.request('POST', path, body),
+  delete: (path) => portalApi.request('DELETE', path),
 };
 
 // Token storage with cookie fallback (iOS standalone doesn't share localStorage)
@@ -315,13 +316,32 @@ async function loadPortalTimeline(contactUuid) {
     // Reactions
     el.querySelectorAll('.portal-react-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const { reacted } = await portalApi.post(`/posts/${btn.dataset.uuid}/reactions`);
+        const uuid = btn.dataset.uuid;
+        const { reacted, reaction_count, reaction_names } = await portalApi.post(`/posts/${uuid}/reactions`);
         const icon = btn.querySelector('i');
         icon.className = reacted ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
-        const countEl = btn.querySelector('.portal-react-count');
-        let count = parseInt(countEl.textContent) || 0;
-        count += reacted ? 1 : -1;
-        countEl.textContent = count > 0 ? count : '';
+
+        // Update engagement bar
+        const post = btn.closest('.portal-post');
+        const engagementBar = post.querySelector('.portal-engagement-bar');
+        const likesEl = post.querySelector('.portal-engagement-likes');
+        if (reaction_count > 0) {
+          const likesHtml = `<span class="portal-engagement-likes">
+            <i class="bi bi-heart-fill text-danger"></i>
+            ${formatPortalLikeNames(reaction_names || [], reaction_count)}
+          </span>`;
+          if (likesEl) {
+            likesEl.outerHTML = likesHtml;
+          } else if (engagementBar) {
+            engagementBar.insertAdjacentHTML('afterbegin', likesHtml);
+          } else {
+            const actionsBar = post.querySelector('.portal-post-actions');
+            actionsBar.insertAdjacentHTML('beforebegin', `<div class="portal-engagement-bar">${likesHtml}</div>`);
+          }
+        } else if (likesEl) {
+          likesEl.remove();
+          if (engagementBar && !engagementBar.children.length) engagementBar.remove();
+        }
       });
     });
 
@@ -448,14 +468,24 @@ function renderPortalPost(p) {
         </video>
       `).join('') : ''}
 
+      ${p.reaction_count || p.comment_count ? `
+      <div class="portal-engagement-bar">
+        ${p.reaction_count ? `<span class="portal-engagement-likes">
+          <i class="bi bi-heart-fill text-danger"></i>
+          ${formatPortalLikeNames(p.reaction_names, p.reaction_count)}
+        </span>` : ''}
+        ${p.comment_count ? `<span class="portal-engagement-comments">
+          ${p.comment_count} ${p.comment_count === 1 ? t('posts.commentSingular') : t('posts.commentPlural')}
+        </span>` : ''}
+      </div>` : ''}
       <div class="portal-post-actions">
         <button class="portal-react-btn" data-uuid="${p.uuid}">
           <i class="bi bi-heart${p.reacted ? '-fill text-danger' : ''}"></i>
-          <span class="portal-react-count">${p.reaction_count || ''}</span>
+          <span>${t('posts.like')}</span>
         </button>
         <button class="portal-comments-toggle" data-uuid="${p.uuid}">
           <i class="bi bi-chat"></i>
-          <span>${p.comment_count || ''}</span>
+          <span>${t('posts.comment')}</span>
         </button>
       </div>
 
@@ -469,24 +499,59 @@ async function loadPortalComments(postUuid, section) {
     const { comments } = await portalApi.get(`/posts/${postUuid}/comments`);
     section.innerHTML = `
       ${comments.map(c => `
-        <div class="portal-comment">
-          <strong class="small">${esc(c.author)}</strong>
-          <span class="small">${esc(c.body)}</span>
-          <span class="text-muted" style="font-size:0.7rem">${formatDate(c.created_at)}</span>
+        <div class="portal-comment" data-id="${c.id}">
+          <div class="portal-comment-avatar">
+            ${c.avatar ? `<img src="${portalAuthUrl(c.avatar)}" alt="">` : `<span>${(c.author?.[0] || '?')}</span>`}
+          </div>
+          <div>
+            <div class="portal-comment-bubble">
+              <strong>${esc(c.author)}</strong>
+              <span>${esc(c.body)}</span>
+            </div>
+            <div class="portal-comment-meta">
+              <span class="portal-comment-time" title="${formatDateTime(c.created_at)}">${timeAgo(c.created_at)}</span>
+              ${c.is_own ? `<button class="portal-comment-delete" data-id="${c.id}">${t('common.delete')}</button>` : ''}
+            </div>
+          </div>
         </div>
       `).join('')}
       <form class="portal-comment-form" data-uuid="${postUuid}">
-        <input type="text" class="form-control form-control-sm" placeholder="${t('posts.commentPlaceholder')}" required>
+        <textarea class="form-control form-control-sm" placeholder="${t('posts.commentPlaceholder')}" rows="1" required></textarea>
         <button type="submit" class="btn btn-primary btn-sm">${t('posts.send')}</button>
       </form>
     `;
 
-    section.querySelector('.portal-comment-form')?.addEventListener('submit', async (e) => {
+    const form = section.querySelector('.portal-comment-form');
+    const textarea = form?.querySelector('textarea');
+    if (textarea) {
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
+      textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+      });
+    }
+    form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const input = e.target.querySelector('input');
-      await portalApi.post(`/posts/${postUuid}/comments`, { body: input.value.trim() });
-      input.value = '';
+      if (!textarea.value.trim()) return;
+      await portalApi.post(`/posts/${postUuid}/comments`, { body: textarea.value.trim() });
+      textarea.value = '';
+      textarea.style.height = 'auto';
       await loadPortalComments(postUuid, section);
+    });
+
+    // Delete own comments
+    section.querySelectorAll('.portal-comment-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const confirmed = await portalConfirm(t('posts.deleteCommentConfirm'));
+        if (!confirmed) return;
+        await portalApi.delete(`/posts/${postUuid}/comments/${btn.dataset.id}`);
+        await loadPortalComments(postUuid, section);
+      });
     });
   } catch (err) {
     section.innerHTML = `<div class="text-danger small">${err.message}</div>`;
@@ -589,6 +654,37 @@ function showPortalLightbox(images, startIndex) {
   document.addEventListener('keydown', keyHandler);
   modalEl.addEventListener('hidden.bs.modal', () => { document.removeEventListener('keydown', keyHandler); modalEl.remove(); }, { once: true });
   modal.show();
+}
+
+function portalConfirm(message) {
+  return new Promise(resolve => {
+    const el = document.createElement('div');
+    el.className = 'modal fade';
+    el.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content glass-card">
+          <div class="modal-body text-center py-4">
+            <p class="mb-3">${message}</p>
+            <div class="d-flex gap-2 justify-content-center">
+              <button class="btn btn-outline-secondary btn-sm px-3" data-action="cancel">${t('common.cancel')}</button>
+              <button class="btn btn-danger btn-sm px-3" data-action="confirm">${t('common.delete')}</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    const modal = new bootstrap.Modal(el);
+    el.querySelector('[data-action="confirm"]').addEventListener('click', () => { modal.hide(); resolve(true); });
+    el.querySelector('[data-action="cancel"]').addEventListener('click', () => { modal.hide(); resolve(false); });
+    el.addEventListener('hidden.bs.modal', () => { el.remove(); resolve(false); }, { once: true });
+    modal.show();
+  });
+}
+
+function formatPortalLikeNames(names, count) {
+  if (!names?.length) return count;
+  if (names.length <= 2) return esc(names.join(` ${t('common.and')} `));
+  return `${esc(names[0])}, ${esc(names[1])} ${t('posts.andOthers', { count: count - 2 })}`;
 }
 
 function esc(str) {

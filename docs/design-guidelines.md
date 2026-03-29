@@ -92,6 +92,22 @@ Gift events: selecting type (Christmas, birthday) auto-fills date and name. Hide
 ### 17. Gift visibility
 Gifts are `private` by default. Auto-switch to `shared` when status = `given`. Shared gifts are hidden from recipients who are users.
 
+### 18. Post engagement bar (Facebook-style)
+Posts show an **engagement bar** between media and action buttons:
+- **Left**: `❤️ Robert, Ola og 3 andre` — clickable, opens modal with all likers as contact links
+- **Right**: `4 kommentarer` — clickable, toggles comment section
+- Only first names (family context). Names link to contact profiles where possible.
+- Action bar below: `❤️ Lik` and `💬 Kommenter` as text buttons (no counts on buttons)
+
+### 19. Comments
+- Use `<textarea>` (not `<input>`) for comment fields. Enter submits, Shift+Enter adds newline.
+- Auto-resize textarea up to 120px max height.
+- Comments show: avatar (clickable) | bubble with **Name** (clickable link to contact) + text + timestamp below
+- Portal comments: same bubble pattern but simpler (no avatar, name + text in bubble, time below)
+
+### 20. Contact identity principle
+All reactions and comments are attributed to a **contact** (not a user or guest). Users and portal guests are linked to contacts via `linked_contact_id`. Backend always resolves to `contact_id` for display. Only first names are shown in social contexts (likes, comments).
+
 ## i18n
 
 ### Usage
@@ -106,6 +122,7 @@ t('contacts.deleteConfirm', { name }); // With params
 - Add keys to BOTH `locales/en.json` and `locales/nb.json`
 - Use nested keys: `section.key` (e.g., `contacts.title`, `admin.save`)
 - Dates: use `formatDate()` or `formatDateLong()` from `utils/i18n.js`
+- Relative time: use `timeAgo()` from `utils/i18n.js` — "3 minutter siden", "om 5 dager". Falls back to `formatDate()` for >30 days. Works both directions (past/future). Use for comments, activity timestamps, and countdowns (e.g. birthdays).
 
 ## Navigation Structure
 

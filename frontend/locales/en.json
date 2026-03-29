@@ -110,6 +110,10 @@
     "viewPost": "View post",
     "like": "Like",
     "comment": "Comment",
+    "commentSingular": "comment",
+    "commentPlural": "comments",
+    "andOthers": "and {count} others",
+    "deleteCommentConfirm": "Delete this comment?",
     "commentPlaceholder": "Write a comment...",
     "send": "Send"
   },
@@ -568,7 +572,19 @@
     "saved": "Saved",
     "select": "Select",
     "open": "Open",
-    "done": "Done"
+    "done": "Done",
+    "and": "and"
+  },
+  "time": {
+    "justNow": "just now",
+    "oneMinute": "1 minute",
+    "minutes": "{n} minutes",
+    "oneHour": "1 hour",
+    "hours": "{n} hours",
+    "oneDay": "1 day",
+    "days": "{n} days",
+    "ago": "{time} ago",
+    "in": "in {time}"
   },
   "cropper": {
     "title": "Crop photo",

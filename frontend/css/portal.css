@@ -276,6 +276,26 @@
 .portal-react-btn:hover { color: #e74c3c; }
 .portal-comments-toggle:hover { color: var(--color-primary); }
 
+/* ── Engagement bar ── */
+.portal-engagement-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) var(--space-lg);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.portal-engagement-likes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.portal-engagement-comments {
+  color: var(--color-text-secondary);
+}
+
 /* ── Comments ── */
 .portal-comments-section {
   padding: var(--space-sm) var(--space-lg) var(--space-md);
@@ -285,18 +305,87 @@
 .portal-comment {
   padding: var(--space-xs) 0;
   display: flex;
-  gap: var(--space-sm);
-  align-items: baseline;
+  gap: var(--space-xs);
+  align-items: flex-start;
+}
+
+.portal-comment-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.portal-comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.portal-comment-bubble {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
   font-size: 0.9rem;
+  display: inline-block;
+}
+
+.portal-comment-bubble strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.portal-comment-bubble > span {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.portal-comment-meta {
+  display: flex;
+  gap: var(--space-sm);
+  padding-left: var(--space-sm);
+  align-items: center;
+}
+
+.portal-comment-time {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.portal-comment-delete {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.portal-comment-delete:hover {
+  color: var(--color-danger, #dc3545);
 }
 
 .portal-comment-form {
   display: flex;
   gap: var(--space-sm);
   margin-top: var(--space-sm);
+  align-items: flex-end;
 }
 
-.portal-comment-form input { flex: 1; }
+.portal-comment-form textarea {
+  flex: 1;
+  resize: none;
+  overflow: hidden;
+  min-height: 32px;
+}
 
 /* ── Infinite scroll sentinel ── */
 .portal-scroll-sentinel {

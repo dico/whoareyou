@@ -1,16 +1,15 @@
 import { api } from '../api/client.js';
 import { confirmDialog, contactSearchDialog } from './dialogs.js';
 import { attachMention } from './mention.js';
-import { t, formatDate } from '../utils/i18n.js';
+import { t, formatDate, timeAgo, formatDateTime } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 
-/**
- * Render a list of posts into a container element.
- * Supports edit, delete, and tag management.
- * @param {string} containerId - DOM element ID to render into
- * @param {string|null} contactUuid - Filter by contact, or null for global
- * @param {function} onChanged - Callback after post is edited/deleted
- */
+function formatLikeNames(names, count) {
+  if (!names?.length) return count;
+  if (names.length <= 2) return names.join(` ${t('common.and')} `);
+  return `${names[0]}, ${names[1]} ${t('posts.andOthers', { count: count - 2 })}`;
+}
+
 let currentLimit = {};
 
 export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false } = {}) {
@@ -129,20 +128,31 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             }
             return html;
           })()}
+          ${p.reaction_count || p.comment_count ? `
+          <div class="post-engagement-bar">
+            ${p.reaction_count ? `<button class="post-engagement-likes btn-show-likes" data-uuid="${p.uuid}"
+              data-people="${escapeHtml(JSON.stringify(p.reaction_people || []))}">
+              <i class="bi bi-heart-fill text-danger"></i>
+              <span>${formatLikeNames(p.reaction_names, p.reaction_count)}</span>
+            </button>` : ''}
+            ${p.comment_count ? `<button class="post-engagement-comments btn-toggle-comments" data-uuid="${p.uuid}">
+              ${p.comment_count} ${p.comment_count === 1 ? t('posts.commentSingular') : t('posts.commentPlural')}
+            </button>` : ''}
+          </div>` : ''}
           <div class="post-actions-bar">
-            <button class="post-action-btn btn-react" data-uuid="${p.uuid}" title="${p.reaction_names?.length ? p.reaction_names.join(', ') : t('posts.like')}">
+            <button class="post-action-btn btn-react" data-uuid="${p.uuid}">
               <i class="bi bi-heart${p.reacted ? '-fill text-danger' : ''}"></i>
-              ${p.reaction_count ? `<span class="post-action-count">${p.reaction_count}</span>` : ''}
+              <span>${t('posts.like')}</span>
             </button>
-            <button class="post-action-btn btn-toggle-comments" data-uuid="${p.uuid}" title="${t('posts.comment')}">
+            <button class="post-action-btn btn-toggle-comments" data-uuid="${p.uuid}">
               <i class="bi bi-chat"></i>
-              ${p.comment_count ? `<span class="post-action-count">${p.comment_count}</span>` : ''}
+              <span>${t('posts.comment')}</span>
             </button>
           </div>
           <div class="post-comments-section d-none" data-uuid="${p.uuid}">
             <div class="post-comments-list"></div>
             <form class="post-comment-form">
-              <input type="text" class="form-control form-control-sm" placeholder="${t('posts.commentPlaceholder')}" required>
+              <textarea class="form-control form-control-sm" placeholder="${t('posts.commentPlaceholder')}" rows="1" required></textarea>
               <button type="submit" class="btn btn-primary btn-sm">${t('posts.send')}</button>
             </form>
           </div>
@@ -416,20 +426,66 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     // Reactions — toggle heart
     el.querySelectorAll('.btn-react').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const { action } = await api.post(`/posts/${btn.dataset.uuid}/reactions`, { emoji: '❤️' });
+        const uuid = btn.dataset.uuid;
+        const { action, reaction_names, reaction_count, reaction_people } = await api.post(`/posts/${uuid}/reactions`, { emoji: '❤️' });
         const icon = btn.querySelector('i');
-        const countEl = btn.querySelector('.post-action-count');
-        const count = parseInt(countEl?.textContent || '0');
-        if (action === 'added') {
-          icon.className = 'bi bi-heart-fill text-danger';
-          if (countEl) countEl.textContent = count + 1;
-          else btn.insertAdjacentHTML('beforeend', `<span class="post-action-count">${count + 1}</span>`);
-        } else {
-          icon.className = 'bi bi-heart';
-          const newCount = Math.max(0, count - 1);
-          if (countEl) { if (newCount) countEl.textContent = newCount; else countEl.remove(); }
+        icon.className = action === 'added' ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+
+        // Update engagement bar
+        const post = btn.closest('.timeline-post');
+        const engagementBar = post.querySelector('.post-engagement-bar');
+        const likesEl = post.querySelector('.post-engagement-likes');
+        if (reaction_count > 0) {
+          const likesHtml = `<button class="post-engagement-likes btn-show-likes" data-uuid="${uuid}"
+            data-people="${escapeHtml(JSON.stringify(reaction_people || []))}">
+            <i class="bi bi-heart-fill text-danger"></i>
+            <span>${formatLikeNames(reaction_names || [], reaction_count)}</span>
+          </button>`;
+          if (likesEl) {
+            likesEl.outerHTML = likesHtml;
+          } else if (engagementBar) {
+            engagementBar.insertAdjacentHTML('afterbegin', likesHtml);
+          } else {
+            const actionsBar = post.querySelector('.post-actions-bar');
+            actionsBar.insertAdjacentHTML('beforebegin', `<div class="post-engagement-bar">${likesHtml}</div>`);
+          }
+        } else if (likesEl) {
+          likesEl.remove();
+          if (engagementBar && !engagementBar.children.length) engagementBar.remove();
         }
       });
+    });
+
+    // Show likes modal (delegated to handle dynamically created buttons)
+    el.addEventListener('click', (e) => {
+      const likesBtn = e.target.closest('.btn-show-likes');
+      if (!likesBtn) return;
+      e.preventDefault();
+      let people;
+      try { people = JSON.parse(likesBtn.dataset.people || '[]'); } catch { people = []; }
+      if (!people.length) return;
+
+      const modalEl = document.createElement('div');
+      modalEl.className = 'modal fade';
+      modalEl.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content glass-card">
+            <div class="modal-header"><h6 class="modal-title">${t('posts.like')}</h6>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              ${people.map(p => `<div class="d-flex align-items-center gap-2 py-1">
+                <i class="bi bi-heart-fill text-danger"></i>
+                ${p.contact_uuid
+                  ? `<a href="/contacts/${p.contact_uuid}" data-link class="text-decoration-none">${escapeHtml(p.name)}</a>`
+                  : `<span>${escapeHtml(p.name)}</span>`}
+              </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(modalEl);
+      const modal = new bootstrap.Modal(modalEl);
+      modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+      modal.show();
     });
 
     // Comments — toggle section + load
@@ -444,41 +500,63 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       });
     });
 
-    // Comment submit
+    // Comment submit + Enter key handling
     el.querySelectorAll('.post-comment-form').forEach(form => {
+      const textarea = form.querySelector('textarea');
+      // Enter = submit, Shift+Enter = newline
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
+      // Auto-resize textarea
+      textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+      });
+
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const section = form.closest('.post-comments-section');
         const uuid = section.dataset.uuid;
-        const input = form.querySelector('input');
-        if (!input.value.trim()) return;
+        if (!textarea.value.trim()) return;
         try {
-          const { comment } = await api.post(`/posts/${uuid}/comments`, { body: input.value });
-          input.value = '';
+          const { comment } = await api.post(`/posts/${uuid}/comments`, { body: textarea.value });
+          textarea.value = '';
+          textarea.style.height = 'auto';
           const list = section.querySelector('.post-comments-list');
           list.insertAdjacentHTML('beforeend', renderComment(comment));
-          // Update count on button
-          const btn = el.querySelector(`.btn-toggle-comments[data-uuid="${uuid}"]`);
-          const countEl = btn.querySelector('.post-action-count');
-          const count = parseInt(countEl?.textContent || '0') + 1;
-          if (countEl) countEl.textContent = count;
-          else btn.insertAdjacentHTML('beforeend', `<span class="post-action-count">${count}</span>`);
+          // Update count in engagement bar
+          updateCommentCount(el, uuid, 1);
           // Bind delete on new comment
-          bindCommentDelete(list.lastElementChild, uuid, btn);
+          bindCommentDelete(list.lastElementChild, uuid, el);
         } catch {}
       });
     });
 
     function renderComment(c) {
+      const firstName = c.user?.first_name || '?';
+      const initials = (firstName[0] || '?');
+      const nameHtml = c.contact_uuid
+        ? `<a href="/contacts/${c.contact_uuid}" data-link class="post-comment-author">${escapeHtml(firstName)}</a>`
+        : `<strong class="post-comment-author">${escapeHtml(firstName)}</strong>`;
       return `<div class="post-comment" data-id="${c.id}">
         <div class="post-comment-avatar">
-          ${c.user.avatar ? `<img src="${authUrl(c.user.avatar)}" alt="">` : `<span>${c.user.first_name[0]}${c.user.last_name?.[0] || ''}</span>`}
+          ${c.contact_uuid ? `<a href="/contacts/${c.contact_uuid}" data-link>` : ''}
+          ${c.user?.avatar ? `<img src="${authUrl(c.user.avatar)}" alt="">` : `<span>${initials}</span>`}
+          ${c.contact_uuid ? '</a>' : ''}
         </div>
-        <div class="post-comment-content">
-          <strong>${escapeHtml(c.user.first_name)}</strong>
-          <span>${escapeHtml(c.body)}</span>
+        <div>
+          <div class="post-comment-bubble">
+            ${nameHtml}
+            <span>${escapeHtml(c.body)}</span>
+          </div>
+          <div class="post-comment-meta">
+            <span class="post-comment-time" title="${formatDateTime(c.created_at)}">${timeAgo(c.created_at)}</span>
+            ${c.is_own ? `<button class="post-comment-delete" title="${t('common.delete')}">${t('common.delete')}</button>` : ''}
+          </div>
         </div>
-        ${c.is_own ? `<button class="btn btn-link btn-sm post-comment-delete" title="${t('common.delete')}"><i class="bi bi-x"></i></button>` : ''}
       </div>`;
     }
 
@@ -487,22 +565,45 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       try {
         const { comments } = await api.get(`/posts/${uuid}/comments`);
         list.innerHTML = comments.map(c => renderComment(c)).join('');
-        const btn = el.querySelector(`.btn-toggle-comments[data-uuid="${uuid}"]`);
-        list.querySelectorAll('.post-comment-delete').forEach(del => bindCommentDelete(del.closest('.post-comment'), uuid, btn));
+        list.querySelectorAll('.post-comment-delete').forEach(del => bindCommentDelete(del.closest('.post-comment'), uuid, el));
       } catch {}
     }
 
-    function bindCommentDelete(commentEl, postUuid, countBtn) {
+    function bindCommentDelete(commentEl, postUuid, container) {
       const del = commentEl?.querySelector('.post-comment-delete');
       if (!del) return;
       del.addEventListener('click', async () => {
+        const ok = await confirmDialog(t('posts.deleteCommentConfirm'));
+        if (!ok) return;
         const id = commentEl.dataset.id;
         await api.delete(`/posts/${postUuid}/comments/${id}`);
         commentEl.remove();
-        const countEl = countBtn.querySelector('.post-action-count');
-        const count = Math.max(0, parseInt(countEl?.textContent || '1') - 1);
-        if (countEl) { if (count) countEl.textContent = count; else countEl.remove(); }
+        updateCommentCount(container, postUuid, -1);
       });
+    }
+
+    function updateCommentCount(container, uuid, delta) {
+      const engagementBtn = container.querySelector(`.post-engagement-comments[data-uuid="${uuid}"]`);
+      if (engagementBtn) {
+        const current = parseInt(engagementBtn.textContent) || 0;
+        const newCount = Math.max(0, current + delta);
+        if (newCount) {
+          engagementBtn.textContent = `${newCount} ${newCount === 1 ? t('posts.commentSingular') : t('posts.commentPlural')}`;
+        } else {
+          engagementBtn.remove();
+        }
+      } else if (delta > 0) {
+        // Add engagement bar entry for comments
+        const post = container.querySelector(`.timeline-post[data-post-uuid="${uuid}"]`) || container;
+        const engagementBar = post.querySelector('.post-engagement-bar');
+        const html = `<button class="post-engagement-comments btn-toggle-comments" data-uuid="${uuid}">1 ${t('posts.commentSingular')}</button>`;
+        if (engagementBar) {
+          engagementBar.insertAdjacentHTML('beforeend', html);
+        } else {
+          const actionsBar = post.querySelector('.post-actions-bar');
+          if (actionsBar) actionsBar.insertAdjacentHTML('beforebegin', `<div class="post-engagement-bar">${html}</div>`);
+        }
+      }
     }
 
     // Scroll to and highlight specific post if requested via URL param

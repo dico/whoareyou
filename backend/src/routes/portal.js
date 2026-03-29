@@ -237,13 +237,20 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
         .whereIn('post_contacts.contact_id', req.portal.contactIds)
         .select('contacts.uuid', 'contacts.first_name', 'contacts.last_name');
 
-      const [reactions] = await db('post_reactions').where({ post_id: post.id }).count('id as count');
-      post.reaction_count = reactions.count;
-
-      const myReaction = await db('post_reactions')
-        .where({ post_id: post.id, portal_guest_id: req.portal.guestId })
-        .first();
-      post.reacted = !!myReaction;
+      const postReactions = await db('post_reactions')
+        .where({ post_id: post.id })
+        .leftJoin('users', 'post_reactions.user_id', 'users.id')
+        .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
+        .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
+        .select('post_reactions.portal_guest_id',
+          'rc.first_name as contact_first', 'rc.last_name as contact_last',
+          'users.first_name as user_first', 'users.last_name as user_last',
+          'portal_guests.display_name as guest_name');
+      post.reaction_count = postReactions.length;
+      post.reacted = postReactions.some(r => r.portal_guest_id === req.portal.guestId);
+      post.reaction_names = postReactions.map(r => {
+        return r.contact_first || r.guest_name || r.user_first;
+      }).filter(Boolean);
 
       const [comments] = await db('post_comments').where({ post_id: post.id }).count('id as count');
       post.comment_count = comments.count;
@@ -263,6 +270,7 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
         uuid: p.uuid, body: p.body, post_date: p.post_date,
         about: p.about || null, contacts: p.contacts, media: p.media,
         reaction_count: p.reaction_count, reacted: p.reacted,
+        reaction_names: p.reaction_names || [],
         comment_count: p.comment_count,
       })),
       hasMore: posts.length === limit,
@@ -290,21 +298,37 @@ router.get('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) =
     const comments = await db('post_comments')
       .where({ post_id: post.id })
       .leftJoin('users', 'post_comments.user_id', 'users.id')
+      .leftJoin('contacts as cc', 'post_comments.contact_id', 'cc.id')
       .leftJoin('portal_guests', 'post_comments.portal_guest_id', 'portal_guests.id')
       .select(
         'post_comments.id', 'post_comments.body', 'post_comments.created_at',
-        'users.first_name as user_first', 'users.last_name as user_last',
+        'post_comments.contact_id',
+        'users.first_name as user_first', 'users.linked_contact_id',
+        'cc.first_name as contact_first', 'cc.id as contact_id_resolved',
         'portal_guests.display_name as guest_name',
+        'portal_guests.linked_contact_id as guest_linked_contact_id',
         'post_comments.portal_guest_id'
       )
       .orderBy('post_comments.created_at', 'asc');
 
+    // Get avatars for comment authors
+    const avatarContactIds = comments.map(c => c.contact_id_resolved || c.linked_contact_id || c.guest_linked_contact_id).filter(Boolean);
+    const avatarMap = new Map();
+    if (avatarContactIds.length) {
+      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(avatarContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) avatarMap.set(p.contact_id, p.thumbnail_path);
+    }
+
     res.json({
-      comments: comments.map(c => ({
-        id: c.id, body: c.body, created_at: c.created_at,
-        author: c.guest_name || `${c.user_first || ''} ${c.user_last || ''}`.trim(),
-        is_own: c.portal_guest_id === req.portal.guestId,
-      })),
+      comments: comments.map(c => {
+        const avatarContactId = c.contact_id_resolved || c.linked_contact_id || c.guest_linked_contact_id;
+        return {
+          id: c.id, body: c.body, created_at: c.created_at,
+          author: c.guest_name || c.contact_first || c.user_first || '?',
+          avatar: avatarMap.get(avatarContactId) || null,
+          is_own: c.portal_guest_id === req.portal.guestId,
+        };
+      }),
     });
   } catch (err) { next(err); }
 });
@@ -343,6 +367,19 @@ router.post('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// DELETE /api/portal/posts/:uuid/comments/:id
+router.delete('/posts/:uuid/comments/:commentId', portalAuthenticate, async (req, res, next) => {
+  try {
+    const comment = await db('post_comments')
+      .where({ id: req.params.commentId, portal_guest_id: req.portal.guestId, tenant_id: req.portal.tenantId })
+      .first();
+    if (!comment) throw new AppError('Comment not found', 404);
+
+    await db('post_comments').where({ id: comment.id }).del();
+    res.json({ message: 'Comment deleted' });
+  } catch (err) { next(err); }
+});
+
 // POST /api/portal/posts/:uuid/reactions
 router.post('/posts/:uuid/reactions', portalAuthenticate, async (req, res, next) => {
   try {
@@ -362,7 +399,6 @@ router.post('/posts/:uuid/reactions', portalAuthenticate, async (req, res, next)
 
     if (existing) {
       await db('post_reactions').where({ id: existing.id }).del();
-      res.json({ reacted: false });
     } else {
       const guest = await db('portal_guests').where({ id: req.portal.guestId }).first();
       await db('post_reactions').insert({
@@ -370,10 +406,30 @@ router.post('/posts/:uuid/reactions', portalAuthenticate, async (req, res, next)
         user_id: null,
         portal_guest_id: req.portal.guestId,
         contact_id: guest?.linked_contact_id || null,
+        tenant_id: req.portal.tenantId,
         emoji: '❤️',
       });
-      res.json({ reacted: true });
     }
+
+    // Return updated reaction info
+    const allReactions = await db('post_reactions')
+      .where({ post_id: post.id })
+      .leftJoin('users', 'post_reactions.user_id', 'users.id')
+      .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
+      .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
+      .select('rc.first_name as contact_first', 'rc.last_name as contact_last',
+        'users.first_name as user_first', 'users.last_name as user_last',
+        'portal_guests.display_name as guest_name');
+    const names = allReactions.map(r => {
+      return (r.contact_first ? `${r.contact_first} ${r.contact_last || ''}`.trim() : null)
+        || r.guest_name
+        || (r.user_first ? `${r.user_first} ${r.user_last || ''}`.trim() : null);
+    }).filter(Boolean);
+    res.json({
+      reacted: !existing,
+      reaction_count: allReactions.length,
+      reaction_names: names,
+    });
   } catch (err) { next(err); }
 });
 

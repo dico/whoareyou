@@ -160,7 +160,9 @@ app.use('/uploads/', (req, res, next) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     // Portal guests: verify the file belongs to an allowed contact
-    if (req.portal && type === 'contacts' && !req.portal.contactIds.includes(record.id)) {
+    // Allow thumbnail avatars for all tenant contacts (needed for comment/reaction avatars)
+    const isThumbnail = /\/_?photo_.*_thumb\.\w+$/.test(filePath);
+    if (req.portal && type === 'contacts' && !isThumbnail && !req.portal.contactIds.includes(record.id)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (req.portal && type === 'posts') {
