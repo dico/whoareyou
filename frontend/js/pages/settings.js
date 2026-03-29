@@ -20,8 +20,8 @@ export async function renderSettings() {
       <div class="settings-grid">
         <a href="/admin/tenant" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(0,122,255,0.1);color:#007AFF"><i class="bi bi-people"></i></div>
-          <div class="settings-card-label">${t('settings.manageMembers')}</div>
-          <div class="settings-card-desc">${t('admin.householdDesc')}</div>
+          <div class="settings-card-label">${t('settings.familyHousehold')}</div>
+          <div class="settings-card-desc">${t('settings.familyHouseholdDesc')}</div>
         </a>
         <a href="/admin/labels" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(255,149,0,0.1);color:#FF9500"><i class="bi bi-tags"></i></div>

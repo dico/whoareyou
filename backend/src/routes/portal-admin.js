@@ -21,18 +21,31 @@ router.use((req, res, next) => {
 router.get('/guests', async (req, res, next) => {
   try {
     const guests = await db('portal_guests')
-      .where({ tenant_id: req.tenantId })
-      .select('uuid', 'display_name', 'email', 'is_active', 'last_login_at', 'created_at')
-      .orderBy('display_name');
+      .where({ 'portal_guests.tenant_id': req.tenantId })
+      .leftJoin('contacts as lc', 'portal_guests.linked_contact_id', 'lc.id')
+      .leftJoin('contact_photos as cp', function () {
+        this.on('cp.contact_id', 'lc.id').andOn('cp.is_primary', db.raw('true'));
+      })
+      .select(
+        'portal_guests.uuid', 'portal_guests.display_name', 'portal_guests.email',
+        'portal_guests.is_active', 'portal_guests.last_login_at', 'portal_guests.created_at',
+        'lc.uuid as linked_contact_uuid', 'lc.first_name as contact_first_name',
+        'cp.thumbnail_path as avatar'
+      )
+      .orderBy('portal_guests.display_name');
 
-    // Get contact counts
+    // Get accessible contacts + session count for each guest
     for (const g of guests) {
       const guestRow = await db('portal_guests').where({ uuid: g.uuid }).first();
-      const contacts = await db('portal_guest_contacts')
+      g.contacts = await db('portal_guest_contacts')
         .where({ portal_guest_id: guestRow.id })
         .join('contacts', 'portal_guest_contacts.contact_id', 'contacts.id')
         .select('contacts.uuid', 'contacts.first_name', 'contacts.last_name');
-      g.contacts = contacts;
+      const [{ count }] = await db('portal_sessions')
+        .where({ portal_guest_id: guestRow.id, is_active: true })
+        .where('expires_at', '>', db.fn.now())
+        .count('id as count');
+      g.active_sessions = count;
     }
 
     res.json({ guests });
@@ -42,12 +55,18 @@ router.get('/guests', async (req, res, next) => {
 // POST /api/portal-admin/guests — create guest
 router.post('/guests', async (req, res, next) => {
   try {
-    const { display_name, email, password, contact_uuids } = req.body;
+    const { display_name, email, password, contact_uuids, linked_contact_uuid } = req.body;
     if (!display_name?.trim()) throw new AppError('Display name required', 400);
 
     let passwordHash = null;
     if (email && password) {
       passwordHash = await bcrypt.hash(password, 12);
+    }
+
+    let linkedContactId = null;
+    if (linked_contact_uuid) {
+      const contact = await db('contacts').where({ uuid: linked_contact_uuid, tenant_id: req.tenantId }).first();
+      if (contact) linkedContactId = contact.id;
     }
 
     const uuid = uuidv4();
@@ -57,6 +76,7 @@ router.post('/guests', async (req, res, next) => {
       display_name: display_name.trim(),
       email: email?.trim().toLowerCase() || null,
       password_hash: passwordHash,
+      linked_contact_id: linkedContactId,
       is_active: true,
       created_by: req.user.id,
     });
@@ -90,6 +110,14 @@ router.put('/guests/:uuid', async (req, res, next) => {
     if (req.body.email !== undefined) updates.email = req.body.email?.trim().toLowerCase() || null;
     if (req.body.password) updates.password_hash = await bcrypt.hash(req.body.password, 12);
     if (req.body.is_active !== undefined) updates.is_active = !!req.body.is_active;
+    if (req.body.linked_contact_uuid !== undefined) {
+      if (req.body.linked_contact_uuid) {
+        const contact = await db('contacts').where({ uuid: req.body.linked_contact_uuid, tenant_id: req.tenantId }).first();
+        updates.linked_contact_id = contact ? contact.id : null;
+      } else {
+        updates.linked_contact_id = null;
+      }
+    }
 
     if (Object.keys(updates).length) {
       await db('portal_guests').where({ id: guest.id }).update(updates);

@@ -42,41 +42,26 @@ export async function renderTenantAdmin() {
       <!-- Portal tab -->
       <div id="tab-portal" class="d-none">
         <div class="settings-section glass-card">
-          <div class="d-flex justify-content-between align-items-start mb-3">
-            <div>
-              <h4 class="mb-1">${t('portal.title')}</h4>
-              <p class="text-muted small mb-0">${t('portal.desc')}</p>
+          <h4 class="mb-1">${t('portal.title')}</h4>
+          <p class="text-muted small">${t('portal.desc')}</p>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="portal-tenant-toggle">
+            <label class="form-check-label" for="portal-tenant-toggle">${t('portal.enableForTenant')}</label>
+            <div class="form-text">${t('portal.enableForTenantHint')}</div>
+          </div>
+          <span id="portal-toggle-feedback" class="small"></span>
+        </div>
+
+        <div id="portal-content">
+          <div class="settings-section glass-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="mb-0">${t('portal.guests')}</h5>
+              <button class="btn btn-primary btn-sm" id="btn-add-guest">
+                <i class="bi bi-person-plus me-1"></i>${t('portal.addGuest')}
+              </button>
             </div>
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="portal-tenant-toggle">
-              <label class="form-check-label small" for="portal-tenant-toggle">${t('portal.enableForTenant')}</label>
-            </div>
+            <div id="portal-guests-list"></div>
           </div>
-        </div>
-
-        <div class="settings-section glass-card">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">${t('portal.guests')}</h5>
-            <button class="btn btn-primary btn-sm" id="btn-add-guest">
-              <i class="bi bi-person-plus me-1"></i>${t('portal.addGuest')}
-            </button>
-          </div>
-          <div id="portal-guests-list"></div>
-        </div>
-
-        <div class="settings-section glass-card">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">${t('portal.shareLinks')}</h5>
-            <button class="btn btn-outline-secondary btn-sm" id="btn-create-link">
-              <i class="bi bi-link-45deg me-1"></i>${t('portal.createLink')}
-            </button>
-          </div>
-          <div id="portal-links-list"></div>
-        </div>
-
-        <div class="settings-section glass-card">
-          <h5 class="mb-3">${t('portal.activeSessions')}</h5>
-          <div id="portal-sessions-list"></div>
         </div>
       </div>
 
@@ -502,31 +487,45 @@ async function loadMembers() {
 // Portal management
 // ═══════════════════════════════════════
 
-let portalLoaded = false;
+let portalInitialized = false;
 
 async function loadPortal() {
-  if (portalLoaded) return;
-  portalLoaded = true;
+  const toggle = document.getElementById('portal-tenant-toggle');
+  const content = document.getElementById('portal-content');
+  const feedback = document.getElementById('portal-toggle-feedback');
 
-  // Load tenant portal toggle
-  try {
-    const { tenants } = await api.get('/auth/tenants');
-    const myTenant = tenants.find(t => t.uuid === state.user.tenant_uuid);
-    document.getElementById('portal-tenant-toggle').checked = !!myTenant?.portal_enabled;
-  } catch { /* ignore */ }
+  if (!portalInitialized) {
+    portalInitialized = true;
 
-  document.getElementById('portal-tenant-toggle').addEventListener('change', async (e) => {
+    // Load current state
     try {
-      await api.put('/auth/tenant/security', { portal_enabled: e.target.checked });
-    } catch (err) {
-      e.target.checked = !e.target.checked;
-    }
-  });
+      const { tenants } = await api.get('/auth/tenants');
+      const myTenant = tenants.find(t => t.uuid === state.user.tenant_uuid);
+      toggle.checked = !!myTenant?.portal_enabled;
+      content.classList.toggle('d-none', !toggle.checked);
+    } catch { /* ignore */ }
 
-  document.getElementById('btn-add-guest').addEventListener('click', () => showAddGuestModal());
-  document.getElementById('btn-create-link').addEventListener('click', () => showCreateLinkModal());
+    // Toggle handler with feedback
+    toggle.addEventListener('change', async (e) => {
+      try {
+        await api.put('/auth/tenant/security', { portal_enabled: e.target.checked });
+        content.classList.toggle('d-none', !e.target.checked);
+        feedback.className = 'small text-success';
+        feedback.textContent = t('common.saved');
+        setTimeout(() => { feedback.textContent = ''; }, 2000);
+      } catch (err) {
+        e.target.checked = !e.target.checked;
+        feedback.className = 'small text-danger';
+        feedback.textContent = err.message;
+      }
+    });
 
-  await Promise.all([loadPortalGuests(), loadPortalLinks(), loadPortalSessions()]);
+    document.getElementById('btn-add-guest').addEventListener('click', () => showAddGuestModal());
+  }
+
+  if (toggle.checked) {
+    await loadPortalGuests();
+  }
 }
 
 async function loadPortalGuests() {
@@ -538,30 +537,40 @@ async function loadPortalGuests() {
       el.innerHTML = `<p class="text-muted small">${t('portal.noGuests')}</p>`;
       return;
     }
-    el.innerHTML = guests.map(g => `
-      <div class="member-row">
-        <div class="member-avatar"><span>${(g.display_name || '?')[0]}</span></div>
-        <div class="member-info">
-          <strong>${g.display_name}</strong>
-          ${g.email ? `<span class="text-muted small">${g.email}</span>` : `<span class="text-muted small">${t('portal.linkOnly')}</span>`}
-          <span class="text-muted small">${g.contacts.map(c => c.first_name).join(', ')}</span>
-        </div>
-        <div class="member-badges">
-          ${g.is_active ? '' : `<span class="badge bg-danger">${t('admin.inactive')}</span>`}
-        </div>
-        <div class="member-actions">
-          <div class="dropdown">
-            <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-            <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-              <li><a class="dropdown-item btn-edit-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}" data-email="${g.email || ''}" data-contacts='${JSON.stringify(g.contacts.map(c=>c.uuid))}'><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
-              <li><a class="dropdown-item btn-toggle-guest" href="#" data-uuid="${g.uuid}" data-active="${g.is_active ? '1' : '0'}"><i class="bi bi-${g.is_active ? 'pause' : 'play'} me-2"></i>${g.is_active ? t('admin.deactivate') : t('admin.activate')}</a></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item text-danger btn-delete-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
-            </ul>
+    el.innerHTML = guests.map(g => {
+      const initials = (g.display_name || '?')[0];
+      const avatarHtml = g.avatar
+        ? `<img src="${authUrl(g.avatar)}" alt="">`
+        : `<span>${initials}</span>`;
+      const canSee = g.contacts.map(c => c.first_name).join(', ');
+
+      return `
+        <div class="member-row">
+          <div class="member-avatar">${avatarHtml}</div>
+          <div class="member-info">
+            <strong>${g.display_name}</strong>
+            ${g.linked_contact_uuid ? `<a href="/contacts/${g.linked_contact_uuid}" data-link class="text-muted small d-block"><i class="bi bi-link-45deg"></i> ${g.contact_first_name || ''}</a>` : ''}
+            <span class="text-muted small">${t('portal.accessTo')}: ${canSee || '—'}</span>
+            ${g.active_sessions > 0 ? `<span class="text-muted small"><i class="bi bi-circle-fill text-success" style="font-size:0.5rem"></i> ${g.active_sessions} ${t('portal.activeSessions').toLowerCase()}</span>` : ''}
+          </div>
+          <div class="member-badges">
+            ${g.is_active ? '' : `<span class="badge bg-danger">${t('admin.inactive')}</span>`}
+          </div>
+          <div class="member-actions">
+            <div class="dropdown">
+              <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" data-bs-display="static"><i class="bi bi-three-dots"></i></button>
+              <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="z-index:1050">
+                <li><a class="dropdown-item btn-edit-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}" data-email="${g.email || ''}" data-linked="${g.linked_contact_uuid || ''}" data-contacts='${JSON.stringify(g.contacts.map(c=>c.uuid))}'><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+                <li><a class="dropdown-item btn-create-guest-link" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-link-45deg me-2"></i>${t('portal.createLink')}</a></li>
+                <li><a class="dropdown-item btn-toggle-guest" href="#" data-uuid="${g.uuid}" data-active="${g.is_active ? '1' : '0'}"><i class="bi bi-${g.is_active ? 'pause' : 'play'} me-2"></i>${g.is_active ? t('admin.deactivate') : t('admin.activate')}</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger btn-delete-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     // Edit guest
     el.querySelectorAll('.btn-edit-guest').forEach(btn => {
@@ -573,7 +582,7 @@ async function loadPortalGuests() {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
         await api.put(`/portal-admin/guests/${btn.dataset.uuid}`, { is_active: btn.dataset.active === '0' });
-        portalLoaded = false; loadPortal();
+        loadPortalGuests();
       });
     });
 
@@ -583,7 +592,39 @@ async function loadPortalGuests() {
         e.preventDefault();
         if (await confirmDialog(t('portal.deleteGuestConfirm', { name: btn.dataset.name }), { title: t('common.delete'), confirmText: t('common.delete') })) {
           await api.delete(`/portal-admin/guests/${btn.dataset.uuid}`);
-          portalLoaded = false; loadPortal();
+          loadPortalGuests();
+        }
+      });
+    });
+    // Create invite link for guest
+    el.querySelectorAll('.btn-create-guest-link').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const result = await api.post('/portal-admin/links', {
+            label: btn.dataset.name,
+            portal_guest_uuid: btn.dataset.uuid,
+            expires_days: 365,
+          });
+          // Show URL in a simple prompt-like inline
+          const row = btn.closest('.member-row');
+          let urlBox = row.querySelector('.portal-link-result');
+          if (urlBox) urlBox.remove();
+          urlBox = document.createElement('div');
+          urlBox.className = 'portal-link-result mt-2';
+          urlBox.innerHTML = `
+            <div class="d-flex gap-1">
+              <input type="text" class="form-control form-control-sm" value="${result.url}" readonly>
+              <button class="btn btn-primary btn-sm portal-copy-link">${t('portal.copyLink')}</button>
+            </div>
+          `;
+          row.after(urlBox);
+          urlBox.querySelector('.portal-copy-link').addEventListener('click', () => {
+            navigator.clipboard.writeText(result.url);
+            urlBox.querySelector('.portal-copy-link').innerHTML = `<i class="bi bi-check"></i> ${t('portal.copied')}`;
+          });
+        } catch (err) {
+          confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
         }
       });
     });
@@ -620,7 +661,7 @@ async function loadPortalLinks() {
     el.querySelectorAll('.btn-revoke-link').forEach(btn => {
       btn.addEventListener('click', async () => {
         await api.delete(`/portal-admin/links/${btn.dataset.uuid}`);
-        portalLoaded = false; loadPortal();
+        loadPortalGuests();
       });
     });
   } catch (err) { el.innerHTML = `<div class="text-danger small">${err.message}</div>`; }
@@ -648,7 +689,7 @@ async function loadPortalSessions() {
     el.querySelectorAll('.btn-revoke-session').forEach(btn => {
       btn.addEventListener('click', async () => {
         await api.delete(`/portal-admin/sessions/${btn.dataset.uuid}`);
-        portalLoaded = false; loadPortal();
+        loadPortalGuests();
       });
     });
   } catch (err) { el.innerHTML = ''; }
@@ -668,6 +709,15 @@ function showAddGuestModal() {
           </div>
           <form id="${mid}-form">
             <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">${t('portal.whoIsGuest')}</label>
+                <div class="position-relative">
+                  <input type="text" class="form-control form-control-sm" id="${mid}-contact-search" placeholder="${t('common.search')}" autocomplete="off">
+                  <div class="product-picker-dropdown d-none" id="${mid}-contact-results"></div>
+                  <input type="hidden" id="${mid}-linked-uuid">
+                </div>
+                <div id="${mid}-linked-chip" class="mt-1"></div>
+              </div>
               <div class="form-floating mb-3">
                 <input type="text" class="form-control" id="${mid}-name" required>
                 <label>${t('portal.guestName')}</label>
@@ -705,7 +755,41 @@ function showAddGuestModal() {
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
 
-  // Inline contact search
+  // "Who is this guest" contact search
+  let guestDebounce = null;
+  const guestSearch = document.getElementById(`${mid}-contact-search`);
+  const guestResults = document.getElementById(`${mid}-contact-results`);
+  guestSearch?.addEventListener('input', () => {
+    clearTimeout(guestDebounce);
+    const q = guestSearch.value.trim();
+    if (q.length < 2) { guestResults.classList.add('d-none'); return; }
+    guestDebounce = setTimeout(async () => {
+      try {
+        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
+        if (!contacts.length) { guestResults.classList.add('d-none'); return; }
+        guestResults.innerHTML = contacts.map(c => contactRowHtml(c, { tag: 'div' })).join('');
+        guestResults.classList.remove('d-none');
+        guestResults.querySelectorAll('.contact-row').forEach((el, i) => {
+          el.addEventListener('click', () => {
+            const c = contacts[i];
+            document.getElementById(`${mid}-linked-uuid`).value = c.uuid;
+            document.getElementById(`${mid}-name`).value = document.getElementById(`${mid}-name`).value || c.first_name + (c.last_name ? ' ' + c.last_name : '');
+            document.getElementById(`${mid}-linked-chip`).innerHTML = `
+              <span class="contact-chip">
+                <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '')}</span>`}</span>
+                ${c.first_name} ${c.last_name || ''}
+                <button type="button" class="contact-chip-remove" onclick="this.closest('.contact-chip').remove();document.getElementById('${mid}-linked-uuid').value=''"><i class="bi bi-x"></i></button>
+              </span>
+            `;
+            guestSearch.value = '';
+            guestResults.classList.add('d-none');
+          });
+        });
+      } catch { guestResults.classList.add('d-none'); }
+    }, 200);
+  });
+
+  // "Can see" contact search
   setupPortalContactSearch(`${mid}-search`, `${mid}-results`, `${mid}-chips`, selectedContacts);
 
   document.getElementById(`${mid}-form`).addEventListener('submit', async (e) => {
@@ -717,10 +801,11 @@ function showAddGuestModal() {
         display_name: document.getElementById(`${mid}-name`).value.trim(),
         email: document.getElementById(`${mid}-email`).value.trim() || null,
         password: document.getElementById(`${mid}-password`).value || null,
+        linked_contact_uuid: document.getElementById(`${mid}-linked-uuid`).value || null,
         contact_uuids: selectedContacts.map(c => c.uuid),
       });
       modal.hide();
-      portalLoaded = false; loadPortal();
+      loadPortalGuests();
     } catch (err) { errorEl.textContent = err.message; errorEl.classList.remove('d-none'); }
   });
 
@@ -807,7 +892,7 @@ function showEditGuestModal(data) {
       await api.put(`/portal-admin/guests/${data.uuid}`, payload);
       await api.put(`/portal-admin/guests/${data.uuid}/contacts`, { contact_uuids: selectedContacts.map(c => c.uuid) });
       modal.hide();
-      portalLoaded = false; loadPortal();
+      loadPortalGuests();
     } catch (err) { errorEl.textContent = err.message; errorEl.classList.remove('d-none'); }
   });
 
@@ -896,7 +981,7 @@ function showCreateLinkModal() {
     } catch (err) { errorEl.textContent = err.message; errorEl.classList.remove('d-none'); }
   });
 
-  modalEl.addEventListener('hidden.bs.modal', () => { modalEl.remove(); portalLoaded = false; loadPortal(); }, { once: true });
+  modalEl.addEventListener('hidden.bs.modal', () => { modalEl.remove(); loadPortalGuests(); }, { once: true });
   modal.show();
 }
 
@@ -922,7 +1007,7 @@ function setupPortalContactSearch(inputId, resultsId, chipsId, selectedContacts)
         results.querySelectorAll('.contact-row').forEach((el, i) => {
           el.addEventListener('click', () => {
             const c = filtered[i];
-            selectedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '' });
+            selectedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
             renderPortalChips(chipsId, selectedContacts);
             input.value = '';
             results.classList.add('d-none');
@@ -941,6 +1026,9 @@ function renderPortalChips(chipsId, contacts) {
   if (!container) return;
   container.innerHTML = contacts.map((c, i) => `
     <span class="contact-chip">
+      <span class="contact-chip-avatar">
+        ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
+      </span>
       ${c.first_name} ${c.last_name || ''}
       <button type="button" class="contact-chip-remove" data-index="${i}"><i class="bi bi-x"></i></button>
     </span>
