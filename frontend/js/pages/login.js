@@ -115,6 +115,7 @@ export function renderLogin() {
     if (!enabled) {
       document.getElementById('register-tab')?.remove();
       document.getElementById('register-form')?.remove();
+      document.getElementById('auth-tabs')?.classList.add('d-none');
     }
   }).catch(() => {});
 
