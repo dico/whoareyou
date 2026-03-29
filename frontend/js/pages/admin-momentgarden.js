@@ -105,6 +105,14 @@ export async function renderMomentGarden() {
           <i class="bi bi-arrow-repeat me-1"></i>${t('integrations.syncLovesComments')}
         </button>
         <div id="mg-sync-result" class="mt-3 d-none"></div>
+
+        <hr class="my-3">
+        <h5 class="small text-muted">${t('integrations.cleanupTitle')}</h5>
+        <p class="small text-muted">${t('integrations.cleanupDesc')}</p>
+        <button class="btn btn-outline-danger btn-sm" id="mg-cleanup-btn">
+          <i class="bi bi-trash3 me-1"></i>${t('integrations.cleanupBtn')}
+        </button>
+        <div id="mg-cleanup-result" class="mt-2 d-none"></div>
       </div>
     </div>
   `;
@@ -476,6 +484,28 @@ export async function renderMomentGarden() {
     btn.disabled = false;
     btn.innerHTML = `<i class="bi bi-arrow-repeat me-1"></i>${t('integrations.syncLovesComments')}`;
     loadSyncStatus();
+  });
+
+  // ── Cleanup old data ──
+  document.getElementById('mg-cleanup-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('mg-cleanup-btn');
+    const resultEl = document.getElementById('mg-cleanup-result');
+    if (!confirm(t('integrations.cleanupConfirm'))) return;
+
+    btn.disabled = true;
+    resultEl.classList.add('d-none');
+
+    try {
+      const data = await api.post('/import/momentgarden/cleanup');
+      resultEl.innerHTML = `<div class="alert alert-success small">
+        ${t('integrations.cleanupDone', { reactions: data.deleted_reactions, comments: data.deleted_comments })}
+      </div>`;
+      resultEl.classList.remove('d-none');
+    } catch (err) {
+      resultEl.innerHTML = `<div class="alert alert-danger small">${err.message}</div>`;
+      resultEl.classList.remove('d-none');
+    }
+    btn.disabled = false;
   });
 }
 

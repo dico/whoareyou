@@ -326,11 +326,16 @@ router.post('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) 
     const isTagged = await db('post_contacts').where('post_id', post.id).whereIn('contact_id', req.portal.contactIds).first();
     if (!isAbout && !isTagged) throw new AppError('Post not found', 404);
 
+    // Resolve contact_id from portal guest's linked contact
+    const guest = await db('portal_guests').where({ id: req.portal.guestId }).first();
+    const contactId = guest?.linked_contact_id || null;
+
     await db('post_comments').insert({
       post_id: post.id,
       tenant_id: req.portal.tenantId,
       user_id: null,
       portal_guest_id: req.portal.guestId,
+      contact_id: contactId,
       body: body.trim(),
     });
 
@@ -359,10 +364,12 @@ router.post('/posts/:uuid/reactions', portalAuthenticate, async (req, res, next)
       await db('post_reactions').where({ id: existing.id }).del();
       res.json({ reacted: false });
     } else {
+      const guest = await db('portal_guests').where({ id: req.portal.guestId }).first();
       await db('post_reactions').insert({
         post_id: post.id,
         user_id: null,
         portal_guest_id: req.portal.guestId,
+        contact_id: guest?.linked_contact_id || null,
         emoji: '❤️',
       });
       res.json({ reacted: true });

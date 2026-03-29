@@ -88,8 +88,14 @@ router.get('/', async (req, res, next) => {
         .groupBy('post_id')
         .select('post_id', db.raw('count(*) as count')),
       db('post_reactions')
-        .whereIn('post_id', postIds)
-        .select('post_id', 'emoji', 'user_id'),
+        .whereIn('post_reactions.post_id', postIds)
+        .leftJoin('users', 'post_reactions.user_id', 'users.id')
+        .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
+        .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
+        .select('post_reactions.post_id', 'post_reactions.emoji', 'post_reactions.user_id',
+          'users.first_name as user_first', 'users.last_name as user_last',
+          'rc.first_name as contact_first', 'rc.last_name as contact_last',
+          'portal_guests.display_name as guest_name'),
     ]) : [[], [], new Map(), [], []];
 
     // Group by post
@@ -121,9 +127,13 @@ router.get('/', async (req, res, next) => {
 
     const reactionsByPost = {};
     for (const r of reactions) {
-      if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false };
+      if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false, names: [] };
       reactionsByPost[r.post_id].count++;
       if (r.user_id === req.user.id) reactionsByPost[r.post_id].reacted = true;
+      const name = (r.contact_first ? `${r.contact_first} ${r.contact_last || ''}`.trim() : null)
+        || r.guest_name
+        || (r.user_first ? `${r.user_first} ${r.user_last || ''}`.trim() : null);
+      if (name) reactionsByPost[r.post_id].names.push(name);
     }
 
     const result = posts.map((p) => {
@@ -146,6 +156,7 @@ router.get('/', async (req, res, next) => {
         media: mediaByPost[p.id] || [],
         comment_count: commentCountByPost[p.id] || 0,
         reaction_count: reactionsByPost[p.id]?.count || 0,
+        reaction_names: reactionsByPost[p.id]?.names || [],
         reacted: reactionsByPost[p.id]?.reacted || false,
       };
     });
@@ -468,17 +479,21 @@ router.get('/:uuid/comments', async (req, res, next) => {
     if (!post) throw new AppError('Post not found', 404);
 
     const comments = await db('post_comments')
-      .join('users', 'post_comments.user_id', 'users.id')
+      .leftJoin('users', 'post_comments.user_id', 'users.id')
+      .leftJoin('contacts as cc', 'post_comments.contact_id', 'cc.id')
       .where({ 'post_comments.post_id': post.id })
       .select(
         'post_comments.id', 'post_comments.body', 'post_comments.created_at',
+        'post_comments.user_id', 'post_comments.contact_id',
         'users.uuid as user_uuid', 'users.first_name', 'users.last_name',
-        'users.linked_contact_id'
+        'users.linked_contact_id',
+        'cc.first_name as contact_first', 'cc.last_name as contact_last', 'cc.id as contact_id_resolved'
       )
       .orderBy('post_comments.created_at', 'asc');
 
-    // Get avatars for users with linked contacts
-    const linkedIds = comments.filter(c => c.linked_contact_id).map(c => c.linked_contact_id);
+    // Get avatars — from linked contacts (users) or direct contacts
+    const contactIdsForAvatar = comments.map(c => c.contact_id_resolved || c.linked_contact_id).filter(Boolean);
+    const linkedIds = [...new Set(contactIdsForAvatar)];
     const avatarMap = new Map();
     if (linkedIds.length) {
       const photos = await db('contact_photos').whereIn('contact_id', linkedIds).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
@@ -486,18 +501,22 @@ router.get('/:uuid/comments', async (req, res, next) => {
     }
 
     res.json({
-      comments: comments.map(c => ({
-        id: c.id,
-        body: c.body,
-        created_at: c.created_at,
-        user: {
-          uuid: c.user_uuid,
-          first_name: c.first_name,
-          last_name: c.last_name,
-          avatar: avatarMap.get(c.linked_contact_id) || null,
-        },
-        is_own: c.user_uuid === req.user.uuid,
-      })),
+      comments: comments.map(c => {
+        // Prioritize: direct contact > user's linked contact > user
+        const avatarContactId = c.contact_id_resolved || c.linked_contact_id;
+        return {
+          id: c.id,
+          body: c.body,
+          created_at: c.created_at,
+          user: {
+            uuid: c.user_uuid,
+            first_name: c.contact_first || c.first_name,
+            last_name: c.contact_last || c.last_name,
+            avatar: avatarMap.get(avatarContactId) || null,
+          },
+          is_own: c.user_id === req.user.id,
+        };
+      }),
     });
   } catch (err) {
     next(err);
@@ -515,9 +534,14 @@ router.post('/:uuid/comments', async (req, res, next) => {
 
     if (!req.body.body?.trim()) throw new AppError('Comment body is required', 400);
 
+    // Resolve contact_id from user's linked contact
+    const user = await db('users').where({ id: req.user.id }).first();
+    const contactId = user?.linked_contact_id || null;
+
     const [id] = await db('post_comments').insert({
       post_id: post.id,
       user_id: req.user.id,
+      contact_id: contactId,
       tenant_id: req.tenantId,
       body: req.body.body.trim(),
     });
@@ -577,6 +601,8 @@ router.post('/:uuid/reactions', async (req, res, next) => {
     if (!post) throw new AppError('Post not found', 404);
 
     const emoji = req.body.emoji || '❤️';
+    const user = await db('users').where({ id: req.user.id }).first();
+    const contactId = user?.linked_contact_id || null;
 
     const existing = await db('post_reactions')
       .where({ post_id: post.id, user_id: req.user.id, emoji })
@@ -589,6 +615,7 @@ router.post('/:uuid/reactions', async (req, res, next) => {
       await db('post_reactions').insert({
         post_id: post.id,
         user_id: req.user.id,
+        contact_id: contactId,
         tenant_id: req.tenantId,
         emoji,
       });

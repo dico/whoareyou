@@ -130,7 +130,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             return html;
           })()}
           <div class="post-actions-bar">
-            <button class="post-action-btn btn-react" data-uuid="${p.uuid}" title="${t('posts.like')}">
+            <button class="post-action-btn btn-react" data-uuid="${p.uuid}" title="${p.reaction_names?.length ? p.reaction_names.join(', ') : t('posts.like')}">
               <i class="bi bi-heart${p.reacted ? '-fill text-danger' : ''}"></i>
               ${p.reaction_count ? `<span class="post-action-count">${p.reaction_count}</span>` : ''}
             </button>

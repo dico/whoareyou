@@ -399,6 +399,26 @@ router.post('/momentgarden/discover-users', async (req, res, next) => {
   }
 });
 
+// POST /api/import/momentgarden/cleanup — remove old MG reactions/comments without contact_id (before re-sync)
+router.post('/momentgarden/cleanup', async (req, res, next) => {
+  try {
+    const deletedReactions = await db('post_reactions')
+      .where({ tenant_id: req.tenantId })
+      .whereNull('contact_id')
+      .del();
+    const deletedComments = await db('post_comments')
+      .where({ tenant_id: req.tenantId })
+      .whereNull('contact_id')
+      .where('body', 'like', '[%] %')
+      .del();
+    res.json({
+      message: `Cleaned up ${deletedReactions} reactions and ${deletedComments} comments without contact mapping. Ready for re-sync.`,
+      deleted_reactions: deletedReactions,
+      deleted_comments: deletedComments,
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/import/momentgarden/sync-one — sync loves + comments for ONE moment
 // Query param: ?dry_run=true → return data without saving
 router.post('/momentgarden/sync-one', async (req, res, next) => {
@@ -427,12 +447,25 @@ router.post('/momentgarden/sync-one', async (req, res, next) => {
         }
 
         if (!dryRun) {
-          const existing = await db('post_reactions')
-            .where({ post_id, user_id: req.user.id, emoji: '❤️' }).first();
-          if (!existing) {
-            await db('post_reactions').insert({
-              post_id, user_id: req.user.id, tenant_id: req.tenantId, emoji: '❤️',
-            }).catch(() => {});
+          // Create one reaction per unique MG user (mapped to contacts)
+          for (const love of data.loves) {
+            const nickname = love.nickname?.trim() || love.alias?.trim();
+            const contactUuid = nickname && user_map?.[nickname];
+            let contactId = null;
+            if (contactUuid) {
+              const contact = await db('contacts').where({ uuid: contactUuid }).first();
+              if (contact) contactId = contact.id;
+            }
+            // Check if this contact already reacted on this post
+            const existing = contactId
+              ? await db('post_reactions').where({ post_id, contact_id: contactId, emoji: '❤️' }).first()
+              : await db('post_reactions').where({ post_id, user_id: req.user.id, emoji: '❤️', contact_id: null }).first();
+            if (!existing) {
+              await db('post_reactions').insert({
+                post_id, user_id: contactId ? null : req.user.id, contact_id: contactId,
+                tenant_id: req.tenantId, emoji: '❤️',
+              }).catch(() => {});
+            }
           }
         }
       }
@@ -460,14 +493,24 @@ router.post('/momentgarden/sync-one', async (req, res, next) => {
           commentsData.push({ nickname, body, date });
 
           if (!dryRun) {
-            const commentBody = `[${nickname}] ${body}`;
+            // Find mapped contact for this commenter
+            const contactUuid = nickname && user_map?.[nickname];
+            let contactId = null;
+            if (contactUuid) {
+              const contact = await db('contacts').where({ uuid: contactUuid }).first();
+              if (contact) contactId = contact.id;
+            }
+
+            // Store comment — mapped contacts get clean body, unmapped keep [nickname] prefix
+            const commentBody = contactId ? body : `[${nickname}] ${body}`;
             const existing = await db('post_comments')
               .where({ post_id, tenant_id: req.tenantId })
-              .where('body', commentBody).first();
+              .where('body', 'like', `%${body}%`).first();
 
             if (!existing) {
               await db('post_comments').insert({
-                post_id, user_id: req.user.id, tenant_id: req.tenantId,
+                post_id, user_id: contactId ? null : req.user.id,
+                contact_id: contactId, tenant_id: req.tenantId,
                 body: commentBody,
                 created_at: date || new Date(),
                 updated_at: date || new Date(),

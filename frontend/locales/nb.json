@@ -643,7 +643,12 @@
     "batchSize": "Antall per kjøring",
     "resyncAll": "Re-synk alle (inkl. allerede synkede)",
     "momentsSynced": "synkronisert",
-    "remaining": "gjenstår"
+    "remaining": "gjenstår",
+    "cleanupTitle": "Rydd opp i gamle data",
+    "cleanupDesc": "Slett gamle likes og kommentarer som ble importert før brukerkobling var tilgjengelig (uten contact_id). Kjør dette før re-synk for å unngå duplikater.",
+    "cleanupBtn": "Slett ukoblede data",
+    "cleanupConfirm": "Dette sletter alle likes og kommentarer uten kontaktkobling. Er du sikker?",
+    "cleanupDone": "Slettet {reactions} likes og {comments} kommentarer uten kontaktkobling."
   },
   "portal": {
     "title": "Familieportal",

@@ -643,7 +643,12 @@
     "batchSize": "Batch size",
     "resyncAll": "Re-sync all (including already synced)",
     "momentsSynced": "synced",
-    "remaining": "remaining"
+    "remaining": "remaining",
+    "cleanupTitle": "Cleanup old data",
+    "cleanupDesc": "Remove old loves and comments that were imported before user mapping was available (no contact_id). Run this before re-syncing to avoid duplicates.",
+    "cleanupBtn": "Delete unmapped data",
+    "cleanupConfirm": "This will delete all loves and comments without a mapped contact. Are you sure?",
+    "cleanupDone": "Deleted {reactions} loves and {comments} comments without contact mapping."
   },
   "portal": {
     "title": "Family portal",
