@@ -132,6 +132,63 @@ export async function renderProfile() {
     </div>
   `;
 
+  // ── Sessions (must be before tab handler) ──
+  async function loadSessions() {
+    try {
+      const { sessions } = await api.get('/auth/sessions');
+      const list = document.getElementById('sessions-list');
+      if (!list) return;
+
+      if (!sessions.length) {
+        list.innerHTML = `<p class="text-muted small">${t('settings.noSessions')}</p>`;
+        return;
+      }
+
+      list.innerHTML = sessions.map(s => {
+        const icon = s.device_label?.toLowerCase().includes('mobile') ? 'phone' :
+                     s.device_label?.toLowerCase().includes('tablet') ? 'tablet' : 'laptop';
+        const timeAgo = formatTimeAgo(s.last_activity_at);
+        const countryFlag = s.country_code && s.country_code !== 'LOCAL'
+          ? `<img src="/img/flags/${s.country_code.toLowerCase()}.svg" alt="${s.country_code}" style="width:16px;height:12px;margin-right:4px;vertical-align:middle">`
+          : '';
+        return `
+          <div class="session-item ${s.is_current ? 'session-current' : ''}">
+            <div class="session-icon"><i class="bi bi-${icon}"></i></div>
+            <div class="session-info">
+              <div class="session-device">${s.device_label || t('settings.unknownDevice')}</div>
+              <div class="session-meta">${countryFlag}${s.ip_address || ''} · ${timeAgo}</div>
+            </div>
+            ${s.is_current
+              ? `<span class="badge bg-primary">${t('settings.thisDevice')}</span>`
+              : `<button class="btn btn-outline-danger btn-sm btn-revoke-session" data-uuid="${s.uuid}">${t('settings.revoke')}</button>`
+            }
+          </div>
+        `;
+      }).join('');
+
+      if (sessions.length > 1) {
+        document.getElementById('btn-revoke-all')?.classList.remove('d-none');
+      }
+
+      list.querySelectorAll('.btn-revoke-session').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await api.delete(`/auth/sessions/${btn.dataset.uuid}`);
+          loadSessions();
+        });
+      });
+    } catch {
+      const el = document.getElementById('sessions-list');
+      if (el) el.innerHTML = '';
+    }
+  }
+
+  document.getElementById('btn-revoke-all')?.addEventListener('click', async () => {
+    if (await confirmDialog(t('settings.revokeAllConfirm'), { title: t('settings.security'), confirmText: t('settings.revokeAllSessions') })) {
+      await api.delete('/auth/sessions');
+      loadSessions();
+    }
+  });
+
   // Tab switching
   document.getElementById('profile-tabs').addEventListener('click', (e) => {
     const tab = e.target.closest('.filter-tab');
@@ -430,61 +487,6 @@ export async function renderProfile() {
       el.innerHTML = '';
     }
   }
-
-  // ── Sessions ──
-  async function loadSessions() {
-    try {
-      const { sessions } = await api.get('/auth/sessions');
-      const list = document.getElementById('sessions-list');
-
-      if (!sessions.length) {
-        list.innerHTML = `<p class="text-muted small">${t('settings.noSessions')}</p>`;
-        return;
-      }
-
-      list.innerHTML = sessions.map(s => {
-        const icon = s.device_label?.toLowerCase().includes('mobile') ? 'phone' :
-                     s.device_label?.toLowerCase().includes('tablet') ? 'tablet' : 'laptop';
-        const timeAgo = formatTimeAgo(s.last_activity_at);
-        const countryFlag = s.country_code && s.country_code !== 'LOCAL'
-          ? `<img src="/img/flags/${s.country_code.toLowerCase()}.svg" alt="${s.country_code}" style="width:16px;height:12px;margin-right:4px;vertical-align:middle">`
-          : '';
-        return `
-          <div class="session-item ${s.is_current ? 'session-current' : ''}">
-            <div class="session-icon"><i class="bi bi-${icon}"></i></div>
-            <div class="session-info">
-              <div class="session-device">${s.device_label || t('settings.unknownDevice')}</div>
-              <div class="session-meta">${countryFlag}${s.ip_address || ''} · ${timeAgo}</div>
-            </div>
-            ${s.is_current
-              ? `<span class="badge bg-primary">${t('settings.thisDevice')}</span>`
-              : `<button class="btn btn-outline-danger btn-sm btn-revoke-session" data-uuid="${s.uuid}">${t('settings.revoke')}</button>`
-            }
-          </div>
-        `;
-      }).join('');
-
-      if (sessions.length > 1) {
-        document.getElementById('btn-revoke-all')?.classList.remove('d-none');
-      }
-
-      list.querySelectorAll('.btn-revoke-session').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          await api.delete(`/auth/sessions/${btn.dataset.uuid}`);
-          loadSessions();
-        });
-      });
-    } catch {
-      document.getElementById('sessions-list').innerHTML = '';
-    }
-  }
-
-  document.getElementById('btn-revoke-all')?.addEventListener('click', async () => {
-    if (await confirmDialog(t('settings.revokeAllConfirm'), { title: t('settings.security'), confirmText: t('settings.revokeAllSessions') })) {
-      await api.delete('/auth/sessions');
-      loadSessions();
-    }
-  });
 }
 
 function formatTimeAgo(dateStr) {
