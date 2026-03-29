@@ -1,3 +1,116 @@
+/* Contact photo gallery */
+.contact-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-xs);
+}
+
+.contact-gallery-item {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--color-bg);
+}
+
+.contact-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-fast);
+}
+
+.contact-gallery-item:hover img {
+  transform: scale(1.05);
+}
+
+.contact-gallery-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2px var(--space-xs);
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: 0.7rem;
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Gallery lightbox with sidebar */
+.gallery-lb-content {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  border: none;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  max-height: 85vh;
+}
+
+@media (max-width: 768px) {
+  .gallery-lb-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gallery-lb-image-area {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gallery-lb-image-area .photo-viewer {
+  position: relative;
+  text-align: center;
+  width: 100%;
+}
+
+.gallery-lb-image-area .photo-viewer img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+}
+
+.gallery-lb-sidebar {
+  background: var(--color-surface);
+  padding: var(--space-md);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-lb-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.gallery-lb-stats {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.gallery-lb-comments {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.gallery-lb-comment {
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.gallery-lb-comment:last-child {
+  border-bottom: none;
+}
+
 /* Profile layout */
 .profile-layout {
   display: grid;

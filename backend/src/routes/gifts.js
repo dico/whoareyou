@@ -59,6 +59,67 @@ router.get('/products', async (req, res, next) => {
   }
 });
 
+// GET /api/gifts/products/scrape — extract metadata from URL (MUST be before :uuid)
+router.get('/products/scrape', async (req, res, next) => {
+  try {
+    const { url } = req.query;
+    if (!url) throw new AppError('URL is required', 400);
+
+    const result = { url, title: '', image_url: '', price: null };
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' },
+      });
+      clearTimeout(timeout);
+
+      const html = await response.text();
+
+      // Extract og:title or <title>
+      const ogTitle = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i)?.[1]
+        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i)?.[1];
+      const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
+      result.title = ogTitle || titleTag || '';
+      result.title = result.title.replace(/\s+/g, ' ').trim();
+
+      // Detect bot-blocked pages and discard results
+      const blockedPatterns = /security checkpoint|access denied|captcha|just a moment|cloudflare|verify you are human/i;
+      if (blockedPatterns.test(result.title) || blockedPatterns.test(html.slice(0, 2000))) {
+        result.title = '';
+        result.blocked = true;
+      }
+
+      // Extract og:image
+      const ogImage = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1]
+        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1];
+      // Filter out logos/favicons
+      if (ogImage && !/apple-touch-icon|favicon|logo/i.test(ogImage)) {
+        result.image_url = ogImage;
+      }
+
+      // Extract price
+      const priceMatch = html.match(/<meta[^>]*property=["'](?:product:price:amount|og:price:amount)["'][^>]*content=["']([^"']+)["']/i)?.[1]
+        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["'](?:product:price:amount|og:price:amount)["']/i)?.[1];
+      if (priceMatch) result.price = parseFloat(priceMatch) || null;
+
+      // Extract description
+      const ogDesc = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1]
+        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:description["']/i)?.[1]
+        || html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1];
+      if (ogDesc) result.description = ogDesc.replace(/\s+/g, ' ').trim();
+    } catch {
+      // Scrape failed silently — return what we have
+    }
+
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/gifts/products/:uuid — product detail with history
 router.get('/products/:uuid', async (req, res, next) => {
   try {
@@ -114,7 +175,7 @@ router.get('/products/:uuid', async (req, res, next) => {
       .where({ 'gift_wishlists.tenant_id': req.tenantId })
       .join('contacts', 'gift_wishlists.contact_id', 'contacts.id')
       .select(
-        'gift_wishlist_items.title', 'gift_wishlist_items.is_fulfilled',
+        'gift_wishlist_items.title', 'gift_wishlist_items.notes', 'gift_wishlist_items.is_fulfilled',
         'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name'
       );
 
@@ -124,6 +185,7 @@ router.get('/products/:uuid', async (req, res, next) => {
         url: product.url, image_url: product.image_url,
         default_price: product.default_price, currency_code: product.currency_code,
       },
+      links: await db('gift_product_links').where({ product_id: product.id }).select('id', 'store_name', 'url', 'price'),
       orders,
       wishlist_items: wishlistItems,
     });
@@ -193,49 +255,75 @@ router.delete('/products/:uuid', async (req, res, next) => {
   }
 });
 
-// GET /api/gifts/products/scrape — extract metadata from URL
-router.get('/products/scrape', async (req, res, next) => {
+// POST /api/gifts/products/:uuid/image — upload product image (drag-and-drop)
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs/promises';
+import { processImage } from '../services/image.js';
+import { config } from '../config/index.js';
+
+const productUpload = multer({
+  dest: path.join(config.uploads.dir, 'temp'),
+  limits: { fileSize: config.uploads.maxFileSize },
+  fileFilter: (req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype)) cb(null, true);
+    else cb(new AppError('Only images allowed', 400));
+  },
+});
+
+router.post('/products/:uuid/image', productUpload.single('image'), async (req, res, next) => {
   try {
-    const { url } = req.query;
-    if (!url) throw new AppError('URL is required', 400);
+    if (!req.file) throw new AppError('No file uploaded', 400);
+    const product = await db('gift_products').where({ uuid: req.params.uuid, tenant_id: req.tenantId }).first();
+    if (!product) throw new AppError('Product not found', 404);
 
-    const result = { url, title: '', image_url: '', price: null };
+    const subDir = `products/${product.uuid}`;
+    const filename = `product_${Date.now()}`;
+    const { filePath } = await processImage(req.file.path, subDir, filename);
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhoareYou/1.0)' },
-      });
-      clearTimeout(timeout);
+    await db('gift_products').where({ id: product.id }).update({
+      image_url: `/uploads/${subDir}/${path.basename(filePath)}`,
+    });
 
-      const html = await response.text();
-
-      // Extract og:title or <title>
-      const ogTitle = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i)?.[1]
-        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i)?.[1];
-      const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
-      result.title = ogTitle || titleTag || '';
-      result.title = result.title.replace(/\s+/g, ' ').trim();
-
-      // Extract og:image
-      const ogImage = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1]
-        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1];
-      if (ogImage) result.image_url = ogImage;
-
-      // Extract price from product:price or og:price:amount
-      const priceMatch = html.match(/<meta[^>]*property=["'](?:product:price:amount|og:price:amount)["'][^>]*content=["']([^"']+)["']/i)?.[1]
-        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["'](?:product:price:amount|og:price:amount)["']/i)?.[1];
-      if (priceMatch) result.price = parseFloat(priceMatch) || null;
-    } catch {
-      // Scrape failed silently — return what we have
-    }
-
-    res.json(result);
+    res.json({ image_url: `/uploads/${subDir}/${path.basename(filePath)}` });
   } catch (err) {
     next(err);
+  } finally {
+    if (req.file) try { await fs.unlink(req.file.path); } catch { /* ignore */ }
   }
+});
+
+// GET /api/gifts/products/:uuid/links
+router.get('/products/:uuid/links', async (req, res, next) => {
+  try {
+    const product = await db('gift_products').where({ uuid: req.params.uuid, tenant_id: req.tenantId }).first();
+    if (!product) throw new AppError('Product not found', 404);
+    const links = await db('gift_product_links').where({ product_id: product.id }).select('id', 'store_name', 'url', 'price');
+    res.json({ links });
+  } catch (err) { next(err); }
+});
+
+// POST /api/gifts/products/:uuid/links
+router.post('/products/:uuid/links', async (req, res, next) => {
+  try {
+    const product = await db('gift_products').where({ uuid: req.params.uuid, tenant_id: req.tenantId }).first();
+    if (!product) throw new AppError('Product not found', 404);
+    const { store_name, url, price } = req.body;
+    if (!url?.trim()) throw new AppError('URL is required', 400);
+    const [id] = await db('gift_product_links').insert({
+      product_id: product.id, store_name: store_name?.trim() || null,
+      url: url.trim(), price: price || null,
+    });
+    res.status(201).json({ id });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/gifts/products/links/:id
+router.delete('/products/links/:id', async (req, res, next) => {
+  try {
+    await db('gift_product_links').where({ id: req.params.id }).del();
+    res.json({ message: 'Link deleted' });
+  } catch (err) { next(err); }
 });
 
 // ════════════════════════════════════════════

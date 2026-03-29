@@ -96,6 +96,12 @@ Applikasjonen er funksjonell og i daglig bruk. Utviklingen foregår iterativt me
 - Slektstre forbedringer — pan/zoom (drag+scroll+pinch), dybde-kontroll (1-6), kategorifilter (familie/sosialt/jobb), visningsmodus (hele familien/direkte linje/forfedre/etterkommere), relasjonslabels, auto-fit, 90vw×85vh modal, persistent modal med inline re-render
 - Navbar-søk husker siste søk — fokus viser forrige resultater uten ny forespørsel
 - Dokumentvedlegg i poster — PDF, Word, Excel, TXT, CSV i post-media. Bilder via sharp, dokumenter som-de-er. PDF/TXT preview i iframe-modal, andre som nedlasting. Drag-and-drop med dokumentstøtte
+- Video i poster — MP4, WebM, MOV, AVI med `<video>`-tag, 100MB filgrense, drag-and-drop
+- Kommentarer på poster — CRUD med avatar, slett egne
+- Likes/reaksjoner — hjerte-toggle med telling, emoji-basert backend
+- MomentGarden-import — ZIP-upload med duplikat-deteksjon, forhåndsvisning, progress bar. Synk loves/kommentarer via MG API (cookie-basert) med bruker-matching og batch-kontroll. Integrasjonsoversikt → MomentGarden-underside
+- Kjæledyr-relasjonstype (eier/kjæledyr)
+- Familieportal planlagt og dokumentert (docs/familieportal.md)
 
 ## MVP-definisjon
 

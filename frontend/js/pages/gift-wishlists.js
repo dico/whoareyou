@@ -4,6 +4,7 @@ import { t } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { giftSubNav } from './gifts.js';
 import { createProductPicker } from '../components/product-picker.js';
+import { showProductDetailModal } from '../components/product-detail-modal.js';
 
 export async function renderGiftWishlists() {
   const content = document.getElementById('app-content');
@@ -14,6 +15,18 @@ export async function renderGiftWishlists() {
       <div id="wishlists-content"><div class="loading">${t('app.loading')}</div></div>
     </div>
   `;
+
+  // Reload when a product is edited from detail modal
+  const handler = () => loadWishlists();
+  document.addEventListener('product-updated', handler);
+  // Clean up on navigation (page re-render)
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById('wishlists-content')) {
+      document.removeEventListener('product-updated', handler);
+      observer.disconnect();
+    }
+  });
+  observer.observe(content, { childList: true });
 
   await loadWishlists();
 }
@@ -136,10 +149,10 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
     }
 
     container.innerHTML = items.map(item => `
-      <div class="gift-card ${item.is_fulfilled ? 'gift-card-fulfilled' : ''}" data-item-id="${item.id}">
+      <div class="gift-card ${item.is_fulfilled ? 'gift-card-fulfilled' : ''} ${item.product_uuid ? 'gift-card-clickable' : ''}" data-item-id="${item.id}" data-product-uuid="${item.product_uuid || ''}">
         <div class="gift-card-image">
           ${item.product_image_url
-            ? `<img src="${esc(item.product_image_url)}" alt="">`
+            ? `<img src="${item.product_image_url.startsWith('/uploads/') ? authUrl(item.product_image_url) : esc(item.product_image_url)}" alt="">`
             : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
           }
         </div>
@@ -148,8 +161,7 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
           ${item.notes ? `<div class="gift-card-sub text-muted small">${esc(item.notes)}</div>` : ''}
         </div>
         <div class="gift-card-end">
-          ${item.default_price ? `<span class="gift-card-price">${item.default_price} kr</span>` : ''}
-          ${item.product_url ? `<a href="${esc(item.product_url)}" target="_blank" rel="noopener" class="btn btn-link btn-sm"><i class="bi bi-box-arrow-up-right"></i></a>` : ''}
+          ${item.default_price ? `<span class="gift-card-price">${Math.round(item.default_price)} kr</span>` : ''}
         </div>
         <div class="dropdown">
           <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
@@ -182,6 +194,15 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
         e.preventDefault();
         await api.delete(`/gifts/wishlists/${btn.dataset.wl}/items/${btn.dataset.id}`);
         await loadWishlistItems(wishlistUuid, contactUuid);
+      });
+    });
+
+    // Click on card opens product detail
+    container.querySelectorAll('.gift-card-clickable').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.dropdown') || e.target.closest('a')) return;
+        const productUuid = card.dataset.productUuid;
+        if (productUuid) showProductDetailModal(productUuid);
       });
     });
   } catch (err) {

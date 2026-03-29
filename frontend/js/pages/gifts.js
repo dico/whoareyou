@@ -3,8 +3,10 @@ import { navigate } from '../app.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { authUrl } from '../utils/auth-url.js';
 
 const EVENT_TYPES = ['christmas', 'birthday', 'wedding', 'other'];
+const EVENT_ICONS = { christmas: 'tree', birthday: 'balloon', wedding: 'heart', other: 'calendar-event' };
 
 function giftSubNav(active) {
   return `
@@ -26,8 +28,8 @@ export async function renderGifts() {
       ${giftSubNav('dashboard')}
       <div class="gift-dashboard">
         <div class="gift-dashboard-section glass-card">
-          <h4>${t('gifts.upcomingEvents')}</h4>
-          <div id="upcoming-events"><div class="loading">${t('app.loading')}</div></div>
+          <h4>${t('gifts.latestEvents')}</h4>
+          <div id="latest-events"><div class="loading">${t('app.loading')}</div></div>
         </div>
         <div class="gift-dashboard-section glass-card">
           <h4>${t('gifts.recentGifts')}</h4>
@@ -37,48 +39,70 @@ export async function renderGifts() {
     </div>
   `;
 
-  // Load upcoming events and recent gifts in parallel
   const [eventsData, giftsData] = await Promise.all([
     api.get('/gifts/events').catch(() => ({ events: [] })),
     api.get('/gifts/orders?limit=10').catch(() => ({ orders: [] })),
   ]);
 
-  // Upcoming: events with date >= today, sorted ascending
-  const today = new Date().toISOString().split('T')[0];
-  const upcoming = eventsData.events
-    .filter(e => e.event_date && e.event_date >= today)
-    .sort((a, b) => a.event_date.localeCompare(b.event_date))
-    .slice(0, 5);
+  // Latest events (most recent first)
+  const evEl = document.getElementById('latest-events');
+  if (!evEl) return;
 
-  const upEl = document.getElementById('upcoming-events');
-  if (!upEl) return;
-
-  if (upcoming.length) {
-    upEl.innerHTML = upcoming.map(e => `
+  const latestEvents = eventsData.events.slice(0, 5);
+  if (latestEvents.length) {
+    evEl.innerHTML = latestEvents.map(e => `
       <a href="/gifts/events/${e.uuid}" data-link class="gift-event-row">
-        <span class="gift-event-type-badge gift-type-${e.event_type}">${t('gifts.types.' + e.event_type)}</span>
-        <span class="gift-event-name">${escapeHtml(e.name)}</span>
-        <span class="text-muted small">${formatDate(e.event_date)}</span>
-        <span class="text-muted small">${t('gifts.giftsCount', { count: e.gift_count || 0 })}</span>
+        <div class="gift-event-row-icon gift-event-icon-${e.event_type}">
+          <i class="bi bi-${EVENT_ICONS[e.event_type] || 'calendar-event'}"></i>
+        </div>
+        <div class="gift-event-row-info">
+          <span class="gift-event-name">${escapeHtml(e.name)}</span>
+          <span class="text-muted small">${e.event_date ? formatDate(e.event_date) : ''} · ${t('gifts.giftsCount', { count: e.gift_count || 0 })}</span>
+        </div>
       </a>
     `).join('');
   } else {
-    upEl.innerHTML = `<p class="text-muted small">${t('gifts.noEvents')}</p>`;
+    evEl.innerHTML = `<p class="text-muted small">${t('gifts.noEvents')}</p>`;
   }
 
-  // Recent gifts
+  // Recent gifts with product image
   const recentEl = document.getElementById('recent-gifts');
   if (!recentEl) return;
 
   if (giftsData.orders.length) {
-    recentEl.innerHTML = giftsData.orders.map(g => `
-      <div class="gift-recent-row">
-        <span class="gift-status-dot gift-status-${g.status}"></span>
-        <span class="gift-recent-title">${escapeHtml(g.title)}</span>
-        ${g.event_name ? `<span class="text-muted small">${escapeHtml(g.event_name)}</span>` : ''}
-        ${g.price ? `<span class="text-muted small">${g.price} kr</span>` : ''}
-      </div>
-    `).join('');
+    recentEl.innerHTML = giftsData.orders.map(g => {
+      const imgSrc = g.product_image_url
+        ? (g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : escapeHtml(g.product_image_url))
+        : '';
+      const meta = [
+        g.event_name || '',
+        g.recipients?.map(r => r.first_name).join(', ') || '',
+      ].filter(Boolean).join(' · ');
+
+      return `
+        <div class="gift-recent-row" ${g.product_uuid ? `data-product-uuid="${g.product_uuid}" style="cursor:pointer"` : ''}>
+          <div class="gift-recent-avatar">
+            ${imgSrc
+              ? `<img src="${imgSrc}" alt="">`
+              : `<span><i class="bi bi-gift"></i></span>`
+            }
+          </div>
+          <div class="gift-recent-info">
+            <span class="gift-recent-title">${escapeHtml(g.title)}</span>
+            ${meta ? `<span class="text-muted small">${meta}</span>` : ''}
+          </div>
+          ${g.price ? `<span class="text-muted small">${Math.round(g.price)} kr</span>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    // Click to open product detail
+    recentEl.querySelectorAll('[data-product-uuid]').forEach(row => {
+      row.addEventListener('click', async () => {
+        const { showProductDetailModal } = await import('../components/product-detail-modal.js');
+        showProductDetailModal(row.dataset.productUuid);
+      });
+    });
   } else {
     recentEl.innerHTML = `<p class="text-muted small">${t('gifts.noGifts')}</p>`;
   }
@@ -137,13 +161,14 @@ async function loadEventsList() {
           ${evts.map(e => `
             <a href="/gifts/events/${e.uuid}" data-link class="gift-event-card glass-card">
               <div class="gift-event-card-main">
-                <span class="gift-event-type-badge gift-type-${e.event_type}">${t('gifts.types.' + e.event_type)}</span>
                 <strong>${escapeHtml(e.name)}</strong>
-                ${e.honoree_first_name ? `<span class="text-muted small">— ${escapeHtml(e.honoree_first_name)} ${escapeHtml(e.honoree_last_name || '')}</span>` : ''}
               </div>
-              <div class="gift-event-card-meta">
-                ${e.event_date ? `<span class="text-muted small">${formatDate(e.event_date)}</span>` : ''}
-                <span class="text-muted small">${t('gifts.giftsCount', { count: e.gift_count || 0 })}</span>
+              <div class="gift-event-card-meta text-muted small">
+                ${[
+                  e.event_date ? formatDate(e.event_date) : '',
+                  e.honoree_first_name ? `${escapeHtml(e.honoree_first_name)} ${escapeHtml(e.honoree_last_name || '')}` : '',
+                  t('gifts.giftsCount', { count: e.gift_count || 0 }),
+                ].filter(Boolean).join(' · ')}
               </div>
             </a>
           `).join('')}

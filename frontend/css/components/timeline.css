@@ -368,6 +368,34 @@
   border-radius: var(--radius-sm);
 }
 
+/* Video play badge on preview thumbnail */
+.media-preview-video-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  padding: 1px 4px;
+  line-height: 1;
+}
+
+/* Videos in posts */
+.post-videos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.post-video-item video {
+  width: 100%;
+  max-height: 500px;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
 .media-preview-doc {
   display: flex;
   align-items: center;
@@ -429,6 +457,113 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Post actions bar (like, comment) */
+.post-actions-bar {
+  display: flex;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-sm);
+}
+
+.post-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.post-action-btn:hover {
+  background: rgba(0,0,0,0.04);
+  color: var(--color-text);
+}
+
+.post-action-count {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+/* Comments section */
+.post-comments-section {
+  padding-top: var(--space-sm);
+}
+
+.post-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.post-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.post-comment-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.post-comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-comment-content {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  flex: 1;
+}
+
+.post-comment-content strong {
+  margin-right: var(--space-xs);
+}
+
+.post-comment-delete {
+  padding: 0;
+  color: var(--color-text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.post-comment:hover .post-comment-delete {
+  opacity: 1;
+}
+
+.post-comment-form {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.post-comment-form input {
+  flex: 1;
+}
+
+/* MomentGarden user mapping */
+.mg-user-search-wrap { position: relative; }
 
 /* Life event card in timeline */
 .life-event-card { border-left: 3px solid var(--color-primary); }

@@ -82,7 +82,7 @@ function renderIdeaCard(g) {
     <div class="gift-card gift-card-idea" data-uuid="${g.uuid}">
       <div class="gift-card-image">
         ${g.product_image_url
-          ? `<img src="${esc(g.product_image_url)}" alt="">`
+          ? `<img src="${g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : esc(g.product_image_url)}" alt="">`
           : `<div class="gift-card-placeholder"><i class="bi bi-lightbulb"></i></div>`
         }
       </div>
@@ -94,12 +94,13 @@ function renderIdeaCard(g) {
         </div>
       </div>
       <div class="gift-card-end">
-        ${g.price ? `<span class="gift-card-price">${g.price} kr</span>` : ''}
+        ${g.price ? `<span class="gift-card-price">${Math.round(g.price)} kr</span>` : ''}
         <span class="badge bg-${statusColor}">${t('gifts.statuses.' + g.status)}</span>
       </div>
       <div class="dropdown">
         <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
         <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+          <li><a class="dropdown-item idea-edit" href="#" data-uuid="${g.uuid}" data-title="${esc(g.title)}" data-price="${g.price || ''}" data-notes="${esc(g.notes || '')}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
           <li><a class="dropdown-item idea-assign-event" href="#" data-uuid="${g.uuid}"><i class="bi bi-calendar-event me-2"></i>${g.event_uuid ? t('gifts.reassignEvent') : t('gifts.assignToEvent')}</a></li>
           ${g.event_uuid ? `<li><a class="dropdown-item idea-unassign-event" href="#" data-uuid="${g.uuid}"><i class="bi bi-x-circle me-2"></i>${t('gifts.removeFromEvent')}</a></li>` : ''}
           <li><hr class="dropdown-divider"></li>
@@ -113,6 +114,60 @@ function renderIdeaCard(g) {
 function attachPlanningHandlers() {
   const el = document.getElementById('planning-list');
   if (!el) return;
+
+  // Edit gift
+  el.querySelectorAll('.idea-edit').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const mid = 'edit-gift-' + Date.now();
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="${mid}" tabindex="-1">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">${t('gifts.editGift')}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <form id="${mid}-form">
+                <div class="modal-body">
+                  <div class="mb-3">
+                    <label class="form-label">${t('gifts.gift')}</label>
+                    <input type="text" class="form-control form-control-sm" id="${mid}-title" value="${btn.dataset.title}" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">${t('gifts.price')}</label>
+                    <input type="number" class="form-control form-control-sm" id="${mid}-price" value="${btn.dataset.price}" step="1">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">${t('gifts.notes')}</label>
+                    <input type="text" class="form-control form-control-sm" id="${mid}-notes" value="${btn.dataset.notes}">
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+                  <button type="submit" class="btn btn-primary btn-sm">${t('common.save')}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `);
+      const modalEl = document.getElementById(mid);
+      const modal = new bootstrap.Modal(modalEl);
+      document.getElementById(`${mid}-form`).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        await api.put(`/gifts/orders/${btn.dataset.uuid}`, {
+          title: document.getElementById(`${mid}-title`).value.trim(),
+          price: parseFloat(document.getElementById(`${mid}-price`).value) || null,
+          notes: document.getElementById(`${mid}-notes`).value.trim() || null,
+        });
+        modal.hide();
+        await loadPlanningList();
+      });
+      modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+      modal.show();
+    });
+  });
 
   // Assign to event
   el.querySelectorAll('.idea-assign-event').forEach(btn => {
@@ -220,7 +275,7 @@ function showIdeaModal() {
               </div>
               <div class="mb-3">
                 <label class="form-label">${t('gifts.price')}</label>
-                <input type="number" class="form-control form-control-sm" id="${mid}-price" step="0.01">
+                <input type="number" class="form-control form-control-sm" id="${mid}-price" step="1">
               </div>
               <div class="mb-3">
                 <label class="form-label">${t('gifts.notes')}</label>
@@ -299,17 +354,17 @@ function renderChips(containerId, contacts) {
 
 function groupHeader(contacts, count) {
   if (!contacts?.length) return '';
-  const primary = contacts[0];
-  const extra = contacts.slice(1).map(c => `${esc(c.first_name)} ${esc(c.last_name || '')}`.trim()).join(', ');
+  const links = contacts.map(c => `
+    <a href="/contacts/${c.uuid}" data-link class="gift-group-header-link">
+      <span class="gift-group-avatar">
+        ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
+      </span>
+      <span>${esc(c.first_name)} ${esc(c.last_name || '')}</span>
+    </a>
+  `).join('');
   return `
     <div class="gift-group-header">
-      <a href="/contacts/${primary.uuid}" data-link class="gift-group-header-link">
-        <span class="gift-group-avatar">
-          ${primary.avatar ? `<img src="${authUrl(primary.avatar)}" alt="">` : `<span>${(primary.first_name?.[0] || '') + (primary.last_name?.[0] || '')}</span>`}
-        </span>
-        <span>${esc(primary.first_name)} ${esc(primary.last_name || '')}</span>
-      </a>
-      ${extra ? `<span class="text-muted small">, ${extra}</span>` : ''}
+      ${links}
       ${count ? `<span class="text-muted small ms-1">(${count})</span>` : ''}
     </div>
   `;

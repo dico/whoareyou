@@ -10,11 +10,12 @@ import { config } from '../config/index.js';
 const router = Router();
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
 const DOCUMENT_TYPES = ['application/pdf', 'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain', 'text/csv'];
-const ALL_MEDIA_TYPES = [...IMAGE_TYPES, ...DOCUMENT_TYPES];
+const ALL_MEDIA_TYPES = [...IMAGE_TYPES, ...VIDEO_TYPES, ...DOCUMENT_TYPES];
 
 // Image-only upload (for contact photos)
 const upload = multer({
@@ -163,6 +164,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, re
       const file = req.files[i];
       const timestamp = Date.now();
       const isImage = IMAGE_TYPES.includes(file.mimetype);
+      const isVideo = VIDEO_TYPES.includes(file.mimetype);
 
       let filePath, thumbnailPath, fileType;
 
@@ -174,11 +176,12 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, re
         thumbnailPath = processed.thumbnailPath;
         fileType = 'image/webp';
       } else {
-        // Document — store as-is with original extension
+        // Video or document — store as-is with original extension
         const ext = path.extname(file.originalname) || '.bin';
+        const prefix = isVideo ? 'video' : 'doc';
         const outDir = path.join(config.uploads.dir, 'posts', post.uuid);
         await fs.mkdir(outDir, { recursive: true });
-        const destName = `doc_${timestamp}_${i}${ext}`;
+        const destName = `${prefix}_${timestamp}_${i}${ext}`;
         await fs.rename(file.path, path.join(outDir, destName));
         filePath = `/uploads/posts/${post.uuid}/${destName}`;
         thumbnailPath = null;

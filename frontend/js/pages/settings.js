@@ -43,6 +43,11 @@ export async function renderSettings() {
           <div class="settings-card-label">${t('relationships.suggestions')}</div>
           <div class="settings-card-desc">${t('settings.relationshipsCardDesc')}</div>
         </a>
+        <a href="/admin/integrations" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(0,199,190,0.1);color:#00C7BE"><i class="bi bi-cloud-arrow-down"></i></div>
+          <div class="settings-card-label">${t('settings.integrations')}</div>
+          <div class="settings-card-desc">${t('settings.integrationsDesc')}</div>
+        </a>
         ${state.user?.is_system_admin ? `
         <a href="/admin/system" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(88,86,214,0.1);color:#5856D6"><i class="bi bi-buildings"></i></div>

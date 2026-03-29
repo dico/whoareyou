@@ -96,7 +96,7 @@ export async function renderContactDetail(uuid) {
                   <div class="post-compose-actions">
                     <label class="post-media-btn" title="${t('posts.addMedia')}">
                       <i class="bi bi-image"></i>
-                      <input type="file" id="quick-post-media-input" multiple accept="image/*" hidden>
+                      <input type="file" id="quick-post-media-input" multiple accept="image/*,video/*" hidden>
                     </label>
                     <label class="post-media-btn" title="${t('posts.addDocument')}">
                       <i class="bi bi-paperclip"></i>
@@ -108,10 +108,19 @@ export async function renderContactDetail(uuid) {
               </form>
             </div>
 
+            <!-- View tabs -->
+            <div class="filter-tabs mb-3" id="profile-view-tabs">
+              <button class="filter-tab active" data-view="posts"><i class="bi bi-journal-text me-1"></i>${t('posts.title')}</button>
+              <button class="filter-tab" data-view="gallery"><i class="bi bi-grid-3x3-gap me-1"></i>${t('posts.gallery')}</button>
+            </div>
+
             <!-- Timeline -->
             <div id="contact-posts" class="timeline">
               <div class="loading">${t('posts.loadingPosts')}</div>
             </div>
+
+            <!-- Photo gallery (hidden by default) -->
+            <div id="contact-gallery" class="d-none"></div>
           </div>
 
           <!-- Sidebar -->
@@ -829,6 +838,25 @@ export async function renderContactDetail(uuid) {
     const reloadPosts = () => renderPostList('contact-posts', uuid, reloadPosts);
     reloadPosts();
 
+    // Profile view tabs (posts / gallery)
+    let galleryLoaded = false;
+    document.getElementById('profile-view-tabs').addEventListener('click', async (e) => {
+      const tab = e.target.closest('.filter-tab');
+      if (!tab) return;
+      document.querySelectorAll('#profile-view-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const view = tab.dataset.view;
+      document.getElementById('contact-posts').classList.toggle('d-none', view !== 'posts');
+      document.querySelector('.post-compose-inline')?.classList.toggle('d-none', view !== 'posts');
+      document.getElementById('contact-gallery').classList.toggle('d-none', view !== 'gallery');
+
+      if (view === 'gallery' && !galleryLoaded) {
+        galleryLoaded = true;
+        await loadContactGallery(uuid);
+      }
+    });
+
     // Quick post visibility pill toggle
     document.getElementById('quick-post-visibility-btn').addEventListener('click', (e) => {
       const pill = e.currentTarget;
@@ -842,7 +870,7 @@ export async function renderContactDetail(uuid) {
     let quickPostMedia = [];
     document.getElementById('quick-post-media-input')?.addEventListener('change', (e) => {
       for (const file of e.target.files) {
-        if (file.type.startsWith('image/')) quickPostMedia.push(file);
+        if (file.type.startsWith('image/') || file.type.startsWith('video/')) quickPostMedia.push(file);
       }
       renderQuickMediaPreview();
       e.target.value = '';
@@ -875,6 +903,13 @@ export async function renderContactDetail(uuid) {
         if (f.type.startsWith('image/')) {
           return `<div class="media-preview-item">
             <img src="${URL.createObjectURL(f)}" alt="">
+            <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+          </div>`;
+        }
+        if (f.type.startsWith('video/')) {
+          return `<div class="media-preview-item">
+            <video src="${URL.createObjectURL(f)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video>
+            <div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div>
             <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
           </div>`;
         }
@@ -930,6 +965,146 @@ export async function renderContactDetail(uuid) {
   } catch (err) {
     content.innerHTML = `<div class="page-container"><div class="alert alert-danger">${err.message}</div></div>`;
   }
+}
+
+async function loadContactGallery(contactUuid) {
+  const el = document.getElementById('contact-gallery');
+  if (!el) return;
+
+  el.innerHTML = `<div class="loading">${t('app.loading')}</div>`;
+
+  try {
+    const { images } = await api.get(`/posts/gallery?contact=${contactUuid}`);
+
+    if (!images.length) {
+      el.innerHTML = `<div class="empty-state"><i class="bi bi-image"></i><p>${t('posts.noPhotos')}</p></div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="contact-gallery-grid">
+        ${images.map((img, i) => `
+          <div class="contact-gallery-item" data-index="${i}">
+            <img src="${authUrl(img.thumbnail_path || img.file_path)}" alt="" loading="lazy">
+            ${img.reaction_count || img.comment_count ? `
+              <div class="contact-gallery-meta">
+                ${img.reaction_count ? `<span><i class="bi bi-heart-fill"></i> ${img.reaction_count}</span>` : ''}
+                ${img.comment_count ? `<span><i class="bi bi-chat-fill"></i> ${img.comment_count}</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Lightbox — navigate across ALL images for this contact
+    el.querySelectorAll('.contact-gallery-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.index);
+        showGalleryLightbox(images, idx, contactUuid);
+      });
+    });
+  } catch (err) {
+    el.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+  }
+}
+
+function showGalleryLightbox(images, startIndex, contactUuid) {
+  let current = startIndex;
+  let commentDebounce = null;
+  const mid = 'gallery-lb-' + Date.now();
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content gallery-lb-content">
+          <div class="gallery-lb-image-area">
+            <div class="photo-viewer" id="${mid}-viewer"></div>
+          </div>
+          <div class="gallery-lb-sidebar" id="${mid}-sidebar"></div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+
+  async function update() {
+    const img = images[current];
+
+    // Image area
+    document.getElementById(`${mid}-viewer`).innerHTML = `
+      <img src="${authUrl(img.file_path)}" alt="">
+      ${images.length > 1 ? `
+        <button type="button" class="photo-viewer-nav photo-viewer-prev" id="${mid}-prev"><i class="bi bi-chevron-left"></i></button>
+        <button type="button" class="photo-viewer-nav photo-viewer-next" id="${mid}-next"><i class="bi bi-chevron-right"></i></button>
+      ` : ''}
+    `;
+
+    // Sidebar
+    const postDate = img.post_date ? formatDate(img.post_date) : '';
+    const sidebar = document.getElementById(`${mid}-sidebar`);
+    sidebar.innerHTML = `
+      <div class="gallery-lb-sidebar-header">
+        <span class="small">${current + 1} / ${images.length}</span>
+        ${postDate ? `<span class="text-muted small">${postDate}</span>` : ''}
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      ${img.post_body ? `<p class="small mb-3">${escapeHtml(img.post_body)}</p>` : ''}
+      <div class="gallery-lb-stats mb-3">
+        ${img.reaction_count ? `<span class="small"><i class="bi bi-heart-fill text-danger"></i> ${img.reaction_count}</span>` : ''}
+        ${img.comment_count ? `<span class="small"><i class="bi bi-chat-fill"></i> ${img.comment_count}</span>` : ''}
+      </div>
+      <div id="${mid}-comments" class="gallery-lb-comments">
+        <div class="loading small">${t('app.loading')}</div>
+      </div>
+      ${img.post_uuid ? `<a href="/contacts/${contactUuid}?post=${img.post_uuid}" data-link class="subtle-link small d-block mt-2" data-bs-dismiss="modal"><i class="bi bi-journal-text me-1"></i>${t('posts.viewPost')}</a>` : ''}
+    `;
+
+    attachNav();
+
+    // Load comments with debounce (avoid rate-limit when browsing fast)
+    clearTimeout(commentDebounce);
+    const commentsEl = document.getElementById(`${mid}-comments`);
+    if (img.comment_count && img.post_uuid) {
+      commentDebounce = setTimeout(async () => {
+        try {
+          const { comments } = await api.get(`/posts/${img.post_uuid}/comments`);
+          const el = document.getElementById(`${mid}-comments`);
+          if (el) {
+            el.innerHTML = comments.length ? comments.map(c => `
+              <div class="gallery-lb-comment">
+                <strong class="small">${escapeHtml(c.user?.first_name || '')} ${escapeHtml(c.user?.last_name || '')}</strong>
+                <span class="small">${escapeHtml(c.body)}</span>
+              </div>
+            `).join('') : '';
+          }
+        } catch { /* ignore */ }
+      }, 500);
+    } else if (commentsEl) {
+      commentsEl.innerHTML = '';
+    }
+  }
+
+  function attachNav() {
+    document.getElementById(`${mid}-prev`)?.addEventListener('click', () => { current = (current - 1 + images.length) % images.length; update(); });
+    document.getElementById(`${mid}-next`)?.addEventListener('click', () => { current = (current + 1) % images.length; update(); });
+  }
+
+  const keyHandler = (e) => {
+    if (e.key === 'ArrowLeft') { current = (current - 1 + images.length) % images.length; update(); }
+    if (e.key === 'ArrowRight') { current = (current + 1) % images.length; update(); }
+  };
+  document.addEventListener('keydown', keyHandler);
+
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    document.removeEventListener('keydown', keyHandler);
+    modalEl.remove();
+  }, { once: true });
+
+  update();
+  modal.show();
 }
 
 function renderEditMode(contact) {

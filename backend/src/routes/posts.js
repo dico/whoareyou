@@ -53,7 +53,7 @@ router.get('/', async (req, res, next) => {
     // Fetch tagged contacts, media, and profile contacts
     const postIds = posts.map((p) => p.id);
 
-    const [taggedContacts, media, profileContacts] = postIds.length ? await Promise.all([
+    const [taggedContacts, media, profileContacts, commentCounts, reactions] = postIds.length ? await Promise.all([
       db('post_contacts')
         .join('contacts', 'post_contacts.contact_id', 'contacts.id')
         .whereIn('post_contacts.post_id', postIds)
@@ -83,7 +83,14 @@ router.get('/', async (req, res, next) => {
               return map;
             })
         : Promise.resolve(new Map()),
-    ]) : [[], [], new Map()];
+      db('post_comments')
+        .whereIn('post_id', postIds)
+        .groupBy('post_id')
+        .select('post_id', db.raw('count(*) as count')),
+      db('post_reactions')
+        .whereIn('post_id', postIds)
+        .select('post_id', 'emoji', 'user_id'),
+    ]) : [[], [], new Map(), [], []];
 
     // Group by post
     const contactsByPost = {};
@@ -109,6 +116,16 @@ router.get('/', async (req, res, next) => {
       });
     }
 
+    const commentCountByPost = {};
+    for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
+
+    const reactionsByPost = {};
+    for (const r of reactions) {
+      if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false };
+      reactionsByPost[r.post_id].count++;
+      if (r.user_id === req.user.id) reactionsByPost[r.post_id].reacted = true;
+    }
+
     const result = posts.map((p) => {
       const profileContact = p.contact_id ? profileContacts.get(p.contact_id) : null;
       return {
@@ -127,6 +144,9 @@ router.get('/', async (req, res, next) => {
         // Tagged contacts (for activity posts)
         contacts: contactsByPost[p.id] || [],
         media: mediaByPost[p.id] || [],
+        comment_count: commentCountByPost[p.id] || 0,
+        reaction_count: reactionsByPost[p.id]?.count || 0,
+        reacted: reactionsByPost[p.id]?.reacted || false,
       };
     });
 
@@ -207,6 +227,48 @@ router.get('/', async (req, res, next) => {
         pages: Math.ceil(count / limit),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/posts/gallery — all images for a contact (for photo gallery)
+router.get('/gallery', async (req, res, next) => {
+  try {
+    const { contact } = req.query;
+    if (!contact) throw new AppError('Contact UUID required', 400);
+
+    const contactRow = await db('contacts').where({ uuid: contact, tenant_id: req.tenantId }).first();
+    if (!contactRow) throw new AppError('Contact not found', 404);
+
+    // Get all post IDs for this contact (about + tagged)
+    const postIds = await db('posts')
+      .where('posts.tenant_id', req.tenantId)
+      .whereNull('posts.deleted_at')
+      .where(function () {
+        this.where('posts.visibility', 'shared').orWhere('posts.created_by', req.user.id);
+      })
+      .where(function () {
+        this.where('posts.contact_id', contactRow.id)
+          .orWhereIn('posts.id', db('post_contacts').where('contact_id', contactRow.id).select('post_id'));
+      })
+      .select('posts.id');
+
+    // Get all images from those posts
+    const media = await db('post_media')
+      .whereIn('post_id', postIds.map(p => p.id))
+      .where('file_type', 'like', 'image/%')
+      .join('posts', 'post_media.post_id', 'posts.id')
+      .select(
+        'post_media.file_path', 'post_media.thumbnail_path',
+        'posts.uuid as post_uuid', 'posts.body as post_body', 'posts.post_date',
+      )
+      .select(db.raw('(SELECT COUNT(*) FROM post_reactions WHERE post_reactions.post_id = posts.id) as reaction_count'))
+      .select(db.raw('(SELECT COUNT(*) FROM post_comments WHERE post_comments.post_id = posts.id) as comment_count'))
+      .orderBy('posts.post_date', 'desc')
+      .orderBy('post_media.sort_order');
+
+    res.json({ images: media });
   } catch (err) {
     next(err);
   }
@@ -393,5 +455,148 @@ async function getPostWithDetails(postId, tenantId) {
     media,
   };
 }
+
+// ── Comments ──
+
+// GET /api/posts/:uuid/comments
+router.get('/:uuid/comments', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const comments = await db('post_comments')
+      .join('users', 'post_comments.user_id', 'users.id')
+      .where({ 'post_comments.post_id': post.id })
+      .select(
+        'post_comments.id', 'post_comments.body', 'post_comments.created_at',
+        'users.uuid as user_uuid', 'users.first_name', 'users.last_name',
+        'users.linked_contact_id'
+      )
+      .orderBy('post_comments.created_at', 'asc');
+
+    // Get avatars for users with linked contacts
+    const linkedIds = comments.filter(c => c.linked_contact_id).map(c => c.linked_contact_id);
+    const avatarMap = new Map();
+    if (linkedIds.length) {
+      const photos = await db('contact_photos').whereIn('contact_id', linkedIds).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) avatarMap.set(p.contact_id, p.thumbnail_path);
+    }
+
+    res.json({
+      comments: comments.map(c => ({
+        id: c.id,
+        body: c.body,
+        created_at: c.created_at,
+        user: {
+          uuid: c.user_uuid,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          avatar: avatarMap.get(c.linked_contact_id) || null,
+        },
+        is_own: c.user_uuid === req.user.uuid,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/posts/:uuid/comments
+router.post('/:uuid/comments', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    if (!req.body.body?.trim()) throw new AppError('Comment body is required', 400);
+
+    const [id] = await db('post_comments').insert({
+      post_id: post.id,
+      user_id: req.user.id,
+      tenant_id: req.tenantId,
+      body: req.body.body.trim(),
+    });
+
+    const comment = await db('post_comments')
+      .join('users', 'post_comments.user_id', 'users.id')
+      .where('post_comments.id', id)
+      .select(
+        'post_comments.id', 'post_comments.body', 'post_comments.created_at',
+        'users.uuid as user_uuid', 'users.first_name', 'users.last_name'
+      )
+      .first();
+
+    res.status(201).json({
+      comment: {
+        id: comment.id,
+        body: comment.body,
+        created_at: comment.created_at,
+        user: { uuid: comment.user_uuid, first_name: comment.first_name, last_name: comment.last_name },
+        is_own: true,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/posts/:uuid/comments/:id
+router.delete('/:uuid/comments/:commentId', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const deleted = await db('post_comments')
+      .where({ id: req.params.commentId, post_id: post.id, user_id: req.user.id })
+      .del();
+    if (!deleted) throw new AppError('Comment not found', 404);
+
+    res.json({ message: 'Comment deleted' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Reactions ──
+
+// POST /api/posts/:uuid/reactions — toggle reaction
+router.post('/:uuid/reactions', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const emoji = req.body.emoji || '❤️';
+
+    const existing = await db('post_reactions')
+      .where({ post_id: post.id, user_id: req.user.id, emoji })
+      .first();
+
+    if (existing) {
+      await db('post_reactions').where({ id: existing.id }).del();
+      res.json({ action: 'removed', emoji });
+    } else {
+      await db('post_reactions').insert({
+        post_id: post.id,
+        user_id: req.user.id,
+        tenant_id: req.tenantId,
+        emoji,
+      });
+      res.json({ action: 'added', emoji });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;

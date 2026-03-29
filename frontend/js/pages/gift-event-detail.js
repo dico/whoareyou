@@ -6,7 +6,11 @@ import { createProductPicker } from '../components/product-picker.js';
 import { showEventModal, giftSubNav } from './gifts.js';
 import { authUrl } from '../utils/auth-url.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { showProductDetailModal } from '../components/product-detail-modal.js';
 
+const EVENT_ICONS = {
+  christmas: 'tree', birthday: 'balloon', wedding: 'heart', other: 'calendar-event',
+};
 const STATUS_ORDER = ['idea', 'purchased', 'given'];
 const STATUS_COLORS = {
   idea: 'secondary', reserved: 'info', purchased: 'warning',
@@ -46,39 +50,35 @@ async function loadEventDetail(uuid) {
     pageMembers = membersData.members || [];
 
     el.innerHTML = `
-      <div class="d-flex justify-content-between align-items-start mb-3">
-        <div>
-          <div class="d-flex align-items-center gap-2 mb-1">
-            <button class="btn btn-link btn-back p-0" id="btn-back"><i class="bi bi-arrow-left"></i></button>
+      <div class="gift-event-header-wrap">
+        <div class="gift-event-header glass-card">
+          <div class="gift-event-header-icon gift-event-icon-${event.event_type}">
+            <i class="bi bi-${EVENT_ICONS[event.event_type] || 'calendar-event'}"></i>
+          </div>
+          <div class="gift-event-header-info">
             <h3 class="mb-0">${esc(event.name)}</h3>
-            <span class="gift-event-type-badge gift-type-${event.event_type}">${t('gifts.types.' + event.event_type)}</span>
+            <span class="text-muted small" id="event-meta"></span>
           </div>
-          <div class="text-muted small">
-            ${event.event_date ? formatDate(event.event_date) : ''}
-            ${event.honoree ? ` — ${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}` : ''}
+          <div class="gift-event-header-actions">
+            <div class="dropdown">
+              <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+              <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+                <li><a class="dropdown-item" href="#" id="btn-edit-event"><i class="bi bi-pencil me-2"></i>${t('gifts.editEvent')}</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="#" id="btn-delete-event"><i class="bi bi-trash me-2"></i>${t('gifts.deleteEvent')}</a></li>
+              </ul>
+            </div>
           </div>
         </div>
-        <div class="dropdown">
-          <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-          <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-            <li><a class="dropdown-item" href="#" id="btn-edit-event"><i class="bi bi-pencil me-2"></i>${t('gifts.editEvent')}</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="#" id="btn-delete-event"><i class="bi bi-trash me-2"></i>${t('gifts.deleteEvent')}</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <div class="d-flex align-items-center gap-3">
+        <div class="gift-event-toolbar">
           <div class="filter-tabs" id="gift-direction-tabs">
             <button class="filter-tab active" data-direction="outgoing">${t('gifts.outgoing')}</button>
             <button class="filter-tab" data-direction="incoming">${t('gifts.incoming')}</button>
           </div>
-          <span class="text-muted small" id="gift-count"></span>
+          <button class="btn btn-primary btn-sm" id="btn-new-gift">
+            <i class="bi bi-plus-lg me-1"></i>${t('gifts.newGift')}
+          </button>
         </div>
-        <button class="btn btn-primary btn-sm" id="btn-new-gift">
-          <i class="bi bi-plus-lg me-1"></i>${t('gifts.newGift')}
-        </button>
       </div>
 
       <div id="gift-list">
@@ -87,7 +87,7 @@ async function loadEventDetail(uuid) {
     `;
 
     // Back
-    document.getElementById('btn-back').addEventListener('click', () => history.back());
+    // Back navigation removed — use browser back or sub-nav
 
     // Edit/delete event
     document.getElementById('btn-edit-event').addEventListener('click', (e) => { e.preventDefault(); showEventModal(event); });
@@ -106,7 +106,7 @@ async function loadEventDetail(uuid) {
       document.querySelector(`#gift-direction-tabs [data-direction="${savedDir}"]`)?.classList.add('active');
       document.getElementById('gift-list').innerHTML = renderGiftList(gifts, pageMembers, savedDir);
     }
-    updateGiftCount(gifts, savedDir);
+    updateEventMeta(event, gifts, savedDir);
     document.getElementById('gift-direction-tabs').addEventListener('click', (e) => {
       const btn = e.target.closest('.filter-tab');
       if (!btn) return;
@@ -114,7 +114,7 @@ async function loadEventDetail(uuid) {
       btn.classList.add('active');
       const dir = btn.dataset.direction;
       localStorage.setItem('giftDirection', dir);
-      updateGiftCount(gifts, dir);
+      updateEventMeta(event, gifts, dir);
       document.getElementById('gift-list').innerHTML = renderGiftList(gifts, pageMembers, dir);
       attachGiftListHandlers(uuid);
     });
@@ -132,10 +132,15 @@ async function loadEventDetail(uuid) {
   }
 }
 
-function updateGiftCount(gifts, direction) {
+function updateEventMeta(event, gifts, direction) {
   const count = gifts.filter(g => g.order_type === direction).length;
-  const el = document.getElementById('gift-count');
-  if (el) el.textContent = t('gifts.giftsCount', { count });
+  const parts = [
+    event.event_date ? formatDate(event.event_date) : '',
+    event.honoree ? `${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}` : '',
+    t('gifts.giftsCount', { count }),
+  ].filter(Boolean);
+  const el = document.getElementById('event-meta');
+  if (el) el.textContent = parts.join(' · ');
 }
 
 // ═══════════════════════════════════════
@@ -288,21 +293,18 @@ function contactChips(contacts, prefix = '') {
  */
 function renderGroupHeader(contacts, { count, actionsHtml } = {}) {
   if (!contacts?.length) return '';
-  const primary = contacts[0];
-  const extraNames = contacts.slice(1).map(c => `${esc(c.first_name)} ${esc(c.last_name || '')}`.trim()).join(', ');
+  const links = contacts.map(c => `
+    <a href="/contacts/${c.uuid}" data-link class="gift-group-header-link">
+      <span class="gift-group-avatar">
+        ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
+      </span>
+      <span>${esc(c.first_name)} ${esc(c.last_name || '')}</span>
+    </a>
+  `).join('');
 
   return `
     <div class="gift-group-header">
-      <a href="/contacts/${primary.uuid}" data-link class="gift-group-header-link">
-        <span class="gift-group-avatar">
-          ${primary.avatar
-            ? `<img src="${authUrl(primary.avatar)}" alt="">`
-            : `<span>${(primary.first_name?.[0] || '') + (primary.last_name?.[0] || '')}</span>`
-          }
-        </span>
-        <span>${esc(primary.first_name)} ${esc(primary.last_name || '')}</span>
-      </a>
-      ${extraNames ? `<span class="text-muted small">, ${extraNames}</span>` : ''}
+      ${links}
       ${count !== undefined ? `<span class="text-muted small ms-1">(${count})</span>` : ''}
       <span class="gift-group-header-actions">${actionsHtml || ''}</span>
     </div>
@@ -321,7 +323,7 @@ function renderGiftCard(g, isIncoming) {
     <div class="gift-card ${isIdea ? 'gift-card-idea' : ''}" data-uuid="${g.uuid}">
       <div class="gift-card-image">
         ${g.product_image_url
-          ? `<img src="${esc(g.product_image_url)}" alt="">`
+          ? `<img src="${g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : esc(g.product_image_url)}" alt="">`
           : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
         }
       </div>
@@ -330,7 +332,7 @@ function renderGiftCard(g, isIncoming) {
         ${subHtml ? `<div class="gift-card-sub text-muted small">${subHtml}</div>` : ''}
       </div>
       <div class="gift-card-end">
-        ${g.price ? `<span class="gift-card-price">${g.price} kr</span>` : ''}
+        ${g.price ? `<span class="gift-card-price">${Math.round(g.price)} kr</span>` : ''}
         <button class="gift-status-badge badge bg-${statusColor} gift-status-cycle" data-uuid="${g.uuid}" data-status="${g.status}">
           ${t('gifts.statuses.' + g.status)}
         </button>
@@ -390,7 +392,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
             <div id="${mid}-added" class="mb-2"></div>
             <div class="gift-add-row">
               <div class="gift-add-row-product" id="${mid}-product"></div>
-              <input type="number" class="form-control form-control-sm gift-add-row-price" id="${mid}-price" placeholder="${t('gifts.price')}" step="0.01">
+              <input type="number" class="form-control form-control-sm gift-add-row-price" id="${mid}-price" placeholder="${t('gifts.price')}" step="1">
               <button type="button" class="btn btn-primary btn-sm" id="${mid}-add-btn">
                 <i class="bi bi-plus-lg"></i>
               </button>
@@ -463,12 +465,12 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
       <div class="gift-added-item">
         <div class="gift-card-image">
           ${g.image_url
-            ? `<img src="${esc(g.image_url)}" alt="">`
+            ? `<img src="${g.image_url.startsWith('/uploads/') ? authUrl(g.image_url) : esc(g.image_url)}" alt="">`
             : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
           }
         </div>
         <span>${esc(g.title)}</span>
-        ${g.price ? `<span class="text-muted small ms-auto">${g.price} kr</span>` : ''}
+        ${g.price ? `<span class="text-muted small ms-auto">${Math.round(g.price)} kr</span>` : ''}
       </div>
     `).join('');
     if (countEl) countEl.textContent = addedGifts.length ? `${addedGifts.length} ${t('gifts.added')}` : '';
@@ -624,7 +626,7 @@ async function reloadGifts(eventUuid) {
   const dir = document.querySelector('#gift-direction-tabs .filter-tab.active')?.dataset.direction || 'outgoing';
   el.innerHTML = renderGiftList(data.gifts, pageMembers, dir);
   attachGiftListHandlers(eventUuid);
-  updateGiftCount(data.gifts, dir);
+  updateEventMeta(data.event, data.gifts, dir);
 }
 
 /**
@@ -726,14 +728,16 @@ function showGiftsDetailModal(gifts) {
               <div class="gift-detail-item">
                 <div class="gift-card-image">
                   ${g.product_image_url
-                    ? `<img src="${esc(g.product_image_url)}" alt="">`
+                    ? `<img src="${g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : esc(g.product_image_url)}" alt="">`
                     : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
                   }
                 </div>
                 <div class="gift-detail-item-body">
-                  <strong>${esc(g.title)}</strong>
-                  ${g.price ? `<span class="text-muted small">${g.price} ${g.currency_code || 'kr'}</span>` : ''}
-                  ${g.product_url ? `<a href="${esc(g.product_url)}" target="_blank" rel="noopener" class="subtle-link small">${getDomain(g.product_url)}</a>` : ''}
+                  ${g.product_uuid
+                    ? `<a href="#" class="gift-open-product" data-product-uuid="${g.product_uuid}"><strong>${esc(g.title)}</strong></a>`
+                    : `<strong>${esc(g.title)}</strong>`
+                  }
+                  ${g.price ? `<span class="text-muted small">${Math.round(g.price)} kr</span>` : ''}
                   ${g.notes ? `<span class="text-muted small">${esc(g.notes)}</span>` : ''}
                 </div>
               </div>
@@ -746,6 +750,16 @@ function showGiftsDetailModal(gifts) {
 
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
+
+  // Product links in detail modal
+  modalEl.querySelectorAll('.gift-open-product').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      modal.hide();
+      showProductDetailModal(link.dataset.productUuid);
+    });
+  });
+
   modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
   modal.show();
 }

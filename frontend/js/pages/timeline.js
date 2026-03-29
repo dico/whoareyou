@@ -44,7 +44,7 @@ export async function renderTimeline(contactUuid = null) {
                 <div class="post-tags" id="post-tags"></div>
                 <label class="post-media-btn" id="btn-add-media" title="${t('posts.addMedia')}">
                   <i class="bi bi-image"></i>
-                  <input type="file" id="post-media-input" multiple accept="image/*" hidden>
+                  <input type="file" id="post-media-input" multiple accept="image/*,video/*" hidden>
                 </label>
                 <label class="post-media-btn" title="${t('posts.addDocument')}">
                   <i class="bi bi-paperclip"></i>
@@ -162,7 +162,7 @@ export async function renderTimeline(contactUuid = null) {
   let pendingMedia = [];
   document.getElementById('post-media-input').addEventListener('change', (e) => {
     for (const file of e.target.files) {
-      if (file.type.startsWith('image/')) pendingMedia.push(file);
+      if (file.type.startsWith('image/') || file.type.startsWith('video/')) pendingMedia.push(file);
     }
     renderMediaPreview();
     e.target.value = '';
@@ -189,6 +189,13 @@ export async function renderTimeline(contactUuid = null) {
       if (f.type.startsWith('image/')) {
         return `<div class="media-preview-item">
           <img src="${URL.createObjectURL(f)}" alt="">
+          <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+        </div>`;
+      }
+      if (f.type.startsWith('video/')) {
+        return `<div class="media-preview-item">
+          <video src="${URL.createObjectURL(f)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video>
+          <div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div>
           <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
         </div>`;
       }

@@ -5,6 +5,7 @@ const DOC_TYPES = ['application/pdf', 'application/msword',
 
 function isAllowed(file, acceptDocs) {
   if (file.type.startsWith('image/')) return true;
+  if (file.type.startsWith('video/')) return true;
   if (acceptDocs && DOC_TYPES.includes(file.type)) return true;
   return false;
 }

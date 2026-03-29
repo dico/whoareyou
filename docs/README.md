@@ -183,6 +183,10 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Navbar-søk husker siste søk — klikk i søkefeltet viser forrige resultater uten ny forespørsel
 - [x] Dokumentvedlegg i poster — PDF, Word, Excel, TXT, CSV kan hektes på innlegg. Bilder prosesseres med sharp som før, dokumenter lagres som-de-er. Vises som nedlastingslenker med filtype-ikon og filstørrelse. Binders-ikon i compose. PDF/TXT åpnes i preview-modal med iframe, andre som nedlasting. Drag-and-drop støtter dokumenter
 - [x] Kjæledyr — ny relasjonstype eier/kjæledyr (owner/pet). Kjæledyr registreres som vanlig kontakt med relasjon
+- [x] Video i poster — MP4, WebM, MOV, AVI. Lagres som-de-er, vises med `<video>` tag og browser-kontroller. 100MB filgrense
+- [x] Kommentarer på poster — kommentar-seksjon under hvert innlegg, avatar fra koblet kontakt, slett egne kommentarer
+- [x] Likes/reaksjoner — hjerte-toggle per innlegg, telling vises, backend med emoji-støtte (utvidbart)
+- [x] MomentGarden-import — settings → integrasjoner → MomentGarden-side. ZIP-upload med duplikat-deteksjon (original_name), forhåndsvisning, progress bar. Synk loves/kommentarer fra MG API med session cookie. Moment-ID lagres som external_id for kobling
 
 ### Senere
 
@@ -192,11 +196,12 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 #### Gaver — gjenstår
 - [ ] Gaver: kontaktprofil-integrasjon (vise gaver i sidebar)
 - [ ] Gaver: "Legg til husstand" / "Legg til familie"-snarveier på giver/mottaker
-- [ ] Gaver: produktbilde-upload
+- [x] Gaver: produktbilde-upload (drag-and-drop fra nettside/desktop, sharp-prosessering)
 - [ ] Gaver: ønskelister på vanlige kontakter (ikke bare familiemedlemmer)
 
-### Vurderes
-*Ingen åpne punkter for øyeblikket.*
+### Planlagt
+
+- [ ] **Familieportal** — separat, mobilfokusert portal for utvidet familie (besteforeldre, tanter etc.) til å se/kommentere barnas tidslinjer. Gjestekonto + delelenker. Se [familieportal.md](familieportal.md) for komplett plan.
 
 ### Planlagte konsepter
 
@@ -272,7 +277,7 @@ Side for avansert tag-håndtering: se alle kontakter per tag, flytte kontakter m
 |---------|--------|-------------|
 | Gavehendelser | **Implementert** | Events (jul, bursdag, bryllup, annet), auto-fill dato/navn for jul |
 | Gaverregistrering | **Implementert** | Gave med avsender(e)/mottaker(e), status-lifecycle, inline quick-add |
-| Produktkatalog | **Implementert** | Søk/opprett inline, URL-scraping for metadata, gjenbrukbar katalog |
+| Produktkatalog | **Implementert** | Søk/opprett inline, URL-scraping for metadata, gjenbrukbar katalog, nettbutikk-stil detalj-modal, bilde drag-and-drop, butikklenker med scrape |
 | Synlighet | **Implementert** | Private under planlegging, auto-shared ved gitt, skjult fra mottaker |
 | Product-picker | **Implementert** | Inline søk/opprett, URL-paste med auto-hent, debounced |
 | Ønskelister | **Implementert** | Per familiemedlem, add/delete items, mark fulfilled, product-picker |

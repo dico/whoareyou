@@ -20,6 +20,7 @@ import notificationRoutes from './routes/notifications.js';
 import uploadRoutes from './routes/uploads.js';
 import systemRoutes from './routes/system.js';
 import giftRoutes from './routes/gifts.js';
+import importRoutes from './routes/import.js';
 
 const app = express();
 
@@ -99,6 +100,7 @@ app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
 app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api/gifts', authenticate, tenantScope, giftRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
+app.use('/api/import', authenticate, tenantScope, importRoutes);
 app.use('/api/system', authenticate, systemRoutes);
 
 // Protected file serving — auth check + tenant validation
@@ -111,10 +113,10 @@ app.use('/uploads/', (req, res, next) => {
 }, authenticate, tenantScope, async (req, res, next) => {
   // Validate that the requested file belongs to the user's tenant
   const filePath = req.path; // e.g. /contacts/{uuid}/photo.webp or /posts/{uuid}/media.webp
-  const match = filePath.match(/^\/(contacts|posts)\/([a-f0-9-]+)\//);
+  const match = filePath.match(/^\/(contacts|posts|products)\/([a-f0-9-]+)\//);
   if (match) {
     const [, type, uuid] = match;
-    const table = type === 'contacts' ? 'contacts' : 'posts';
+    const table = type === 'contacts' ? 'contacts' : type === 'posts' ? 'posts' : 'gift_products';
     const record = await db(table).where({ uuid, tenant_id: req.tenantId }).first();
     if (!record) {
       return res.status(403).json({ error: 'Access denied' });

@@ -39,7 +39,7 @@ export const config = {
 
   uploads: {
     dir: process.env.UPLOADS_DIR || '/app/uploads',
-    maxFileSize: 10 * 1024 * 1024, // 10 MB
+    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024, // 100 MB (videos)
     image: {
       maxWidth: 1920,
       thumbnailSize: 200,

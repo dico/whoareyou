@@ -91,12 +91,20 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           ` : ''}
           ${(() => {
             const images = p.media.filter(m => m.file_type?.startsWith('image'));
-            const docs = p.media.filter(m => !m.file_type?.startsWith('image'));
+            const videos = p.media.filter(m => m.file_type?.startsWith('video'));
+            const docs = p.media.filter(m => !m.file_type?.startsWith('image') && !m.file_type?.startsWith('video'));
             let html = '';
             if (images.length) {
               html += `<div class="post-media post-media-grid-${Math.min(images.length, 4)}" data-post-uuid="${p.uuid}">
                 ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""></div>`).join('')}
               </div>`;
+            }
+            if (videos.length) {
+              html += `<div class="post-videos">${videos.map(m =>
+                `<div class="post-video-item">
+                  <video src="${authUrl(m.file_path)}" controls preload="metadata" playsinline></video>
+                </div>`
+              ).join('')}</div>`;
             }
             if (docs.length) {
               html += `<div class="post-documents">${docs.map(m => {
@@ -114,6 +122,23 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             }
             return html;
           })()}
+          <div class="post-actions-bar">
+            <button class="post-action-btn btn-react" data-uuid="${p.uuid}" title="${t('posts.like')}">
+              <i class="bi bi-heart${p.reacted ? '-fill text-danger' : ''}"></i>
+              ${p.reaction_count ? `<span class="post-action-count">${p.reaction_count}</span>` : ''}
+            </button>
+            <button class="post-action-btn btn-toggle-comments" data-uuid="${p.uuid}" title="${t('posts.comment')}">
+              <i class="bi bi-chat"></i>
+              ${p.comment_count ? `<span class="post-action-count">${p.comment_count}</span>` : ''}
+            </button>
+          </div>
+          <div class="post-comments-section d-none" data-uuid="${p.uuid}">
+            <div class="post-comments-list"></div>
+            <form class="post-comment-form">
+              <input type="text" class="form-control form-control-sm" placeholder="${t('posts.commentPlaceholder')}" required>
+              <button type="submit" class="btn btn-primary btn-sm">${t('posts.send')}</button>
+            </form>
+          </div>
         </div>
         <div class="post-edit d-none">
           <form class="edit-post-form" data-post-uuid="${p.uuid}">
@@ -382,6 +407,98 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         modal.show();
       });
     });
+
+    // Reactions — toggle heart
+    el.querySelectorAll('.btn-react').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { action } = await api.post(`/posts/${btn.dataset.uuid}/reactions`, { emoji: '❤️' });
+        const icon = btn.querySelector('i');
+        const countEl = btn.querySelector('.post-action-count');
+        const count = parseInt(countEl?.textContent || '0');
+        if (action === 'added') {
+          icon.className = 'bi bi-heart-fill text-danger';
+          if (countEl) countEl.textContent = count + 1;
+          else btn.insertAdjacentHTML('beforeend', `<span class="post-action-count">${count + 1}</span>`);
+        } else {
+          icon.className = 'bi bi-heart';
+          const newCount = Math.max(0, count - 1);
+          if (countEl) { if (newCount) countEl.textContent = newCount; else countEl.remove(); }
+        }
+      });
+    });
+
+    // Comments — toggle section + load
+    el.querySelectorAll('.btn-toggle-comments').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const section = el.querySelector(`.post-comments-section[data-uuid="${btn.dataset.uuid}"]`);
+        section.classList.toggle('d-none');
+        if (!section.classList.contains('d-none') && !section.dataset.loaded) {
+          section.dataset.loaded = 'true';
+          await loadComments(section, btn.dataset.uuid);
+        }
+      });
+    });
+
+    // Comment submit
+    el.querySelectorAll('.post-comment-form').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const section = form.closest('.post-comments-section');
+        const uuid = section.dataset.uuid;
+        const input = form.querySelector('input');
+        if (!input.value.trim()) return;
+        try {
+          const { comment } = await api.post(`/posts/${uuid}/comments`, { body: input.value });
+          input.value = '';
+          const list = section.querySelector('.post-comments-list');
+          list.insertAdjacentHTML('beforeend', renderComment(comment));
+          // Update count on button
+          const btn = el.querySelector(`.btn-toggle-comments[data-uuid="${uuid}"]`);
+          const countEl = btn.querySelector('.post-action-count');
+          const count = parseInt(countEl?.textContent || '0') + 1;
+          if (countEl) countEl.textContent = count;
+          else btn.insertAdjacentHTML('beforeend', `<span class="post-action-count">${count}</span>`);
+          // Bind delete on new comment
+          bindCommentDelete(list.lastElementChild, uuid, btn);
+        } catch {}
+      });
+    });
+
+    function renderComment(c) {
+      return `<div class="post-comment" data-id="${c.id}">
+        <div class="post-comment-avatar">
+          ${c.user.avatar ? `<img src="${authUrl(c.user.avatar)}" alt="">` : `<span>${c.user.first_name[0]}${c.user.last_name?.[0] || ''}</span>`}
+        </div>
+        <div class="post-comment-content">
+          <strong>${escapeHtml(c.user.first_name)}</strong>
+          <span>${escapeHtml(c.body)}</span>
+        </div>
+        ${c.is_own ? `<button class="btn btn-link btn-sm post-comment-delete" title="${t('common.delete')}"><i class="bi bi-x"></i></button>` : ''}
+      </div>`;
+    }
+
+    async function loadComments(section, uuid) {
+      const list = section.querySelector('.post-comments-list');
+      try {
+        const { comments } = await api.get(`/posts/${uuid}/comments`);
+        list.innerHTML = comments.map(c => renderComment(c)).join('');
+        const btn = el.querySelector(`.btn-toggle-comments[data-uuid="${uuid}"]`);
+        list.querySelectorAll('.post-comment-delete').forEach(del => bindCommentDelete(del.closest('.post-comment'), uuid, btn));
+      } catch {}
+    }
+
+    function bindCommentDelete(commentEl, postUuid, countBtn) {
+      const del = commentEl?.querySelector('.post-comment-delete');
+      if (!del) return;
+      del.addEventListener('click', async () => {
+        const id = commentEl.dataset.id;
+        await api.delete(`/posts/${postUuid}/comments/${id}`);
+        commentEl.remove();
+        const countEl = countBtn.querySelector('.post-action-count');
+        const count = Math.max(0, parseInt(countEl?.textContent || '1') - 1);
+        if (countEl) { if (count) countEl.textContent = count; else countEl.remove(); }
+      });
+    }
 
     // Scroll to and highlight specific post if requested via URL param
     const urlPost = new URLSearchParams(window.location.search).get('post');
