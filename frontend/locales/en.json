@@ -675,7 +675,9 @@
     "expired": "Expired",
     "activeSessions": "Active sessions",
     "noSessions": "No active portal sessions",
-    "linkInvalid": "This link is invalid or has expired"
+    "linkInvalid": "This link is invalid or has expired",
+    "logoutConfirm": "Log out?",
+    "logoutHint": "You can log back in with your link or password."
   },
   "gifts": {
     "title": "Gifts",

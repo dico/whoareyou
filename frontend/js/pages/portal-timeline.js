@@ -138,7 +138,7 @@ export async function renderPortalTimeline() {
           <img src="/img/logo-v3-people-circle.svg" alt="" class="portal-header-logo">
           <span class="portal-header-name">${esc(guest.display_name || t('portal.title'))}</span>
         </div>
-        <button class="btn btn-link btn-sm text-muted" id="portal-logout"><i class="bi bi-box-arrow-right"></i></button>
+        <button class="portal-logout-btn" id="portal-logout"><i class="bi bi-box-arrow-right"></i> ${t('nav.logout')}</button>
       </div>
       <div id="portal-contacts" class="portal-contacts"></div>
       <div id="portal-timeline" class="portal-timeline">
@@ -147,12 +147,37 @@ export async function renderPortalTimeline() {
     </div>
   `;
 
-  document.getElementById('portal-logout').addEventListener('click', () => {
-    localStorage.removeItem('portalToken');
-    localStorage.removeItem('portalRefreshToken');
-    localStorage.removeItem('portalGuest');
-    sessionStorage.removeItem('portalToken');
-    navigate('/portal/login');
+  document.getElementById('portal-logout').addEventListener('click', async () => {
+    const mid = 'portal-logout-' + Date.now();
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal fade" id="${mid}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-body text-center p-4">
+              <i class="bi bi-box-arrow-right" style="font-size:2rem;color:var(--color-text-secondary)"></i>
+              <h5 class="mt-2">${t('portal.logoutConfirm')}</h5>
+              <p class="text-muted small">${t('portal.logoutHint')}</p>
+              <div class="d-flex gap-2 justify-content-center mt-3">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+                <button class="btn btn-primary btn-sm" id="${mid}-confirm">${t('nav.logout')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+    const modalEl = document.getElementById(mid);
+    const modal = new bootstrap.Modal(modalEl);
+    document.getElementById(`${mid}-confirm`).addEventListener('click', () => {
+      localStorage.removeItem('portalToken');
+      localStorage.removeItem('portalRefreshToken');
+      localStorage.removeItem('portalGuest');
+      sessionStorage.removeItem('portalToken');
+      modal.hide();
+      navigate('/portal/login');
+    });
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+    modal.show();
   });
 
   // Load contacts
@@ -214,41 +239,87 @@ async function loadPortalTimeline(contactUuid) {
       });
     });
 
-    // Comments toggle
+    // Load comments inline (always visible)
+    el.querySelectorAll('.portal-comments-section').forEach(async (section) => {
+      const postUuid = section.closest('.portal-post')?.dataset.uuid;
+      if (postUuid) await loadPortalComments(postUuid, section);
+    });
+
+    // Comments toggle still works for expand/collapse if needed
     el.querySelectorAll('.portal-comments-toggle').forEach(btn => {
       btn.addEventListener('click', async () => {
         const section = btn.closest('.portal-post').querySelector('.portal-comments-section');
-        if (section.classList.contains('d-none')) {
-          section.classList.remove('d-none');
-          await loadPortalComments(btn.dataset.uuid, section);
-        } else {
-          section.classList.add('d-none');
-        }
+        section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        section.querySelector('input')?.focus();
       });
     });
 
-    // Load more
-    if (hasMore) {
-      el.insertAdjacentHTML('beforeend', `
-        <button class="btn btn-outline-secondary btn-sm w-100 mt-3 portal-load-more" data-uuid="${contactUuid}" data-offset="20">
-          ${t('posts.loadMore')}
-        </button>
-      `);
-      el.querySelector('.portal-load-more')?.addEventListener('click', async (e) => {
-        const btn = e.target;
-        const offset = parseInt(btn.dataset.offset);
-        btn.textContent = t('app.loading');
-        const more = await portalApi.get(`/contacts/${contactUuid}/timeline?limit=20&offset=${offset}`);
-        btn.remove();
-        el.insertAdjacentHTML('beforeend', more.posts.map(p => renderPortalPost(p)).join(''));
-        if (more.hasMore) {
-          el.insertAdjacentHTML('beforeend', `
-            <button class="btn btn-outline-secondary btn-sm w-100 mt-3 portal-load-more" data-uuid="${contactUuid}" data-offset="${offset + 20}">
-              ${t('posts.loadMore')}
-            </button>
-          `);
-        }
+    // Image lightbox — use full-size images (data-full), not thumbnails
+    el.querySelectorAll('.portal-media-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const grid = item.closest('.portal-post-media');
+        const items = [...grid.querySelectorAll('.portal-media-item')];
+        const idx = items.indexOf(item);
+        const images = items.map(el => el.dataset.full || el.querySelector('img')?.src);
+        showPortalLightbox(images, Math.max(idx, 0));
       });
+    });
+
+    // Infinite scroll
+    if (hasMore) {
+      let loadingMore = false;
+      let nextOffset = 20;
+      const sentinel = document.createElement('div');
+      sentinel.className = 'portal-scroll-sentinel';
+      el.appendChild(sentinel);
+
+      const observer = new IntersectionObserver(async (entries) => {
+        if (!entries[0].isIntersecting || loadingMore) return;
+        loadingMore = true;
+        try {
+          const more = await portalApi.get(`/contacts/${contactUuid}/timeline?limit=20&offset=${nextOffset}`);
+          sentinel.remove();
+          const newHtml = more.posts.map(p => renderPortalPost(p)).join('');
+          el.insertAdjacentHTML('beforeend', newHtml);
+
+          // Attach handlers on new posts
+          el.querySelectorAll('.portal-post:not([data-initialized])').forEach(post => {
+            post.dataset.initialized = '1';
+            // Comments
+            const section = post.querySelector('.portal-comments-section');
+            if (section) loadPortalComments(post.dataset.uuid, section);
+            // Images
+            post.querySelectorAll('.portal-media-item').forEach(item => {
+              item.addEventListener('click', () => {
+                const grid = item.closest('.portal-post-media');
+                const items = [...grid.querySelectorAll('.portal-media-item')];
+                const idx = items.indexOf(item);
+                showPortalLightbox(items.map(el => el.dataset.full || el.querySelector('img')?.src), Math.max(idx, 0));
+              });
+            });
+            // Reactions
+            post.querySelectorAll('.portal-react-btn').forEach(btn => {
+              btn.addEventListener('click', async () => {
+                const { reacted } = await portalApi.post(`/posts/${btn.dataset.uuid}/reactions`);
+                btn.querySelector('i').className = reacted ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+                const countEl = btn.querySelector('.portal-react-count');
+                let count = parseInt(countEl.textContent) || 0;
+                countEl.textContent = (count + (reacted ? 1 : -1)) || '';
+              });
+            });
+          });
+
+          nextOffset += 20;
+          if (more.hasMore) {
+            el.appendChild(sentinel);
+          } else {
+            observer.disconnect();
+          }
+        } catch { observer.disconnect(); }
+        loadingMore = false;
+      }, { rootMargin: '200px' });
+
+      observer.observe(sentinel);
     }
   } catch (err) {
     el.innerHTML = `<div class="text-danger small p-3">${err.message}</div>`;
@@ -278,7 +349,7 @@ function renderPortalPost(p) {
       ${images.length ? `
         <div class="portal-post-media portal-media-grid-${Math.min(images.length, 4)}">
           ${images.map(m => `
-            <div class="portal-media-item">
+            <div class="portal-media-item" data-full="${portalAuthUrl(m.file_path)}">
               <img src="${portalAuthUrl(m.thumbnail_path || m.file_path)}" alt="" loading="lazy">
             </div>
           `).join('')}
@@ -302,7 +373,7 @@ function renderPortalPost(p) {
         </button>
       </div>
 
-      <div class="portal-comments-section d-none"></div>
+      <div class="portal-comments-section"></div>
     </div>
   `;
 }
@@ -334,6 +405,50 @@ async function loadPortalComments(postUuid, section) {
   } catch (err) {
     section.innerHTML = `<div class="text-danger small">${err.message}</div>`;
   }
+}
+
+function showPortalLightbox(images, startIndex) {
+  let current = startIndex;
+  const mid = 'portal-lb-' + Date.now();
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="background:#000;border:none;border-radius:var(--radius-lg);overflow:hidden">
+          <div class="photo-viewer" id="${mid}-viewer" style="position:relative;text-align:center">
+            <img src="${images[current]}" alt="" style="max-width:100%;max-height:80vh;object-fit:contain">
+            ${images.length > 1 ? `
+              <button type="button" class="photo-viewer-nav photo-viewer-prev" id="${mid}-prev"><i class="bi bi-chevron-left"></i></button>
+              <button type="button" class="photo-viewer-nav photo-viewer-next" id="${mid}-next"><i class="bi bi-chevron-right"></i></button>
+            ` : ''}
+          </div>
+          <div class="photo-viewer-footer" style="background:var(--color-surface)">
+            <span id="${mid}-caption" class="photo-viewer-caption">${current + 1} / ${images.length}</span>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+
+  function update() {
+    modalEl.querySelector('.photo-viewer img').src = images[current];
+    document.getElementById(`${mid}-caption`).textContent = `${current + 1} / ${images.length}`;
+  }
+
+  document.getElementById(`${mid}-prev`)?.addEventListener('click', () => { current = (current - 1 + images.length) % images.length; update(); });
+  document.getElementById(`${mid}-next`)?.addEventListener('click', () => { current = (current + 1) % images.length; update(); });
+
+  const keyHandler = (e) => {
+    if (e.key === 'ArrowLeft') { current = (current - 1 + images.length) % images.length; update(); }
+    if (e.key === 'ArrowRight') { current = (current + 1) % images.length; update(); }
+  };
+  document.addEventListener('keydown', keyHandler);
+  modalEl.addEventListener('hidden.bs.modal', () => { document.removeEventListener('keydown', keyHandler); modalEl.remove(); }, { once: true });
+  modal.show();
 }
 
 function esc(str) {

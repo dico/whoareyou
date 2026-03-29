@@ -675,7 +675,9 @@
     "expired": "Utløpt",
     "activeSessions": "Aktive sesjoner",
     "noSessions": "Ingen aktive portalsesjoner",
-    "linkInvalid": "Denne lenken er ugyldig eller utløpt"
+    "linkInvalid": "Denne lenken er ugyldig eller utløpt",
+    "logoutConfirm": "Logge ut?",
+    "logoutHint": "Du kan logge inn igjen med lenken eller passordet ditt."
   },
   "gifts": {
     "title": "Gaver",

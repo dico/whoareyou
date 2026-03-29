@@ -296,6 +296,7 @@ router.post('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) 
 
     await db('post_comments').insert({
       post_id: post.id,
+      tenant_id: req.portal.tenantId,
       user_id: null,
       portal_guest_id: req.portal.guestId,
       body: body.trim(),

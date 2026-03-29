@@ -172,9 +172,17 @@ router.put('/guests/:uuid/contacts', async (req, res, next) => {
 // GET /api/portal-admin/links
 router.get('/links', async (req, res, next) => {
   try {
-    const links = await db('portal_share_links')
+    let query = db('portal_share_links')
       .where({ 'portal_share_links.tenant_id': req.tenantId })
-      .leftJoin('portal_guests', 'portal_share_links.portal_guest_id', 'portal_guests.id')
+      .leftJoin('portal_guests', 'portal_share_links.portal_guest_id', 'portal_guests.id');
+
+    // Filter by guest UUID if provided
+    if (req.query.guest_uuid) {
+      const guest = await db('portal_guests').where({ uuid: req.query.guest_uuid, tenant_id: req.tenantId }).first();
+      if (guest) query = query.where('portal_share_links.portal_guest_id', guest.id);
+    }
+
+    const links = await query
       .select(
         'portal_share_links.uuid', 'portal_share_links.label',
         'portal_share_links.is_active', 'portal_share_links.expires_at',

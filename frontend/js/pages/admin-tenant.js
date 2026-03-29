@@ -487,43 +487,41 @@ async function loadMembers() {
 // Portal management
 // ═══════════════════════════════════════
 
-let portalInitialized = false;
-
 async function loadPortal() {
   const toggle = document.getElementById('portal-tenant-toggle');
   const content = document.getElementById('portal-content');
   const feedback = document.getElementById('portal-toggle-feedback');
+  if (!toggle || !content) return;
 
-  if (!portalInitialized) {
-    portalInitialized = true;
+  // Always load current state
+  try {
+    const { tenants } = await api.get('/auth/tenants');
+    const myTenant = tenants.find(t => t.uuid === state.user.tenant_uuid);
+    toggle.checked = !!myTenant?.portal_enabled;
+    content.classList.toggle('d-none', !toggle.checked);
+  } catch { /* ignore */ }
 
-    // Load current state
+  // Remove old listeners by replacing element
+  const newToggle = toggle.cloneNode(true);
+  toggle.replaceWith(newToggle);
+  newToggle.addEventListener('change', async (e) => {
     try {
-      const { tenants } = await api.get('/auth/tenants');
-      const myTenant = tenants.find(t => t.uuid === state.user.tenant_uuid);
-      toggle.checked = !!myTenant?.portal_enabled;
-      content.classList.toggle('d-none', !toggle.checked);
-    } catch { /* ignore */ }
+      await api.put('/auth/tenant/security', { portal_enabled: e.target.checked });
+      content.classList.toggle('d-none', !e.target.checked);
+      feedback.className = 'small text-success';
+      feedback.textContent = t('common.saved');
+      setTimeout(() => { feedback.textContent = ''; }, 2000);
+      if (e.target.checked) await loadPortalGuests();
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      feedback.className = 'small text-danger';
+      feedback.textContent = err.message;
+    }
+  });
 
-    // Toggle handler with feedback
-    toggle.addEventListener('change', async (e) => {
-      try {
-        await api.put('/auth/tenant/security', { portal_enabled: e.target.checked });
-        content.classList.toggle('d-none', !e.target.checked);
-        feedback.className = 'small text-success';
-        feedback.textContent = t('common.saved');
-        setTimeout(() => { feedback.textContent = ''; }, 2000);
-      } catch (err) {
-        e.target.checked = !e.target.checked;
-        feedback.className = 'small text-danger';
-        feedback.textContent = err.message;
-      }
-    });
+  document.getElementById('btn-add-guest')?.addEventListener('click', () => showAddGuestModal());
 
-    document.getElementById('btn-add-guest').addEventListener('click', () => showAddGuestModal());
-  }
-
-  if (toggle.checked) {
+  if (newToggle.checked) {
     await loadPortalGuests();
   }
 }
@@ -552,12 +550,14 @@ async function loadPortalGuests() {
         </a>
       `).join(' ');
 
+      // Title + first name (e.g. "Bestemor Vigdis")
+      const displayTitle = g.display_name + (g.contact_first_name ? ` ${g.contact_first_name}` : '');
+
       return `
-        <div class="member-row">
+        <div class="member-row portal-guest-row" ${g.linked_contact_uuid ? `data-href="/contacts/${g.linked_contact_uuid}"` : ''}>
           <div class="member-avatar">${avatarHtml}</div>
           <div class="member-info">
-            <strong>${g.display_name}</strong>
-            ${g.linked_contact_uuid ? `<a href="/contacts/${g.linked_contact_uuid}" data-link class="text-muted small d-block"><i class="bi bi-link-45deg"></i> ${g.contact_first_name || ''}</a>` : ''}
+            <strong>${displayTitle}</strong>
             <div class="mt-1">${canSeeChips || `<span class="text-muted small">—</span>`}</div>
           </div>
           <div class="member-badges">
@@ -569,7 +569,7 @@ async function loadPortalGuests() {
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" data-bs-display="static"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="z-index:1050">
                 <li><a class="dropdown-item btn-edit-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}" data-email="${g.email || ''}" data-linked="${g.linked_contact_uuid || ''}" data-contacts='${JSON.stringify(g.contacts.map(c=>c.uuid))}'><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
-                <li><a class="dropdown-item btn-create-guest-link" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-link-45deg me-2"></i>${t('portal.createLink')}</a></li>
+                <li><a class="dropdown-item btn-create-guest-link" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-link-45deg me-2"></i>${t('portal.shareLinks')}</a></li>
                 <li><a class="dropdown-item btn-toggle-guest" href="#" data-uuid="${g.uuid}" data-active="${g.is_active ? '1' : '0'}"><i class="bi bi-${g.is_active ? 'pause' : 'play'} me-2"></i>${g.is_active ? t('admin.deactivate') : t('admin.activate')}</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger btn-delete-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
@@ -579,6 +579,15 @@ async function loadPortalGuests() {
         </div>
       `;
     }).join('');
+
+    // Click on guest row → navigate to contact
+    el.querySelectorAll('.portal-guest-row[data-href]').forEach(row => {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.dropdown') || e.target.closest('.contact-chip') || e.target.closest('.btn-view-sessions')) return;
+        navigate(row.dataset.href);
+      });
+    });
 
     // Edit guest
     el.querySelectorAll('.btn-edit-guest').forEach(btn => {
@@ -650,36 +659,11 @@ async function loadPortalGuests() {
       });
     });
 
-    // Create invite link for guest
+    // Manage links for guest
     el.querySelectorAll('.btn-create-guest-link').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
-        try {
-          const result = await api.post('/portal-admin/links', {
-            label: btn.dataset.name,
-            portal_guest_uuid: btn.dataset.uuid,
-            expires_days: 365,
-          });
-          // Show URL in a simple prompt-like inline
-          const row = btn.closest('.member-row');
-          let urlBox = row.querySelector('.portal-link-result');
-          if (urlBox) urlBox.remove();
-          urlBox = document.createElement('div');
-          urlBox.className = 'portal-link-result mt-2';
-          urlBox.innerHTML = `
-            <div class="d-flex gap-1">
-              <input type="text" class="form-control form-control-sm" value="${result.url}" readonly>
-              <button class="btn btn-primary btn-sm portal-copy-link">${t('portal.copyLink')}</button>
-            </div>
-          `;
-          row.after(urlBox);
-          urlBox.querySelector('.portal-copy-link').addEventListener('click', () => {
-            navigator.clipboard.writeText(result.url);
-            urlBox.querySelector('.portal-copy-link').innerHTML = `<i class="bi bi-check"></i> ${t('portal.copied')}`;
-          });
-        } catch (err) {
-          confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
-        }
+        await showGuestLinksModal(btn.dataset.uuid, btn.dataset.name);
       });
     });
   } catch (err) { el.innerHTML = `<div class="text-danger small">${err.message}</div>`; }
@@ -1028,7 +1012,7 @@ function showCreateLinkModal() {
         </div>
       `;
       document.getElementById(`${mid}-copy`).addEventListener('click', () => {
-        navigator.clipboard.writeText(document.getElementById(`${mid}-url`).value);
+        const urlInput = document.getElementById(`${mid}-url`); urlInput.select(); document.execCommand('copy');
         document.getElementById(`${mid}-copy`).innerHTML = `<i class="bi bi-check me-1"></i>${t('portal.copied')}`;
       });
       document.getElementById(`${mid}-submit`).classList.add('d-none');
@@ -1036,6 +1020,104 @@ function showCreateLinkModal() {
   });
 
   modalEl.addEventListener('hidden.bs.modal', () => { modalEl.remove(); loadPortalGuests(); }, { once: true });
+  modal.show();
+}
+
+async function showGuestLinksModal(guestUuid, guestName) {
+  const mid = 'guest-links-' + Date.now();
+  const { links } = await api.get(`/portal-admin/links?guest_uuid=${guestUuid}`);
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('portal.shareLinks')} — ${guestName}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="${mid}-list">
+              ${links.length ? links.map(l => {
+                const expired = l.expires_at && new Date(l.expires_at) < new Date();
+                return `
+                  <div class="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom" data-link-uuid="${l.uuid}">
+                    <div class="flex-grow-1">
+                      <div class="small">
+                        ${l.is_active && !expired
+                          ? `<i class="bi bi-circle-fill text-success" style="font-size:0.4rem"></i>`
+                          : `<i class="bi bi-circle-fill text-danger" style="font-size:0.4rem"></i>`
+                        }
+                        ${l.label || t('portal.shareLink')}
+                      </div>
+                      <div class="text-muted small">
+                        ${l.last_used_at ? `${t('portal.lastUsed')}: ${formatDate(l.last_used_at)}` : t('portal.neverUsed')}
+                        ${l.expires_at ? ` · ${expired ? t('portal.expired') : `${t('portal.expiresIn')}: ${formatDate(l.expires_at)}`}` : ` · ${t('portal.neverExpires')}`}
+                      </div>
+                    </div>
+                    ${l.is_active ? `<button class="btn btn-outline-danger btn-sm portal-revoke-link" data-uuid="${l.uuid}" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>` : ''}
+                  </div>
+                `;
+              }).join('') : `<p class="text-muted small">${t('portal.noLinks')}</p>`}
+            </div>
+
+            <hr>
+            <h6 class="small text-uppercase text-muted">${t('portal.createLink')}</h6>
+            <div class="d-flex gap-2 align-items-end">
+              <div class="flex-grow-1">
+                <select class="form-select form-select-sm" id="${mid}-expires">
+                  <option value="365" selected>1 ${t('portal.year')}</option>
+                  <option value="90">90 ${t('portal.days')}</option>
+                  <option value="30">30 ${t('portal.days')}</option>
+                  <option value="">${t('portal.neverExpires')}</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm" id="${mid}-create">${t('portal.createLink')}</button>
+            </div>
+            <div id="${mid}-result" class="mt-2 d-none"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+
+  // Revoke links
+  modalEl.querySelectorAll('.portal-revoke-link').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await api.delete(`/portal-admin/links/${btn.dataset.uuid}`);
+      btn.closest('[data-link-uuid]').remove();
+    });
+  });
+
+  // Create new link
+  document.getElementById(`${mid}-create`).addEventListener('click', async () => {
+    try {
+      const expDays = parseInt(document.getElementById(`${mid}-expires`).value) || null;
+      const result = await api.post('/portal-admin/links', {
+        label: guestName,
+        portal_guest_uuid: guestUuid,
+        expires_days: expDays,
+      });
+      const resultEl = document.getElementById(`${mid}-result`);
+      resultEl.classList.remove('d-none');
+      resultEl.innerHTML = `
+        <div class="alert alert-success small mb-0">
+          <input type="text" class="form-control form-control-sm mb-1" value="${result.url}" readonly id="${mid}-url">
+          <button class="btn btn-outline-primary btn-sm w-100" id="${mid}-copy"><i class="bi bi-clipboard me-1"></i>${t('portal.copyLink')}</button>
+        </div>
+      `;
+      document.getElementById(`${mid}-copy`).addEventListener('click', () => {
+        const urlInput = document.getElementById(`${mid}-url`); urlInput.select(); document.execCommand('copy');
+        document.getElementById(`${mid}-copy`).innerHTML = `<i class="bi bi-check me-1"></i>${t('portal.copied')}`;
+      });
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+    }
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
   modal.show();
 }
 
