@@ -180,6 +180,9 @@ async function loadMembers() {
           <div class="dropdown">
             <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
             <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+              <li><a class="dropdown-item btn-edit-member" href="#" data-uuid="${m.uuid}" data-first="${m.first_name}" data-last="${m.last_name || ''}" data-email="${m.email || ''}" data-role="${m.role}" data-totp="${m.totp_enabled ? '1' : '0'}">
+                <i class="bi bi-pencil me-2"></i>${t('common.edit')}
+              </a></li>
               <li><a class="dropdown-item btn-toggle-role" href="#" data-uuid="${m.uuid}" data-current="${m.role}">
                 <i class="bi bi-shield me-2"></i>${m.role === 'admin' ? t('admin.demoteToMember') : t('admin.promoteToAdmin')}
               </a></li>
@@ -207,6 +210,138 @@ async function loadMembers() {
         </div>
       </div>
     `).join('');
+
+    // Edit member
+    el.querySelectorAll('.btn-edit-member').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const mid = 'edit-member-' + Date.now();
+        const hasLogin = !!btn.dataset.email;
+        const has2fa = btn.dataset.totp === '1';
+
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="${mid}" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">${t('admin.editMember')}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="${mid}-form">
+                  <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                      <div class="col">
+                        <div class="form-floating">
+                          <input type="text" class="form-control" id="${mid}-first" value="${btn.dataset.first}" required>
+                          <label>${t('auth.firstName')}</label>
+                        </div>
+                      </div>
+                      <div class="col">
+                        <div class="form-floating">
+                          <input type="text" class="form-control" id="${mid}-last" value="${btn.dataset.last}">
+                          <label>${t('auth.lastName')}</label>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                      <input class="form-check-input" type="checkbox" id="${mid}-login" ${hasLogin ? 'checked' : ''}>
+                      <label class="form-check-label" for="${mid}-login">${t('admin.loginEnabled')}</label>
+                      <div class="form-text">${t('admin.loginEnabledHint')}</div>
+                    </div>
+                    <div id="${mid}-login-fields" ${hasLogin ? '' : 'style="display:none"'}>
+                      <div class="form-floating mb-3">
+                        <input type="email" class="form-control" id="${mid}-email" value="${btn.dataset.email}">
+                        <label>${t('auth.email')}</label>
+                      </div>
+                      <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="${mid}-password" placeholder=" ">
+                        <label>${t('admin.newPassword')} <span class="text-muted fw-normal">(${t('admin.newPasswordHint')})</span></label>
+                      </div>
+                      <div class="form-text mb-3"><i class="bi bi-info-circle me-1"></i>${t('admin.passwordChangeNotice')}</div>
+                      ${has2fa ? `
+                        <div class="form-check mb-2">
+                          <input class="form-check-input" type="checkbox" id="${mid}-reset-2fa">
+                          <label class="form-check-label text-danger" for="${mid}-reset-2fa">${t('admin.reset2fa')}</label>
+                          <div class="form-text">${t('admin.reset2faHint')}</div>
+                        </div>
+                        <div class="mb-3 d-none" id="${mid}-admin-pw-wrap">
+                          <div class="form-floating">
+                            <input type="password" class="form-control" id="${mid}-admin-pw" required>
+                            <label>${t('admin.yourPassword')}</label>
+                          </div>
+                        </div>
+                      ` : ''}
+                      <div class="mb-3">
+                        <label class="form-label small">${t('settings.role')}</label>
+                        <select class="form-select form-select-sm" id="${mid}-role">
+                          <option value="member" ${btn.dataset.role === 'member' ? 'selected' : ''}>${t('admin.roleMember')}</option>
+                          <option value="admin" ${btn.dataset.role === 'admin' ? 'selected' : ''}>${t('admin.roleAdmin')}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div id="${mid}-error" class="alert alert-danger d-none"></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+                    <button type="submit" class="btn btn-primary btn-sm">${t('common.save')}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        `);
+
+        const modalEl = document.getElementById(mid);
+        const modal = new bootstrap.Modal(modalEl);
+
+        // Show admin password field when 2FA reset is checked
+        document.getElementById(`${mid}-reset-2fa`)?.addEventListener('change', (ev) => {
+          document.getElementById(`${mid}-admin-pw-wrap`)?.classList.toggle('d-none', !ev.target.checked);
+        });
+
+        document.getElementById(`${mid}-login`).addEventListener('change', (ev) => {
+          document.getElementById(`${mid}-login-fields`).style.display = ev.target.checked ? '' : 'none';
+        });
+
+        document.getElementById(`${mid}-form`).addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const errorEl = document.getElementById(`${mid}-error`);
+          errorEl.classList.add('d-none');
+
+          const loginEnabled = document.getElementById(`${mid}-login`).checked;
+          const payload = {
+            first_name: document.getElementById(`${mid}-first`).value.trim(),
+            last_name: document.getElementById(`${mid}-last`).value.trim(),
+          };
+
+          if (loginEnabled) {
+            payload.email = document.getElementById(`${mid}-email`).value.trim() || null;
+            payload.role = document.getElementById(`${mid}-role`).value;
+            const pw = document.getElementById(`${mid}-password`).value;
+            if (pw) payload.password = pw;
+            if (document.getElementById(`${mid}-reset-2fa`)?.checked) {
+              payload.reset_2fa = true;
+              payload.admin_password = document.getElementById(`${mid}-admin-pw`)?.value;
+            }
+          } else {
+            payload.email = null;
+            payload.is_active = false;
+          }
+
+          try {
+            await api.put(`/auth/members/${btn.dataset.uuid}`, payload);
+            modal.hide();
+            loadMembers();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.classList.remove('d-none');
+          }
+        });
+
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+        modal.show();
+      });
+    });
 
     // Toggle role
     el.querySelectorAll('.btn-toggle-role').forEach(btn => {

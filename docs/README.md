@@ -174,6 +174,7 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 
 - [x] Mobil-layout — dashboard sidebar stacker vertikalt, lange URLer brytes, "Last inn flere"-knapp på tidslinje
 - [x] Sikkerhetsaudit runde 2 — alle HIGH/MEDIUM-funn fikset (label-tenant, fil-tenant, type-validering)
+- [x] Sikkerhetsaudit runde 3 (brukeradmin) — passordvalidering på admin-reset, sesjonsrevokering ved passordbytte, aldri klartekst-passord i e-post, rate limiting på invite/member-edit, admin-passord kreves for 2FA-reset, kan ikke nedgradere eneste admin
 
 #### Gjenstår (sikkerhet)
 - [x] E-post ved ny pålogging — SMTP-konfigurasjon i system admin, nodemailer, login-varsel fire-and-forget

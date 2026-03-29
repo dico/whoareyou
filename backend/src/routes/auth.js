@@ -822,7 +822,7 @@ router.get('/members', authenticate, async (req, res, next) => {
       .select(
         'users.id as _user_id',
         'users.uuid', 'users.email', 'users.first_name', 'users.last_name',
-        'users.role', 'users.is_active', 'users.is_system_admin',
+        'users.role', 'users.is_active', 'users.is_system_admin', 'users.totp_enabled',
         'users.last_login_at', 'users.created_at',
         'users.linked_contact_id',
         'contacts.uuid as linked_contact_uuid',
@@ -1011,7 +1011,31 @@ router.put('/members/:uuid', authenticate, async (req, res, next) => {
       throw new AppError('Cannot deactivate yourself', 400);
     }
 
+    // Don't allow demoting yourself if you're the only admin
+    if (member.id === req.user.id && req.body.role === 'member' && member.role === 'admin') {
+      const adminCount = await db('users')
+        .where({ tenant_id: req.user.tenantId, role: 'admin', is_active: true })
+        .count('id as count').first();
+      if (adminCount.count <= 1) {
+        throw new AppError('Cannot demote the only administrator', 400);
+      }
+    }
+
     const updates = {};
+    if (req.body.first_name !== undefined) updates.first_name = req.body.first_name.trim();
+    if (req.body.last_name !== undefined) updates.last_name = req.body.last_name.trim() || null;
+    if (req.body.email !== undefined) {
+      const email = req.body.email?.trim().toLowerCase() || null;
+      if (email) {
+        const existing = await db('users').where({ email }).whereNot({ id: member.id }).first();
+        if (existing) throw new AppError('Email already in use', 409);
+      }
+      updates.email = email;
+    }
+    if (req.body.password) {
+      validatePassword(req.body.password); // Enforce min 8 chars
+      updates.password_hash = await bcrypt.hash(req.body.password, SALT_ROUNDS);
+    }
     if (req.body.role !== undefined) updates.role = req.body.role === 'admin' ? 'admin' : 'member';
     if (req.body.is_active !== undefined) updates.is_active = !!req.body.is_active;
 
@@ -1028,8 +1052,49 @@ router.put('/members/:uuid', authenticate, async (req, res, next) => {
       }
     }
 
+    // Reset 2FA — requires admin's own password for confirmation
+    if (req.body.reset_2fa) {
+      if (!req.body.admin_password) {
+        throw new AppError('Your password is required to reset 2FA', 400);
+      }
+      const admin = await db('users').where({ id: req.user.id }).first();
+      const validAdmin = await bcrypt.compare(req.body.admin_password, admin.password_hash);
+      if (!validAdmin) throw new AppError('Invalid admin password', 401);
+
+      updates.totp_enabled = false;
+      updates.totp_secret = null;
+      updates.totp_backup_codes = null;
+    }
+
     if (Object.keys(updates).length) {
       await db('users').where({ id: member.id }).update(updates);
+    }
+
+    // Revoke all sessions if password was changed (force re-login)
+    if (req.body.password) {
+      await db('sessions').where({ user_id: member.id, is_active: true }).update({ is_active: false });
+    }
+
+    // Send notification emails (never include plaintext password)
+    const { sendEmail } = await import('../services/email.js');
+    const targetEmail = updates.email || member.email;
+
+    if (req.body.password && targetEmail) {
+      sendEmail({
+        to: targetEmail,
+        subject: 'WhoareYou — Your password has been changed',
+        text: `Hi ${member.first_name},\n\nYour password has been changed by an administrator.\n\nIf this was not expected, please contact your administrator immediately.\n\nYou have been logged out of all sessions and will need to log in again with your new password.`,
+        html: `<p>Hi ${member.first_name},</p><p>Your password has been changed by an administrator.</p><p><strong>If this was not expected, contact your administrator immediately.</strong></p><p>You have been logged out of all sessions and will need to log in again.</p>`,
+      }).catch(() => {});
+    }
+
+    if (req.body.reset_2fa && targetEmail) {
+      sendEmail({
+        to: targetEmail,
+        subject: 'WhoareYou — Two-factor authentication disabled',
+        text: `Hi ${member.first_name},\n\nTwo-factor authentication has been disabled on your account by an administrator.\n\nIf this was not expected, please contact your administrator immediately.\n\nYou can re-enable 2FA in your profile settings.`,
+        html: `<p>Hi ${member.first_name},</p><p>Two-factor authentication has been disabled on your account by an administrator.</p><p><strong>If this was not expected, contact your administrator immediately.</strong></p><p>You can re-enable 2FA in your profile settings.</p>`,
+      }).catch(() => {});
     }
 
     res.json({ message: 'Member updated' });

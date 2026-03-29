@@ -45,10 +45,10 @@ const loginLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
-// Rate limiting on all API endpoints (generous)
+// Rate limiting on all API endpoints (generous — gallery browsing can be intensive)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1000,
   message: { error: 'Too many requests, try again later' },
   validate: { xForwardedForHeader: false },
 });
@@ -83,6 +83,8 @@ app.post('/api/auth/login', loginLimiter);
 app.post('/api/auth/register', loginLimiter);
 app.post('/api/auth/2fa/verify', loginLimiter);
 app.post('/api/auth/passkey/login', loginLimiter);
+app.post('/api/auth/invite', loginLimiter);
+app.put('/api/auth/members/:uuid', loginLimiter);
 app.use('/api/auth', authRoutes);
 
 // General API rate limit
