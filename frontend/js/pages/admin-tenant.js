@@ -544,17 +544,25 @@ async function loadPortalGuests() {
         : `<span>${initials}</span>`;
       const canSee = g.contacts.map(c => c.first_name).join(', ');
 
+      // Build "can see" chips with avatars
+      const canSeeChips = g.contacts.map(c => `
+        <a href="/contacts/${c.uuid}" data-link class="contact-chip" style="font-size:0.75rem">
+          <span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>
+          ${c.first_name}
+        </a>
+      `).join(' ');
+
       return `
         <div class="member-row">
           <div class="member-avatar">${avatarHtml}</div>
           <div class="member-info">
             <strong>${g.display_name}</strong>
             ${g.linked_contact_uuid ? `<a href="/contacts/${g.linked_contact_uuid}" data-link class="text-muted small d-block"><i class="bi bi-link-45deg"></i> ${g.contact_first_name || ''}</a>` : ''}
-            <span class="text-muted small">${t('portal.accessTo')}: ${canSee || '—'}</span>
-            ${g.active_sessions > 0 ? `<span class="text-muted small"><i class="bi bi-circle-fill text-success" style="font-size:0.5rem"></i> ${g.active_sessions} ${t('portal.activeSessions').toLowerCase()}</span>` : ''}
+            <div class="mt-1">${canSeeChips || `<span class="text-muted small">—</span>`}</div>
           </div>
           <div class="member-badges">
             ${g.is_active ? '' : `<span class="badge bg-danger">${t('admin.inactive')}</span>`}
+            ${g.active_sessions > 0 ? `<button class="badge bg-light text-dark border btn-view-sessions" data-uuid="${g.uuid}" data-name="${g.display_name}" style="cursor:pointer"><i class="bi bi-circle-fill text-success" style="font-size:0.4rem"></i> ${g.active_sessions}</button>` : ''}
           </div>
           <div class="member-actions">
             <div class="dropdown">
@@ -596,6 +604,52 @@ async function loadPortalGuests() {
         }
       });
     });
+    // View sessions for guest
+    el.querySelectorAll('.btn-view-sessions').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const { sessions } = await api.get('/portal-admin/sessions');
+          // Filter by this guest's name (sessions include display_name)
+          const guestSessions = sessions.filter(s => s.display_name === btn.dataset.name);
+          const mid = 'portal-sessions-' + Date.now();
+          document.body.insertAdjacentHTML('beforeend', `
+            <div class="modal fade" id="${mid}" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">${t('portal.activeSessions')} — ${btn.dataset.name}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body">
+                    ${guestSessions.length ? guestSessions.map(s => `
+                      <div class="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom">
+                        <div class="flex-grow-1">
+                          <div class="small"><strong>${s.device_label || t('admin.unknown')}</strong></div>
+                          <div class="text-muted small">${s.ip_address || ''} · ${formatDate(s.last_activity_at)}</div>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm portal-revoke-session" data-uuid="${s.uuid}"><i class="bi bi-x-lg"></i></button>
+                      </div>
+                    `).join('') : `<p class="text-muted small">${t('portal.noSessions')}</p>`}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `);
+          const modalEl = document.getElementById(mid);
+          const modal = new bootstrap.Modal(modalEl);
+          modalEl.querySelectorAll('.portal-revoke-session').forEach(rb => {
+            rb.addEventListener('click', async () => {
+              await api.delete(`/portal-admin/sessions/${rb.dataset.uuid}`);
+              rb.closest('.d-flex').remove();
+            });
+          });
+          modalEl.addEventListener('hidden.bs.modal', () => { modalEl.remove(); loadPortalGuests(); }, { once: true });
+          modal.show();
+        } catch { /* ignore */ }
+      });
+    });
+
     // Create invite link for guest
     el.querySelectorAll('.btn-create-guest-link').forEach(btn => {
       btn.addEventListener('click', async (e) => {
