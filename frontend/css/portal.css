@@ -302,3 +302,36 @@
 .portal-scroll-sentinel {
   height: 1px;
 }
+
+/* ── Install banner ── */
+.portal-install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  background: var(--color-primary);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+}
+
+.portal-install-content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.portal-install-close {
+  border: none;
+  background: none;
+  color: white;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: var(--space-xs);
+}
+
+.portal-install-close:hover {
+  opacity: 1;
+}

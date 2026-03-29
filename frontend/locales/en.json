@@ -677,7 +677,10 @@
     "noSessions": "No active portal sessions",
     "linkInvalid": "This link is invalid or has expired",
     "logoutConfirm": "Log out?",
-    "logoutHint": "You can log back in with your link or password."
+    "logoutHint": "You can log back in with your link or password.",
+    "installIOS": "Tap the share button and choose \"Add to Home Screen\" for easy access.",
+    "installAndroid": "Add this page to your home screen for easy access.",
+    "install": "Install"
   },
   "gifts": {
     "title": "Gifts",

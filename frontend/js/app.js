@@ -127,8 +127,25 @@ async function render() {
       const token = path.split('/portal/s/')[1];
       handleShareLink(token);
     } else {
-      // Check portal auth
-      const portalToken = localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken');
+      // Check portal auth — try localStorage, sessionStorage, then cookie refresh
+      let portalToken = localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken');
+      if (!portalToken) {
+        // Try refresh from cookie (iOS standalone mode)
+        const refreshToken = document.cookie.split('; ').find(c => c.startsWith('portalRefreshToken='))?.split('=')[1];
+        if (refreshToken) {
+          try {
+            const res = await fetch('/api/portal/auth/refresh', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              localStorage.setItem('portalToken', data.token);
+              portalToken = data.token;
+            }
+          } catch { /* fall through */ }
+        }
+      }
       if (!portalToken) {
         window.history.replaceState({}, '', '/portal/login');
         renderPortalLogin();

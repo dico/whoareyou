@@ -677,7 +677,10 @@
     "noSessions": "Ingen aktive portalsesjoner",
     "linkInvalid": "Denne lenken er ugyldig eller utløpt",
     "logoutConfirm": "Logge ut?",
-    "logoutHint": "Du kan logge inn igjen med lenken eller passordet ditt."
+    "logoutHint": "Du kan logge inn igjen med lenken eller passordet ditt.",
+    "installIOS": "Trykk del-knappen og velg «Legg til på Hjem-skjerm» for enkel tilgang.",
+    "installAndroid": "Legg til denne siden på hjemskjermen for enkel tilgang.",
+    "install": "Installer"
   },
   "gifts": {
     "title": "Gaver",

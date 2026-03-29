@@ -12,7 +12,7 @@ const portalApi = {
     const res = await fetch(`/api/portal${path}`, opts);
     if (res.status === 401) {
       // Try refresh
-      const refreshToken = localStorage.getItem('portalRefreshToken');
+      const refreshToken = getPortalRefreshToken();
       if (refreshToken) {
         try {
           const refreshRes = await fetch('/api/portal/auth/refresh', {
@@ -29,9 +29,7 @@ const portalApi = {
           }
         } catch { /* fall through to logout */ }
       }
-      localStorage.removeItem('portalToken');
-      localStorage.removeItem('portalRefreshToken');
-      sessionStorage.removeItem('portalToken');
+      clearPortalTokens();
       navigate('/portal/login');
       throw new Error('Session expired');
     }
@@ -42,9 +40,36 @@ const portalApi = {
   post: (path, body) => portalApi.request('POST', path, body),
 };
 
+// Token storage with cookie fallback (iOS standalone doesn't share localStorage)
+function savePortalTokens(token, refreshToken, guest) {
+  localStorage.setItem('portalToken', token);
+  if (refreshToken) localStorage.setItem('portalRefreshToken', refreshToken);
+  if (guest) localStorage.setItem('portalGuest', JSON.stringify(guest));
+  // Cookie fallback for iOS standalone mode
+  document.cookie = `portalRefreshToken=${refreshToken || ''};path=/portal;max-age=${365*86400};SameSite=Strict`;
+}
+
+function getPortalToken() {
+  return localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken') || '';
+}
+
+function getPortalRefreshToken() {
+  return localStorage.getItem('portalRefreshToken')
+    || document.cookie.split('; ').find(c => c.startsWith('portalRefreshToken='))?.split('=')[1]
+    || '';
+}
+
+function clearPortalTokens() {
+  localStorage.removeItem('portalToken');
+  localStorage.removeItem('portalRefreshToken');
+  localStorage.removeItem('portalGuest');
+  sessionStorage.removeItem('portalToken');
+  document.cookie = 'portalRefreshToken=;path=/portal;max-age=0';
+}
+
 function portalAuthUrl(path) {
   if (!path) return '';
-  const token = localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken') || '';
+  const token = getPortalToken();
   if (path.startsWith('/uploads/')) return `${path}?token=${token}`;
   return path;
 }
@@ -86,9 +111,7 @@ export function renderPortalLogin() {
         email: document.getElementById('portal-email').value.trim(),
         password: document.getElementById('portal-password').value,
       });
-      localStorage.setItem('portalToken', data.token);
-      localStorage.setItem('portalRefreshToken', data.refreshToken);
-      localStorage.setItem('portalGuest', JSON.stringify(data.guest));
+      savePortalTokens(data.token, data.refreshToken, data.guest);
       navigate('/portal');
     } catch (err) {
       errorEl.textContent = err.message;
@@ -106,8 +129,7 @@ export async function handleShareLink(token) {
   try {
     const data = await portalApi.post('/auth/link', { token });
     sessionStorage.setItem('portalToken', data.token);
-    if (data.refreshToken) localStorage.setItem('portalRefreshToken', data.refreshToken);
-    localStorage.setItem('portalGuest', JSON.stringify(data.guest));
+    savePortalTokens(data.token, data.refreshToken, data.guest);
     navigate('/portal');
   } catch (err) {
     root.innerHTML = `
@@ -120,6 +142,51 @@ export async function handleShareLink(token) {
         </div>
       </div>
     `;
+  }
+}
+
+// ── Portal Gallery ──
+
+async function loadPortalGallery(contactUuid) {
+  const el = document.getElementById('portal-gallery');
+  if (!el) return;
+  el.innerHTML = `<div class="loading">${t('app.loading')}</div>`;
+
+  try {
+    const { posts } = await portalApi.get(`/contacts/${contactUuid}/timeline?limit=200`);
+    const allImages = [];
+    for (const p of posts) {
+      for (const m of (p.media || [])) {
+        if (m.file_type?.startsWith('image/')) {
+          allImages.push({ file_path: m.file_path, thumbnail_path: m.thumbnail_path });
+        }
+      }
+    }
+
+    if (!allImages.length) {
+      el.innerHTML = `<div class="portal-empty"><i class="bi bi-image"></i><p>${t('posts.noPhotos')}</p></div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="contact-gallery-grid">
+        ${allImages.map((img, i) => `
+          <div class="contact-gallery-item" data-index="${i}" data-full="${portalAuthUrl(img.file_path)}">
+            <img src="${portalAuthUrl(img.thumbnail_path || img.file_path)}" alt="" loading="lazy">
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    el.querySelectorAll('.contact-gallery-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.index);
+        const images = [...el.querySelectorAll('.contact-gallery-item')].map(el => el.dataset.full);
+        showPortalLightbox(images, idx);
+      });
+    });
+  } catch (err) {
+    el.innerHTML = `<div class="text-danger small p-3">${err.message}</div>`;
   }
 }
 
@@ -141,9 +208,14 @@ export async function renderPortalTimeline() {
         <button class="portal-logout-btn" id="portal-logout"><i class="bi bi-box-arrow-right"></i> ${t('nav.logout')}</button>
       </div>
       <div id="portal-contacts" class="portal-contacts"></div>
+      <div class="portal-view-tabs filter-tabs mb-3" id="portal-view-tabs">
+        <button class="filter-tab active" data-view="timeline"><i class="bi bi-journal-text me-1"></i>${t('posts.title')}</button>
+        <button class="filter-tab" data-view="gallery"><i class="bi bi-grid-3x3-gap me-1"></i>${t('posts.gallery')}</button>
+      </div>
       <div id="portal-timeline" class="portal-timeline">
         <div class="loading">${t('app.loading')}</div>
       </div>
+      <div id="portal-gallery" class="d-none"></div>
     </div>
   `;
 
@@ -169,16 +241,31 @@ export async function renderPortalTimeline() {
     const modalEl = document.getElementById(mid);
     const modal = new bootstrap.Modal(modalEl);
     document.getElementById(`${mid}-confirm`).addEventListener('click', () => {
-      localStorage.removeItem('portalToken');
-      localStorage.removeItem('portalRefreshToken');
-      localStorage.removeItem('portalGuest');
-      sessionStorage.removeItem('portalToken');
+      clearPortalTokens();
       modal.hide();
       navigate('/portal/login');
     });
     modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
     modal.show();
   });
+
+  // View tabs (timeline / gallery)
+  let currentContactUuid = null;
+  document.getElementById('portal-view-tabs').addEventListener('click', async (e) => {
+    const tab = e.target.closest('.filter-tab');
+    if (!tab) return;
+    document.querySelectorAll('#portal-view-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const view = tab.dataset.view;
+    document.getElementById('portal-timeline').classList.toggle('d-none', view !== 'timeline');
+    document.getElementById('portal-gallery').classList.toggle('d-none', view !== 'gallery');
+    if (view === 'gallery' && currentContactUuid) {
+      await loadPortalGallery(currentContactUuid);
+    }
+  });
+
+  // Add to homescreen banner
+  showInstallBanner();
 
   // Load contacts
   try {
@@ -195,7 +282,8 @@ export async function renderPortalTimeline() {
 
     // Load first contact's timeline
     if (contacts.length) {
-      await loadPortalTimeline(contacts[0].uuid);
+      currentContactUuid = contacts[0].uuid;
+      await loadPortalTimeline(currentContactUuid);
     }
 
     // Contact switching
@@ -204,7 +292,13 @@ export async function renderPortalTimeline() {
       if (!pill) return;
       document.querySelectorAll('.portal-contact-pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
-      await loadPortalTimeline(pill.dataset.uuid);
+      currentContactUuid = pill.dataset.uuid;
+      // Reset to timeline view
+      document.querySelectorAll('#portal-view-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('#portal-view-tabs [data-view="timeline"]')?.classList.add('active');
+      document.getElementById('portal-timeline').classList.remove('d-none');
+      document.getElementById('portal-gallery').classList.add('d-none');
+      await loadPortalTimeline(currentContactUuid);
     });
   } catch (err) {
     document.getElementById('portal-contacts').innerHTML = `<div class="text-danger small p-3">${err.message}</div>`;
@@ -406,6 +500,60 @@ async function loadPortalComments(postUuid, section) {
     section.innerHTML = `<div class="text-danger small">${err.message}</div>`;
   }
 }
+
+function showInstallBanner() {
+  // Don't show if already in standalone mode or dismissed
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (window.navigator.standalone) return; // iOS standalone
+  if (localStorage.getItem('portalInstallDismissed')) return;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  if (!isIOS && !isAndroid) return; // Only show on mobile
+
+  const instructions = isIOS
+    ? t('portal.installIOS')
+    : t('portal.installAndroid');
+
+  const banner = document.createElement('div');
+  banner.className = 'portal-install-banner';
+  banner.innerHTML = `
+    <div class="portal-install-content">
+      <i class="bi bi-phone me-2"></i>
+      <span>${instructions}</span>
+    </div>
+    <button class="portal-install-close" id="portal-install-dismiss"><i class="bi bi-x-lg"></i></button>
+  `;
+
+  document.querySelector('.portal-app')?.prepend(banner);
+
+  document.getElementById('portal-install-dismiss')?.addEventListener('click', () => {
+    banner.remove();
+    localStorage.setItem('portalInstallDismissed', '1');
+  });
+}
+
+// Capture Android's beforeinstallprompt
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show Android native install if banner is visible
+  const banner = document.querySelector('.portal-install-banner');
+  if (banner) {
+    banner.querySelector('.portal-install-content').innerHTML = `
+      <i class="bi bi-phone me-2"></i>
+      <span>${t('portal.installAndroid')}</span>
+      <button class="btn btn-primary btn-sm ms-2" id="portal-install-btn">${t('portal.install')}</button>
+    `;
+    document.getElementById('portal-install-btn')?.addEventListener('click', async () => {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') banner.remove();
+      deferredInstallPrompt = null;
+    });
+  }
+});
 
 function showPortalLightbox(images, startIndex) {
   let current = startIndex;
