@@ -40,7 +40,7 @@ router.get('/', async (req, res, next) => {
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
         'posts.contact_id', 'posts.created_at', 'posts.updated_at',
-        'posts.visibility'
+        'posts.visibility', 'posts.portal_guest_id', 'posts.created_by'
       )
       .groupBy('posts.id')
       .orderBy('posts.post_date', 'desc')
@@ -135,6 +135,44 @@ router.get('/', async (req, res, next) => {
       }
     }
 
+    // Resolve post authors (portal guests and users)
+    const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
+    const authorUserIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
+    const postAuthorMap = new Map(); // key -> { name, contact_uuid, avatar }
+
+    if (guestIds.length) {
+      const guests = await db('portal_guests').whereIn('portal_guests.id', guestIds)
+        .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
+        .select('portal_guests.id', 'portal_guests.display_name', 'portal_guests.linked_contact_id',
+          'gc.uuid as contact_uuid', 'gc.first_name as contact_first', 'gc.last_name as contact_last');
+      const guestContactIds = guests.map(g => g.linked_contact_id).filter(Boolean);
+      const guestAvatars = new Map();
+      if (guestContactIds.length) {
+        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(guestContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+        for (const p of photos) guestAvatars.set(p.contact_id, p.thumbnail_path);
+      }
+      for (const g of guests) {
+        const name = g.contact_first ? `${g.contact_first} ${g.contact_last || ''}`.trim() : g.display_name;
+        postAuthorMap.set(`guest_${g.id}`, { name, contact_uuid: g.contact_uuid, avatar: guestAvatars.get(g.linked_contact_id) || null });
+      }
+    }
+    if (authorUserIds.length) {
+      const users = await db('users').whereIn('users.id', authorUserIds)
+        .leftJoin('contacts as uc', 'users.linked_contact_id', 'uc.id')
+        .select('users.id', 'users.first_name', 'users.linked_contact_id',
+          'uc.uuid as contact_uuid', 'uc.first_name as contact_first', 'uc.last_name as contact_last');
+      const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
+      const userAvatars = new Map();
+      if (userContactIds.length) {
+        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(userContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+        for (const p of photos) userAvatars.set(p.contact_id, p.thumbnail_path);
+      }
+      for (const u of users) {
+        const name = u.contact_first ? `${u.contact_first} ${u.contact_last || ''}`.trim() : u.first_name;
+        postAuthorMap.set(`user_${u.id}`, { name, contact_uuid: u.contact_uuid, avatar: userAvatars.get(u.linked_contact_id) || null });
+      }
+    }
+
     const commentCountByPost = {};
     for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
 
@@ -204,6 +242,10 @@ router.get('/', async (req, res, next) => {
         reaction_names: reactionsByPost[p.id]?.names || [],
         reaction_people: reactionsByPost[p.id]?.people || [],
         reacted: reactionsByPost[p.id]?.reacted || false,
+        posted_by: (() => {
+          const key = p.portal_guest_id ? `guest_${p.portal_guest_id}` : p.created_by ? `user_${p.created_by}` : null;
+          return key ? postAuthorMap.get(key) || null : null;
+        })(),
       };
     });
 
@@ -499,6 +541,22 @@ router.put('/:uuid', async (req, res, next) => {
               contacts.map((c) => ({ post_id: post.id, contact_id: c.id }))
             );
           }
+        }
+      }
+
+      // Update or create link preview
+      if (req.body.link_preview !== undefined) {
+        await trx('post_link_previews').where({ post_id: post.id }).del();
+        if (req.body.link_preview?.url) {
+          const lp = req.body.link_preview;
+          await trx('post_link_previews').insert({
+            post_id: post.id,
+            url: lp.url.slice(0, 2048),
+            title: (lp.title || '').slice(0, 500),
+            description: (lp.description || '').slice(0, 2000),
+            image_url: (lp.image_url || '').slice(0, 2048),
+            site_name: (lp.site_name || '').slice(0, 200),
+          });
         }
       }
     });

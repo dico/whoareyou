@@ -115,9 +115,11 @@
     "andOthers": "and {count} others",
     "deleteCommentConfirm": "Delete this comment?",
     "commentPlaceholder": "Write a comment...",
-    "send": "Send"
+    "send": "Send",
+    "postedBy": "Posted by {name}"
   },
   "visibility": {
+    "title": "Visibility",
     "shared": "Everyone",
     "family": "Family",
     "private": "Only me",

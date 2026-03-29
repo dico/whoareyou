@@ -39,6 +39,14 @@ const portalApi = {
   get: (path) => portalApi.request('GET', path),
   post: (path, body) => portalApi.request('POST', path, body),
   delete: (path) => portalApi.request('DELETE', path),
+  async upload(path, formData) {
+    const token = localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`/api/portal${path}`, { method: 'POST', headers, body: formData });
+    if (!res.ok) throw new Error((await res.json()).error || 'Upload failed');
+    return res.json();
+  },
 };
 
 // Token storage with cookie fallback (iOS standalone doesn't share localStorage)
@@ -311,7 +319,78 @@ async function loadPortalTimeline(contactUuid) {
       return;
     }
 
-    el.innerHTML = posts.map(p => renderPortalPost(p)).join('');
+    // Compose form for portal guests
+    el.innerHTML = `
+      <div class="portal-compose glass-card">
+        <form class="portal-compose-form" data-contact="${contactUuid}">
+          <textarea class="form-control form-control-sm" placeholder="${t('posts.commentPlaceholder')}" rows="2" required></textarea>
+          <div class="portal-compose-preview d-none"></div>
+          <div class="portal-compose-bar">
+            <label class="post-media-btn" title="${t('posts.addMedia')}">
+              <i class="bi bi-image"></i>
+              <input type="file" class="portal-compose-media" multiple accept="image/*,video/*" hidden>
+            </label>
+            <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
+          </div>
+        </form>
+      </div>
+    ` + posts.map(p => renderPortalPost(p)).join('');
+
+    // Compose form handlers
+    const composeForm = el.querySelector('.portal-compose-form');
+    let portalPostMedia = [];
+    const composePreview = el.querySelector('.portal-compose-preview');
+
+    composeForm.querySelector('.portal-compose-media').addEventListener('change', (e) => {
+      portalPostMedia.push(...e.target.files);
+      composePreview.innerHTML = portalPostMedia.map((f, i) => `
+        <div class="portal-compose-thumb">
+          <img src="${URL.createObjectURL(f)}" alt="">
+          <button type="button" class="portal-compose-thumb-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+        </div>
+      `).join('');
+      composePreview.classList.remove('d-none');
+      composePreview.querySelectorAll('.portal-compose-thumb-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          portalPostMedia.splice(parseInt(btn.dataset.index), 1);
+          if (!portalPostMedia.length) { composePreview.classList.add('d-none'); composePreview.innerHTML = ''; }
+          else composeForm.querySelector('.portal-compose-media').dispatchEvent(new Event('change'));
+        });
+      });
+      e.target.value = '';
+    });
+
+    composeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const textarea = composeForm.querySelector('textarea');
+      const body = textarea.value.trim();
+      if (!body && !portalPostMedia.length) return;
+
+      const submitBtn = composeForm.querySelector('[type="submit"]');
+      submitBtn.disabled = true;
+
+      try {
+        const { post } = await portalApi.post('/posts', {
+          body: body || '',
+          contact_uuid: contactUuid,
+        });
+
+        if (portalPostMedia.length && post?.uuid) {
+          const formData = new FormData();
+          for (const file of portalPostMedia) formData.append('media', file);
+          await portalApi.upload(`/posts/${post.uuid}/media`, formData);
+        }
+
+        textarea.value = '';
+        portalPostMedia = [];
+        composePreview.classList.add('d-none');
+        composePreview.innerHTML = '';
+        await loadPortalTimeline(contactUuid);
+      } catch (err) {
+        await portalConfirm(err.message);
+      }
+      submitBtn.disabled = false;
+    });
 
     // Reactions
     el.querySelectorAll('.portal-react-btn').forEach(btn => {
@@ -438,18 +517,21 @@ function renderPortalPost(p) {
 
   return `
     <div class="portal-post" data-uuid="${p.uuid}">
-      ${p.about ? `
+      ${(() => {
+        const authorAvatar = p.author?.avatar || p.about?.avatar;
+        const authorName = p.author?.name || (p.about ? `${p.about.first_name} ${p.about.last_name || ''}` : '');
+        const initial = authorName?.[0] || '?';
+        return `
         <div class="portal-post-header">
           <div class="portal-post-avatar">
-            ${p.about.avatar ? `<img src="${portalAuthUrl(p.about.avatar)}" alt="">` : `<span>${(p.about.first_name?.[0] || '')}</span>`}
+            ${authorAvatar ? `<img src="${portalAuthUrl(authorAvatar)}" alt="">` : `<span>${initial}</span>`}
           </div>
           <div>
-            <strong>${esc(p.about.first_name)} ${esc(p.about.last_name || '')}</strong>
+            <strong>${esc(authorName)}</strong>
             <span class="portal-post-date">${formatDate(p.post_date)}</span>
           </div>
-        </div>
-      ` : `<div class="portal-post-date-only">${formatDate(p.post_date)}</div>`}
-
+        </div>`;
+      })()}
       ${p.body ? `<p class="portal-post-body">${esc(p.body)}</p>` : ''}
 
       ${images.length ? `

@@ -2,12 +2,28 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db.js';
 import { config } from '../config/index.js';
 import { AppError } from '../utils/errors.js';
+import { processImage } from '../services/image.js';
 import { portalAuthenticate } from '../middleware/portal-auth.js';
 import { getSetting } from '../utils/settings.js';
+
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+
+const portalUpload = multer({
+  dest: path.join(config.uploads?.dir || path.join(process.cwd(), '..', 'uploads'), 'temp'),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    if ([...IMAGE_TYPES, ...VIDEO_TYPES].includes(file.mimetype)) cb(null, true);
+    else cb(new AppError('Only images and videos are allowed', 400));
+  },
+});
 
 const router = Router();
 
@@ -265,16 +281,140 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
       }
     }
 
+    // Resolve post authors: portal guests or users
+    const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
+    const userIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
+    const authorMap = new Map(); // id -> { name, avatar }
+    if (guestIds.length) {
+      const guests = await db('portal_guests').whereIn('portal_guests.id', guestIds)
+        .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
+        .select('portal_guests.id', 'portal_guests.display_name',
+          'gc.first_name as contact_first', 'gc.last_name as contact_last', 'gc.id as contact_id');
+      // Get avatars for guest-linked contacts
+      const guestContactIds = guests.map(g => g.contact_id).filter(Boolean);
+      const guestAvatarMap = new Map();
+      if (guestContactIds.length) {
+        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(guestContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+        for (const p of photos) guestAvatarMap.set(p.contact_id, p.thumbnail_path);
+      }
+      for (const g of guests) {
+        const name = g.contact_first ? `${g.display_name} ${g.contact_first}` : g.display_name;
+        authorMap.set(`guest_${g.id}`, { name, avatar: guestAvatarMap.get(g.contact_id) || null });
+      }
+    }
+    if (userIds.length) {
+      const users = await db('users').whereIn('users.id', userIds)
+        .leftJoin('contacts as uc', 'users.linked_contact_id', 'uc.id')
+        .select('users.id', 'users.first_name', 'users.linked_contact_id',
+          'uc.first_name as contact_first', 'uc.last_name as contact_last');
+      const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
+      const userAvatarMap = new Map();
+      if (userContactIds.length) {
+        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(userContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+        for (const p of photos) userAvatarMap.set(p.contact_id, p.thumbnail_path);
+      }
+      for (const u of users) {
+        authorMap.set(`user_${u.id}`, { name: u.contact_first || u.first_name, avatar: userAvatarMap.get(u.linked_contact_id) || null });
+      }
+    }
+
     res.json({
-      posts: posts.map(p => ({
-        uuid: p.uuid, body: p.body, post_date: p.post_date,
-        about: p.about || null, contacts: p.contacts, media: p.media,
-        reaction_count: p.reaction_count, reacted: p.reacted,
-        reaction_names: p.reaction_names || [],
-        comment_count: p.comment_count,
-      })),
+      posts: posts.map(p => {
+        const authorKey = p.portal_guest_id ? `guest_${p.portal_guest_id}` : p.created_by ? `user_${p.created_by}` : null;
+        const author = authorKey ? authorMap.get(authorKey) : null;
+        return {
+          uuid: p.uuid, body: p.body, post_date: p.post_date,
+          about: p.about || null, contacts: p.contacts, media: p.media,
+          reaction_count: p.reaction_count, reacted: p.reacted,
+          reaction_names: p.reaction_names || [],
+          comment_count: p.comment_count,
+          author: author || null,
+        };
+      }),
       hasMore: posts.length === limit,
     });
+  } catch (err) { next(err); }
+});
+
+// POST /api/portal/posts — create a post as portal guest
+router.post('/posts', portalAuthenticate, async (req, res, next) => {
+  try {
+    const { body, contact_uuid } = req.body;
+    if (!body?.trim() && !req.body.has_media) throw new AppError('Post body is required', 400);
+
+    // Verify guest has access to this contact
+    const contact = await db('contacts')
+      .where({ uuid: contact_uuid, tenant_id: req.portal.tenantId })
+      .first();
+    if (!contact || !req.portal.contactIds.includes(contact.id)) {
+      throw new AppError('Contact not found', 404);
+    }
+
+    const uuid = uuidv4();
+    const guest = await db('portal_guests').where({ id: req.portal.guestId }).first();
+
+    const [postId] = await db('posts').insert({
+      uuid,
+      tenant_id: req.portal.tenantId,
+      created_by: null,
+      body: (body || '').trim(),
+      post_date: new Date(),
+      contact_id: contact.id,
+      visibility: 'shared',
+      portal_guest_id: req.portal.guestId,
+    });
+
+    res.status(201).json({ post: { uuid, id: postId } });
+  } catch (err) { next(err); }
+});
+
+// POST /api/portal/posts/:uuid/media — upload media to a portal post
+router.post('/posts/:uuid/media', portalAuthenticate, portalUpload.array('media', 10), async (req, res, next) => {
+  try {
+    if (!req.files?.length) throw new AppError('No files uploaded', 400);
+
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, portal_guest_id: req.portal.guestId })
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const uploadsDir = config.uploads?.dir || path.join(process.cwd(), '..', 'uploads');
+    const [{ maxSort }] = await db('post_media').where({ post_id: post.id }).max('sort_order as maxSort');
+
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      const timestamp = Date.now();
+      let filePath, thumbnailPath, fileType;
+
+      if (IMAGE_TYPES.includes(file.mimetype)) {
+        const processed = await processImage(file.path, `posts/${post.uuid}`, `media_${timestamp}_${i}`);
+        filePath = processed.filePath;
+        thumbnailPath = processed.thumbnailPath;
+        fileType = 'image/webp';
+      } else {
+        const ext = path.extname(file.originalname) || '.mp4';
+        const outDir = path.join(uploadsDir, 'posts', post.uuid);
+        await fs.mkdir(outDir, { recursive: true });
+        const destName = `video_${timestamp}_${i}${ext}`;
+        await fs.rename(file.path, path.join(outDir, destName));
+        filePath = `/uploads/posts/${post.uuid}/${destName}`;
+        thumbnailPath = null;
+        fileType = file.mimetype;
+      }
+
+      await db('post_media').insert({
+        post_id: post.id,
+        tenant_id: req.portal.tenantId,
+        file_path: filePath,
+        thumbnail_path: thumbnailPath,
+        file_type: fileType,
+        file_size: file.size,
+        original_name: file.originalname || null,
+        sort_order: (maxSort || 0) + i + 1,
+      });
+    }
+
+    res.json({ message: 'Media uploaded' });
   } catch (err) { next(err); }
 });
 

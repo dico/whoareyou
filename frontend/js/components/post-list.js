@@ -6,6 +6,8 @@ import { authUrl } from '../utils/auth-url.js';
 
 // Store reaction people per post (avoids JSON-in-HTML-attribute issues)
 const reactionPeopleMap = new Map();
+// Store edit link preview per post UUID
+const editLinkPreviewMap = new Map();
 
 function renderLinkPreview(lp) {
   if (!lp?.url) return '';
@@ -57,20 +59,27 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     el.innerHTML = data.posts.map((p) => p.type === 'life_event' ? renderLifeEventCard(p, contactUuid) : `
       <div class="timeline-post glass-card" data-post-uuid="${p.uuid}">
         <div class="post-view">
-          ${p.about ? `
+          ${p.about ? (() => {
+            const hasAuthor = p.posted_by?.name;
+            const showAuthor = hasAuthor && (contactUuid || true); // always show author when available
+            const avatar = showAuthor && p.posted_by.avatar ? p.posted_by.avatar : p.about.avatar;
+            const name = showAuthor ? p.posted_by.name : `${p.about.first_name} ${p.about.last_name || ''}`;
+            const initials = showAuthor ? (p.posted_by.name?.[0] || '?') : (p.about.first_name[0] || '') + (p.about.last_name?.[0] || '');
+            const target = !contactUuid && hasAuthor ? ` <i class="bi bi-arrow-right-short"></i> ${p.about.first_name}` : '';
+            return `
             <a href="/contacts/${p.about.uuid}" data-link class="post-about-header">
               <div class="post-about-avatar">
-                ${p.about.avatar
-                  ? `<img src="${authUrl(p.about.avatar)}" alt="">`
-                  : `<span>${(p.about.first_name[0] || '') + (p.about.last_name?.[0] || '')}</span>`
+                ${avatar
+                  ? `<img src="${authUrl(avatar)}" alt="">`
+                  : `<span>${initials}</span>`
                 }
               </div>
               <div>
-                <strong>${p.about.first_name} ${p.about.last_name || ''}</strong>
+                <strong>${escapeHtml(name)}${target}</strong>
                 <span class="post-date">${formatDate(p.post_date)}</span>
               </div>
-            </a>
-          ` : `
+            </a>`;
+          })() : `
             <div class="post-header">
               <span class="post-date">${formatDate(p.post_date)}</span>
             </div>
@@ -82,6 +91,8 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
                 <li><a class="dropdown-item btn-edit-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><h6 class="dropdown-header">${t('visibility.title')}</h6></li>
                 <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="shared">
                   <i class="bi bi-globe2 me-2"></i>${t('visibility.shared')} ${p.visibility === 'shared' ? '<i class="bi bi-check"></i>' : ''}
                 </a></li>
@@ -194,6 +205,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
               </div>
             `}
             <textarea class="form-control edit-post-body" rows="3">${escapeHtml(p.body)}</textarea>
+            <div class="edit-link-preview d-none"></div>
             <div class="edit-bar">
               <div class="edit-tags-list">
                 ${p.contacts.map((c) => `
@@ -205,6 +217,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
                 <button type="button" class="edit-action btn-add-tag-edit" title="${t('posts.tagContact')}"><i class="bi bi-person-plus"></i></button>
               </div>
               <div class="edit-actions">
+                <input type="date" class="form-control form-control-sm edit-post-date" value="${p.post_date ? new Date(p.post_date).toISOString().split('T')[0] : ''}">
                 <button type="button" class="edit-action btn-cancel-edit">${t('common.cancel')}</button>
                 <button type="submit" class="edit-action edit-action-primary">${t('common.save')}</button>
               </div>
@@ -256,17 +269,87 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             tagsList.insertBefore(tag, addBtn);
           });
         }
+
+        // Link preview detection for edit
+        if (!textarea.dataset.linkPreviewAttached) {
+          textarea.dataset.linkPreviewAttached = 'true';
+          const postData = postsMap.get(btn.dataset.uuid);
+          const previewEl = postEl.querySelector('.edit-link-preview');
+          let editLinkPreview = postData?.link_preview || null;
+          let editLinkDismissed = false;
+          let editFetchedUrl = null;
+          let editLpTimeout = null;
+
+          function renderEditLinkPreview() {
+            if (!editLinkPreview || editLinkDismissed) {
+              previewEl.classList.add('d-none');
+              previewEl.innerHTML = '';
+              return;
+            }
+            const lp = editLinkPreview;
+            const domain = lp.site_name || (() => { try { return new URL(lp.url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+            previewEl.innerHTML = `
+              <div class="link-preview-compose">
+                <button type="button" class="link-preview-dismiss" title="${t('common.cancel')}"><i class="bi bi-x-lg"></i></button>
+                ${renderLinkPreview(lp)}
+              </div>`;
+            previewEl.classList.remove('d-none');
+            previewEl.querySelector('.link-preview-dismiss').addEventListener('click', () => {
+              editLinkDismissed = true;
+              editLinkPreview = null;
+              updateMap();
+              renderEditLinkPreview();
+            });
+          }
+
+          // Show existing preview, or auto-fetch if URL exists without preview
+          if (editLinkPreview) {
+            editFetchedUrl = editLinkPreview.url;
+            renderEditLinkPreview();
+          } else {
+            const urls = textarea.value.match(/https?:\/\/[^\s<]+/g);
+            if (urls?.[0]) {
+              editFetchedUrl = urls[0];
+              api.get(`/posts/link-preview?url=${encodeURIComponent(urls[0])}`).then(d => {
+                if (d.title && !editLinkDismissed) { editLinkPreview = d; updateMap(); renderEditLinkPreview(); }
+              }).catch(() => {});
+            }
+          }
+
+          textarea.addEventListener('input', () => {
+            clearTimeout(editLpTimeout);
+            if (editLinkDismissed) return;
+            editLpTimeout = setTimeout(async () => {
+              const urls = textarea.value.match(/https?:\/\/[^\s<]+/g);
+              const firstUrl = urls?.[0];
+              if (!firstUrl || firstUrl === editFetchedUrl) return;
+              editFetchedUrl = firstUrl;
+              try {
+                const d = await api.get(`/posts/link-preview?url=${encodeURIComponent(firstUrl)}`);
+                if (d.title) { editLinkPreview = d; updateMap(); renderEditLinkPreview(); }
+              } catch {}
+            }, 600);
+          });
+
+          // Store in Map for submit handler
+          const updateMap = () => editLinkPreviewMap.set(btn.dataset.uuid, editLinkDismissed ? null : editLinkPreview);
+          updateMap();
+        }
+
         textarea.focus();
       });
     });
 
+    // Cancel edit (delegated — handles dynamically rendered buttons)
     // Cancel edit
-    el.querySelectorAll('.btn-cancel-edit').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const postEl = btn.closest('[data-post-uuid]');
-        postEl.querySelector('.post-view').classList.remove('d-none');
-        postEl.querySelector('.post-edit').classList.add('d-none');
-      });
+    el.querySelectorAll('.btn-cancel-edit').forEach(btn => {
+      btn.onclick = () => {
+        const postEl = btn.closest('.timeline-post');
+        if (postEl) {
+          postEl.querySelector('.post-view')?.classList.remove('d-none');
+          postEl.querySelector('.post-edit')?.classList.add('d-none');
+        }
+      };
     });
 
     // Change "about" contact
@@ -337,7 +420,9 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         if (!body) return;
 
         try {
-          const payload = { body, contact_uuids: contactUuids };
+          const postDate = form.querySelector('.edit-post-date')?.value || undefined;
+          const linkPreview = editLinkPreviewMap.get(uuid) ?? undefined;
+          const payload = { body, contact_uuids: contactUuids, post_date: postDate, link_preview: linkPreview };
           // Only send about_contact_uuid if we have the edit-about section
           if (aboutEl) {
             payload.about_contact_uuid = aboutUuid;

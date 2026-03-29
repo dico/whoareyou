@@ -230,6 +230,15 @@
   color: var(--color-text-secondary);
 }
 
+.post-posted-by {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.post-posted-by:hover {
+  text-decoration: underline;
+}
+
 .post-body {
   line-height: 1.6;
   margin-bottom: var(--space-sm);

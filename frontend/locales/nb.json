@@ -115,9 +115,11 @@
     "andOthers": "og {count} andre",
     "deleteCommentConfirm": "Slette denne kommentaren?",
     "commentPlaceholder": "Skriv en kommentar...",
-    "send": "Send"
+    "send": "Send",
+    "postedBy": "Lagt ut av {name}"
   },
   "visibility": {
+    "title": "Synlighet",
     "shared": "Alle",
     "family": "Familie",
     "private": "Bare meg",
