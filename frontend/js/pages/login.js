@@ -31,6 +31,7 @@ export function renderLogin() {
           </div>
           <div id="login-error" class="alert alert-danger d-none"></div>
           <button type="submit" class="btn btn-primary w-100">${t('auth.login')}</button>
+          <a href="#" class="d-none subtle-link small text-center d-block mt-2" id="forgot-password-link">${t('auth.forgotPassword')}</a>
           ${window.PublicKeyCredential && location.protocol === 'https:' ? `
             <div class="auth-divider"><span>or</span></div>
             <button type="button" class="btn btn-outline-secondary w-100" id="btn-passkey-login">
@@ -70,12 +71,47 @@ export function renderLogin() {
           <div id="register-error" class="alert alert-danger d-none"></div>
           <button type="submit" class="btn btn-primary w-100">${t('auth.createAccount')}</button>
         </form>
+
+        <!-- Forgot password form -->
+        <form id="forgot-form" class="auth-form d-none">
+          <p class="text-muted small">${t('auth.forgotDesc')}</p>
+          <div class="form-floating mb-3">
+            <input type="email" class="form-control" id="forgot-email" placeholder="${t('auth.email')}" required>
+            <label>${t('auth.email')}</label>
+          </div>
+          <div id="forgot-message" class="d-none mb-3"></div>
+          <button type="submit" class="btn btn-primary w-100">${t('auth.sendResetLink')}</button>
+          <a href="#" class="subtle-link small text-center d-block mt-2" id="forgot-back">${t('auth.backToLogin')}</a>
+        </form>
+
+        <!-- Reset password form (via URL token) -->
+        <form id="reset-form" class="auth-form d-none">
+          <p class="text-muted small">${t('auth.resetDesc')}</p>
+          <div class="form-floating mb-3">
+            <input type="password" class="form-control" id="reset-password" placeholder="${t('auth.passwordHint')}" required>
+            <label>${t('auth.passwordHint')}</label>
+          </div>
+          <div id="reset-message" class="d-none mb-3"></div>
+          <button type="submit" class="btn btn-primary w-100">${t('auth.resetPassword')}</button>
+        </form>
       </div>
     </div>
   `;
 
-  // Check if registration is enabled
-  fetch('/api/system/registration-status').then(r => r.json()).then(({ enabled }) => {
+  // Check for reset token in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const resetToken = urlParams.get('token');
+  if (resetToken && window.location.pathname === '/reset-password') {
+    document.getElementById('auth-tabs')?.classList.add('d-none');
+    document.getElementById('login-form')?.classList.add('d-none');
+    document.getElementById('reset-form')?.classList.remove('d-none');
+  }
+
+  // Check registration + password reset status
+  fetch('/api/system/registration-status').then(r => r.json()).then(({ enabled, password_reset }) => {
+    if (password_reset) {
+      document.getElementById('forgot-password-link')?.classList.remove('d-none');
+    }
     if (!enabled) {
       document.getElementById('register-tab')?.remove();
       document.getElementById('register-form')?.remove();
@@ -91,6 +127,56 @@ export function renderLogin() {
       document.getElementById('login-form').classList.toggle('d-none', target !== 'login');
       document.getElementById('register-form').classList.toggle('d-none', target !== 'register');
     });
+  });
+
+  // Forgot password link
+  document.getElementById('forgot-password-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('auth-tabs')?.classList.add('d-none');
+    document.getElementById('login-form')?.classList.add('d-none');
+    document.getElementById('forgot-form')?.classList.remove('d-none');
+  });
+
+  // Back to login from forgot
+  document.getElementById('forgot-back')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('auth-tabs')?.classList.remove('d-none');
+    document.getElementById('forgot-form')?.classList.add('d-none');
+    document.getElementById('login-form')?.classList.remove('d-none');
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('[data-tab="login"]')?.classList.add('active');
+  });
+
+  // Forgot password submit
+  document.getElementById('forgot-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById('forgot-message');
+    try {
+      const result = await api.post('/auth/forgot-password', { email: document.getElementById('forgot-email').value.trim() });
+      msgEl.className = 'alert alert-success small mb-3';
+      msgEl.textContent = result.message;
+    } catch (err) {
+      msgEl.className = 'alert alert-danger small mb-3';
+      msgEl.textContent = err.message;
+    }
+  });
+
+  // Reset password submit (token from URL)
+  document.getElementById('reset-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById('reset-message');
+    try {
+      const result = await api.post('/auth/reset-password', {
+        token: resetToken,
+        password: document.getElementById('reset-password').value,
+      });
+      msgEl.className = 'alert alert-success small mb-3';
+      msgEl.textContent = result.message;
+      setTimeout(() => { window.location.href = '/login'; }, 2000);
+    } catch (err) {
+      msgEl.className = 'alert alert-danger small mb-3';
+      msgEl.textContent = err.message;
+    }
   });
 
   // Login

@@ -19,9 +19,30 @@ export async function renderSystemAdmin() {
         <div></div>
       </div>
 
-      <div class="settings-section glass-card">
-        <h4><i class="bi bi-gear"></i> ${t('admin.systemSettings')}</h4>
-        <div id="system-settings">
+      <div class="filter-tabs mb-3" id="system-tabs">
+        <button class="filter-tab active" data-tab="tenants"><i class="bi bi-buildings me-1"></i>${t('admin.tenants')}</button>
+        <button class="filter-tab" data-tab="settings"><i class="bi bi-gear me-1"></i>${t('admin.systemSettings')}</button>
+        <button class="filter-tab" data-tab="email"><i class="bi bi-envelope me-1"></i>${t('admin.emailConfig')}</button>
+      </div>
+
+      <!-- Tenants tab -->
+      <div id="tab-tenants">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p class="text-muted small mb-0">${t('admin.tenantsDesc')}</p>
+          <button class="btn btn-primary btn-sm" id="btn-create-tenant">
+            <i class="bi bi-plus-lg me-1"></i>${t('admin.createTenant')}
+          </button>
+        </div>
+        <div id="tenants-list" class="glass-card settings-section">
+          <div class="loading">${t('admin.loadingTenants')}</div>
+        </div>
+      </div>
+
+      </div>
+
+      <!-- Settings tab -->
+      <div id="tab-settings" class="d-none">
+        <div class="settings-section glass-card">
           <div class="form-check form-switch mb-2">
             <input class="form-check-input" type="checkbox" id="setting-registration" checked>
             <label class="form-check-label" for="setting-registration">${t('admin.allowRegistration')}</label>
@@ -36,17 +57,8 @@ export async function renderSystemAdmin() {
         </div>
       </div>
 
-      <div class="settings-section glass-card">
-        <h4><i class="bi bi-buildings"></i> ${t('admin.tenants')}</h4>
-        <p class="text-muted small">${t('admin.tenantsDesc')}</p>
-        <div id="tenants-list" class="mt-3">
-          <div class="loading">${t('admin.loadingTenants')}</div>
-        </div>
-        <button class="btn btn-outline-primary btn-sm mt-3" id="btn-create-tenant">
-          <i class="bi bi-plus-lg me-1"></i>${t('admin.createTenant')}
-        </button>
-      </div>
-
+      <!-- Email tab -->
+      <div id="tab-email" class="d-none">
       <div class="settings-section glass-card">
         <h4><i class="bi bi-envelope"></i> ${t('admin.emailConfig')}</h4>
         <p class="text-muted small">${t('admin.emailConfigDesc')}</p>
@@ -99,10 +111,23 @@ export async function renderSystemAdmin() {
           <div id="smtp-feedback" class="mt-2"></div>
         </form>
       </div>
+      </div>
     </div>
   `;
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/settings'));
+
+  // Tab switching
+  document.getElementById('system-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.filter-tab');
+    if (!tab) return;
+    document.querySelectorAll('#system-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    ['tenants', 'settings', 'email'].forEach(id => {
+      document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
+    });
+  });
+
   await Promise.all([loadSettings(), loadTenants(), loadSmtp()]);
 }
 
@@ -234,8 +259,8 @@ async function loadTenants() {
         </div>
         <div class="tenant-actions">
           <div class="dropdown">
-            <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-            <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+            <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" data-bs-display="static"><i class="bi bi-three-dots"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="position:absolute;z-index:1050">
               ${state.user.tenant_uuid !== tn.uuid ? `
                 <li><a class="dropdown-item btn-switch-tenant" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-arrow-left-right me-2"></i>${t('admin.switch')}</a></li>
               ` : ''}
@@ -268,19 +293,37 @@ async function loadTenants() {
       });
     });
 
-    // Reset tenant admin password
+    // Reset tenant member password
     el.querySelectorAll('.btn-reset-pw').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
         const mid = 'reset-pw-' + Date.now();
+
+        // Fetch members in this tenant
+        let members = [];
+        try {
+          const data = await api.get(`/system/tenants/${btn.dataset.uuid}/members`);
+          members = data.members.filter(m => m.email);
+        } catch { /* ignore */ }
+
+        if (!members.length) {
+          confirmDialog(t('admin.noActiveMembers'), { title: t('admin.resetTenantPassword'), confirmText: 'OK', confirmClass: 'btn-primary' });
+          return;
+        }
+
         document.body.insertAdjacentHTML('beforeend', `
           <div class="modal fade" id="${mid}" tabindex="-1">
-            <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered">
               <div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title">${t('admin.resetTenantPassword')}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form id="${mid}-form">
                   <div class="modal-body">
-                    <p class="text-muted small">${t('admin.resetTenantPasswordDesc', { name: btn.dataset.name })}</p>
+                    <div class="mb-3">
+                      <label class="form-label small">${t('admin.selectMember')}</label>
+                      <select class="form-select form-select-sm" id="${mid}-user">
+                        ${members.map(m => `<option value="${m.uuid}">${m.first_name} ${m.last_name || ''} ${m.role === 'admin' ? `(${t('admin.roleAdmin')})` : ''} — ${m.email}</option>`).join('')}
+                      </select>
+                    </div>
                     <div class="form-floating mb-3">
                       <input type="text" class="form-control" id="${mid}-password" required>
                       <label>${t('admin.newPassword')}</label>
@@ -301,8 +344,12 @@ async function loadTenants() {
         document.getElementById(`${mid}-form`).addEventListener('submit', async (ev) => {
           ev.preventDefault();
           const errorEl = document.getElementById(`${mid}-error`);
+          errorEl.classList.add('d-none');
           try {
-            const result = await api.post(`/system/tenants/${btn.dataset.uuid}/reset-password`, { new_password: document.getElementById(`${mid}-password`).value });
+            const result = await api.post(`/system/tenants/${btn.dataset.uuid}/reset-password`, {
+              user_uuid: document.getElementById(`${mid}-user`).value,
+              new_password: document.getElementById(`${mid}-password`).value,
+            });
             modal.hide();
             confirmDialog(result.message, { title: t('admin.resetTenantPassword'), confirmText: 'OK', confirmClass: 'btn-primary' });
           } catch (err) { errorEl.textContent = err.message; errorEl.classList.remove('d-none'); }
@@ -319,7 +366,7 @@ async function loadTenants() {
         const mid = 'delete-tenant-' + Date.now();
         document.body.insertAdjacentHTML('beforeend', `
           <div class="modal fade" id="${mid}" tabindex="-1">
-            <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered">
               <div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title text-danger">${t('admin.deleteTenant')}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form id="${mid}-form">

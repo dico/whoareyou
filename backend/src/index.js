@@ -83,6 +83,8 @@ app.post('/api/auth/login', loginLimiter);
 app.post('/api/auth/register', loginLimiter);
 app.post('/api/auth/2fa/verify', loginLimiter);
 app.post('/api/auth/passkey/login', loginLimiter);
+app.post('/api/auth/forgot-password', loginLimiter);
+app.post('/api/auth/reset-password', loginLimiter);
 app.post('/api/auth/invite', loginLimiter);
 app.put('/api/auth/members/:uuid', loginLimiter);
 app.use('/api/auth', authRoutes);
@@ -101,14 +103,13 @@ app.use('/api/life-events', authenticate, tenantScope, lifeEventRoutes);
 app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
 app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api/gifts', authenticate, tenantScope, giftRoutes);
-app.use('/api', authenticate, tenantScope, uploadRoutes);
-app.use('/api/import', authenticate, tenantScope, importRoutes);
-// System routes — registration-status is public (handled inside router before auth middleware)
+// System routes — registration-status is public (must be before catch-all)
 app.use('/api/system', (req, res, next) => {
-  // Skip auth for public endpoints
   if (req.path === '/registration-status' && req.method === 'GET') return next();
   authenticate(req, res, next);
 }, systemRoutes);
+app.use('/api/import', authenticate, tenantScope, importRoutes);
+app.use('/api', authenticate, tenantScope, uploadRoutes);
 
 // Protected file serving — auth check + tenant validation
 import path from 'path';

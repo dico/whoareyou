@@ -193,6 +193,7 @@ css/
 19. **Quick-add-mønster** — for rask dataregistrering (gaver, etc.): kompakt inline-form med kun essensielle felt synlige. Avanserte valg bak "Flere valg"-toggle. Etter opprettelse tømmes feltet, klart for neste — gjør det mulig å registrere mange elementer raskt etter hverandre.
 20. **Listevisning for store datasett** — for lister som kan vokse til hundrevis/tusenvis (produkter, kontakter): bruk contact-card-mønsteret (48px rund avatar + navn + meta i én rad, grid med min 280px). Aldri store bildekort/tiles for slike lister — det skalerer ikke.
 21. **Runde avatarer/bilder overalt** — alle miniatyrbilder bruker `border-radius: var(--radius-full)` (sirkulære). Gjelder kontakt-avatarer, produktbilder i lister, gave-kort-bilder, etc. Aldri firkantede miniatyrbilder i rader/kort — kun firkantede bilder i dedikerte gallerier/lightbox.
+22. **Modaler** — alle modaler bruker `modal-dialog-centered` (vertikal sentrering). Standard bredde (ingen størrelses-klasse) som default. `modal-sm` kun for enkle bekreftelser. `modal-lg` for innhold som trenger plass. `modal-xl` for side-ved-side layout (galleri-lightbox med sidebar).
 
 ## Navigasjonsstruktur (implementert)
 

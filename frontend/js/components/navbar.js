@@ -71,8 +71,12 @@ export function renderNavbar() {
             }
           </button>
           <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-            <li><a class="dropdown-item" href="/profile" data-link><i class="bi bi-person-circle me-2"></i>${t('nav.profile')}</a></li>
-            ${user?.role === 'admin' || user?.is_system_admin ? `<li><a class="dropdown-item" href="/settings" data-link><i class="bi bi-gear me-2"></i>${t('settings.administration')}</a></li>` : ''}
+            ${user?.linked_contact_uuid
+              ? `<li><a class="dropdown-item" href="/contacts/${user.linked_contact_uuid}" data-link><i class="bi bi-person-circle me-2"></i>${t('nav.myProfile')}</a></li>`
+              : ''
+            }
+            <li><a class="dropdown-item" href="/profile" data-link><i class="bi bi-gear me-2"></i>${t('nav.accountSettings')}</a></li>
+            ${user?.role === 'admin' || user?.is_system_admin ? `<li><a class="dropdown-item" href="/settings" data-link><i class="bi bi-sliders me-2"></i>${t('settings.administration')}</a></li>` : ''}
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="#" id="btn-logout"><i class="bi bi-box-arrow-right me-2"></i>${t('nav.logout')}</a></li>
           </ul>

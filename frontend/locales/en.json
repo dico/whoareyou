@@ -28,7 +28,13 @@
     "firstName": "First name",
     "lastName": "Last name",
     "tenantName": "Family / household name",
-    "createAccount": "Create account"
+    "createAccount": "Create account",
+    "forgotPassword": "Forgot password?",
+    "forgotDesc": "Enter your email and we'll send you a link to reset your password.",
+    "sendResetLink": "Send reset link",
+    "backToLogin": "Back to login",
+    "resetDesc": "Enter your new password.",
+    "resetPassword": "Reset password"
   },
   "contacts": {
     "title": "Contacts",
@@ -369,6 +375,8 @@
     "deleteTenantWarning": "This will permanently delete \"{name}\" and ALL its data: contacts, posts, photos, gifts. This cannot be undone.",
     "typeTenantName": "Type tenant name to confirm",
     "tenantNameMismatch": "Tenant name does not match.",
+    "selectMember": "Select member",
+    "noActiveMembers": "No members with login found in this tenant.",
     "registrationDisabled": "Registration is disabled. Contact your administrator.",
     "loadingTenants": "Loading tenants...",
     "noTenants": "No tenants found",

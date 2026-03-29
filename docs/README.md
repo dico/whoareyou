@@ -177,6 +177,7 @@ Målet er å bygge et moderne, vedlikeholdbart system for å holde oversikt over
 - [x] Sikkerhetsaudit runde 3 (brukeradmin) — passordvalidering på admin-reset, sesjonsrevokering ved passordbytte, aldri klartekst-passord i e-post, rate limiting på invite/member-edit, admin-passord kreves for 2FA-reset, kan ikke nedgradere eneste admin
 - [x] Systeminnstillinger — deaktiver offentlig registrering, selvbetjent passordtilbakestilling (toggle)
 - [x] Husstandsadministrasjon — opprett husstand med admin, nullstill admin-passord, slett husstand (med navnbekreftelse + admin-passord)
+- [x] Glemt passord — e-postbasert passord-reset med hashet token (1t utløp), rate limited, konfigurerbar toggle i systeminnstillinger
 
 #### Gjenstår (sikkerhet)
 - [x] E-post ved ny pålogging — SMTP-konfigurasjon i system admin, nodemailer, login-varsel fire-and-forget

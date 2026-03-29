@@ -9,10 +9,12 @@ const router = Router();
 // Public endpoint — before auth middleware
 router.get('/registration-status', async (req, res) => {
   try {
-    const regEnabled = await getSetting('registration_enabled', 'true');
-    res.json({ enabled: regEnabled === 'true' });
+    res.json({
+      enabled: (await getSetting('registration_enabled', 'true')) === 'true',
+      password_reset: (await getSetting('password_reset_enabled', 'false')) === 'true',
+    });
   } catch {
-    res.json({ enabled: true });
+    res.json({ enabled: true, password_reset: false });
   }
 });
 
@@ -191,7 +193,24 @@ router.post('/tenants', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/system/tenants/:uuid/reset-password — reset tenant admin password
+// GET /api/system/tenants/:uuid/members — list members in a tenant
+router.get('/tenants/:uuid/members', async (req, res, next) => {
+  try {
+    const { db } = await import('../db.js');
+    const tenant = await db('tenants').where({ uuid: req.params.uuid }).first();
+    if (!tenant) throw new AppError('Tenant not found', 404);
+
+    const members = await db('users')
+      .where({ tenant_id: tenant.id })
+      .select('uuid', 'first_name', 'last_name', 'email', 'role', 'is_active')
+      .orderBy('role', 'desc')
+      .orderBy('first_name');
+
+    res.json({ members });
+  } catch (err) { next(err); }
+});
+
+// POST /api/system/tenants/:uuid/reset-password — reset password for a specific user
 router.post('/tenants/:uuid/reset-password', async (req, res, next) => {
   try {
     const { db } = await import('../db.js');
@@ -201,28 +220,26 @@ router.post('/tenants/:uuid/reset-password', async (req, res, next) => {
     const tenant = await db('tenants').where({ uuid: req.params.uuid }).first();
     if (!tenant) throw new AppError('Tenant not found', 404);
 
-    // Find admin(s) in this tenant
-    const admins = await db('users')
-      .where({ tenant_id: tenant.id, role: 'admin', is_active: true })
-      .select('id', 'email', 'first_name');
-
-    if (!admins.length) throw new AppError('No active admin found in this tenant', 404);
-
-    const { new_password } = req.body;
+    const { user_uuid, new_password } = req.body;
     if (!new_password) throw new AppError('New password is required', 400);
     validatePassword(new_password);
 
+    // Find target user(s)
+    let targets;
+    if (user_uuid) {
+      const user = await db('users').where({ uuid: user_uuid, tenant_id: tenant.id }).first();
+      if (!user) throw new AppError('User not found', 404);
+      targets = [user];
+    } else {
+      // Fallback: all admins
+      targets = await db('users').where({ tenant_id: tenant.id, role: 'admin', is_active: true }).select('id', 'email', 'first_name');
+      if (!targets.length) throw new AppError('No active admin found', 404);
+    }
+
     const passwordHash = await bcrypt.hash(new_password, 12);
 
-    // Reset password for all admins in tenant
-    await db('users')
-      .whereIn('id', admins.map(a => a.id))
-      .update({ password_hash: passwordHash });
-
-    // Revoke all sessions
-    await db('sessions')
-      .whereIn('user_id', admins.map(a => a.id))
-      .update({ is_active: false });
+    await db('users').whereIn('id', targets.map(t => t.id)).update({ password_hash: passwordHash });
+    await db('sessions').whereIn('user_id', targets.map(t => t.id)).update({ is_active: false });
 
     // Notify via email
     const { sendEmail: send } = await import('../services/email.js');

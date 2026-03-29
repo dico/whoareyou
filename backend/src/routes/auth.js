@@ -97,6 +97,78 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
+// POST /api/auth/forgot-password — request password reset email
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { getSetting } = await import('../utils/settings.js');
+    const enabled = await getSetting('password_reset_enabled', 'false');
+    if (enabled !== 'true') throw new AppError('Password reset is disabled', 403);
+
+    const { email } = req.body;
+    if (!email) throw new AppError('Email is required', 400);
+
+    // Always return success (prevent user enumeration)
+    const user = await db('users').where({ email: email.trim().toLowerCase(), is_active: true }).first();
+
+    if (user) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await db('users').where({ id: user.id }).update({
+        reset_token_hash: tokenHash,
+        reset_token_expires: expiresAt,
+      });
+
+      const appUrl = process.env.CORS_ORIGIN || `http://${process.env.VIRTUAL_HOST || 'localhost'}`;
+      const resetUrl = `${appUrl}/reset-password?token=${token}`;
+
+      const { sendEmail } = await import('../services/email.js');
+      sendEmail({
+        to: user.email,
+        subject: 'WhoareYou — Password reset',
+        text: `Hi ${user.first_name},\n\nA password reset was requested for your account.\n\nClick here to reset your password:\n${resetUrl}\n\nThis link expires in 1 hour.\n\nIf you did not request this, ignore this email.`,
+        html: `<p>Hi ${user.first_name},</p><p>A password reset was requested for your account.</p><p><a href="${resetUrl}" style="display:inline-block;padding:10px 20px;background:#007AFF;color:white;text-decoration:none;border-radius:8px">Reset password</a></p><p style="color:#8E8E93">This link expires in 1 hour. If you did not request this, ignore this email.</p>`,
+      }).catch(() => {});
+    }
+
+    res.json({ message: 'If an account with that email exists, a reset link has been sent.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/reset-password — set new password with token
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) throw new AppError('Token and password are required', 400);
+    validatePassword(password);
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await db('users')
+      .where({ reset_token_hash: tokenHash, is_active: true })
+      .where('reset_token_expires', '>', db.fn.now())
+      .first();
+
+    if (!user) throw new AppError('Invalid or expired reset link', 400);
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    await db('users').where({ id: user.id }).update({
+      password_hash: passwordHash,
+      reset_token_hash: null,
+      reset_token_expires: null,
+    });
+
+    // Revoke all sessions
+    await db('sessions').where({ user_id: user.id, is_active: true }).update({ is_active: false });
+
+    res.json({ message: 'Password has been reset. You can now log in.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   try {
@@ -922,7 +994,8 @@ router.post('/invite', authenticate, async (req, res, next) => {
 
     const loginEnabled = req.body.login_enabled !== false;
     let email = null;
-    let passwordHash = null;
+    // Use a random unusable hash for non-login users (column is NOT NULL)
+    let passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), SALT_ROUNDS);
 
     if (loginEnabled) {
       validateRequired(['email'], req.body);

@@ -28,7 +28,13 @@
     "firstName": "Fornavn",
     "lastName": "Etternavn",
     "tenantName": "Familie-/husholdningsnavn",
-    "createAccount": "Opprett konto"
+    "createAccount": "Opprett konto",
+    "forgotPassword": "Glemt passord?",
+    "forgotDesc": "Skriv inn e-postadressen din, så sender vi deg en lenke for å tilbakestille passordet.",
+    "sendResetLink": "Send tilbakestillingslenke",
+    "backToLogin": "Tilbake til innlogging",
+    "resetDesc": "Skriv inn ditt nye passord.",
+    "resetPassword": "Tilbakestill passord"
   },
   "contacts": {
     "title": "Kontakter",
@@ -369,6 +375,8 @@
     "deleteTenantWarning": "Dette sletter «{name}» og ALL data permanent: kontakter, innlegg, bilder, gaver. Dette kan ikke angres.",
     "typeTenantName": "Skriv husstandsnavn for å bekrefte",
     "tenantNameMismatch": "Husstandsnavn stemmer ikke.",
+    "selectMember": "Velg medlem",
+    "noActiveMembers": "Ingen medlemmer med innlogging funnet i denne husstanden.",
     "registrationDisabled": "Registrering er deaktivert. Kontakt din administrator.",
     "loadingTenants": "Laster husstander...",
     "noTenants": "Ingen husstander funnet",

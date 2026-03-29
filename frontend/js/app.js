@@ -53,6 +53,7 @@ const routes = {
   '/gifts/wishlists': () => renderGiftWishlists(),
   '/gifts/planning': () => renderGiftPlanning(),
   '/login': () => renderLogin(),
+  '/reset-password': () => renderLogin(),
 };
 
 // App state
