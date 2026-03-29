@@ -630,6 +630,97 @@ a.post-comment-author:hover {
   flex: 1;
 }
 
+/* Link preview cards */
+.link-preview-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--color-text);
+  margin-top: var(--space-sm);
+  transition: var(--transition-fast);
+}
+
+.link-preview-card:hover {
+  border-color: var(--color-text-secondary);
+}
+
+.link-preview-image {
+  width: 100%;
+  max-height: 250px;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.link-preview-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.link-preview-body {
+  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.link-preview-site {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.link-preview-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.link-preview-desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Link preview in compose form */
+.link-preview-compose {
+  position: relative;
+}
+
+.link-preview-dismiss {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  z-index: 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.link-preview-dismiss:hover {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
 /* MomentGarden user mapping */
 .mg-user-search-wrap { position: relative; }
 

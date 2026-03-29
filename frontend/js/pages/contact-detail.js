@@ -88,6 +88,7 @@ export async function renderContactDetail(uuid) {
               <form id="quick-post-form">
                 <textarea class="form-control" id="quick-post-body" placeholder="${t('posts.writeAbout', { name: contact.first_name })}" rows="2"></textarea>
                 <div id="quick-post-media-preview" class="post-media-preview d-none"></div>
+                <div id="quick-post-link-preview" class="d-none"></div>
                 <div class="post-compose-bar">
                   <div class="visibility-pill" id="quick-post-visibility-btn" data-visibility="shared" title="${t('visibility.sharedHint')}">
                     <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-globe2"></i> ${t('visibility.shared')}</span>
@@ -936,6 +937,68 @@ export async function renderContactDetail(uuid) {
       }
     });
 
+    // ── Link preview detection ──
+    let quickPostLinkPreview = null;
+    let linkPreviewFetchedUrl = null;
+    let linkPreviewDismissed = false;
+    let linkPreviewTimeout = null;
+    const urlRegex = /https?:\/\/[^\s<]+/g;
+
+    const postBody = document.getElementById('quick-post-body');
+    const linkPreviewEl = document.getElementById('quick-post-link-preview');
+
+    function renderQuickLinkPreview() {
+      if (!quickPostLinkPreview || linkPreviewDismissed) {
+        linkPreviewEl.classList.add('d-none');
+        linkPreviewEl.innerHTML = '';
+        return;
+      }
+      const lp = quickPostLinkPreview;
+      const domain = lp.site_name || (() => { try { return new URL(lp.url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+      linkPreviewEl.innerHTML = `
+        <div class="link-preview-compose">
+          <button type="button" class="link-preview-dismiss" title="${t('common.cancel')}"><i class="bi bi-x-lg"></i></button>
+          <a href="${lp.url}" target="_blank" rel="noopener noreferrer" class="link-preview-card">
+            ${lp.image_url ? `<div class="link-preview-image"><img src="${lp.image_url}" alt="" loading="lazy"></div>` : ''}
+            <div class="link-preview-body">
+              ${domain ? `<span class="link-preview-site">${domain}</span>` : ''}
+              <span class="link-preview-title">${lp.title || lp.url}</span>
+              ${lp.description ? `<span class="link-preview-desc">${lp.description}</span>` : ''}
+            </div>
+          </a>
+        </div>`;
+      linkPreviewEl.classList.remove('d-none');
+      linkPreviewEl.querySelector('.link-preview-dismiss').addEventListener('click', () => {
+        linkPreviewDismissed = true;
+        quickPostLinkPreview = null;
+        renderQuickLinkPreview();
+      });
+    }
+
+    postBody.addEventListener('input', () => {
+      clearTimeout(linkPreviewTimeout);
+      if (linkPreviewDismissed) return;
+      linkPreviewTimeout = setTimeout(async () => {
+        const urls = postBody.value.match(urlRegex);
+        const firstUrl = urls?.[0];
+        if (!firstUrl || firstUrl === linkPreviewFetchedUrl) return;
+        linkPreviewFetchedUrl = firstUrl;
+        try {
+          const data = await api.get(`/posts/link-preview?url=${encodeURIComponent(firstUrl)}`);
+          if (data.title) {
+            quickPostLinkPreview = data;
+            renderQuickLinkPreview();
+          }
+        } catch {}
+      }, 600);
+    });
+
+    // Also detect on paste (immediate)
+    postBody.addEventListener('paste', () => {
+      if (linkPreviewDismissed) return;
+      setTimeout(() => postBody.dispatchEvent(new Event('input')), 100);
+    });
+
     document.getElementById('quick-post-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const body = document.getElementById('quick-post-body').value.trim();
@@ -947,6 +1010,7 @@ export async function renderContactDetail(uuid) {
         about_contact_uuid: uuid,
         contact_uuids: extraUuids.length ? extraUuids : undefined,
         visibility: document.getElementById('quick-post-visibility-btn').dataset.visibility,
+        link_preview: quickPostLinkPreview || undefined,
       });
 
       // Upload media
@@ -960,6 +1024,10 @@ export async function renderContactDetail(uuid) {
       quickPostMedia = [];
       renderQuickMediaPreview();
       quickPostExtra.length = 0;
+      quickPostLinkPreview = null;
+      linkPreviewFetchedUrl = null;
+      linkPreviewDismissed = false;
+      renderQuickLinkPreview();
       reloadPosts();
     });
 

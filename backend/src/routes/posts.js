@@ -53,7 +53,7 @@ router.get('/', async (req, res, next) => {
     // Fetch tagged contacts, media, and profile contacts
     const postIds = posts.map((p) => p.id);
 
-    const [taggedContacts, media, profileContacts, commentCounts, reactions] = postIds.length ? await Promise.all([
+    const [taggedContacts, media, profileContacts, commentCounts, reactions, linkPreviews] = postIds.length ? await Promise.all([
       db('post_contacts')
         .join('contacts', 'post_contacts.contact_id', 'contacts.id')
         .whereIn('post_contacts.post_id', postIds)
@@ -94,10 +94,15 @@ router.get('/', async (req, res, next) => {
         .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
         .select('post_reactions.post_id', 'post_reactions.emoji',
           'post_reactions.user_id', 'post_reactions.contact_id',
-          'users.first_name as user_first', 'users.linked_contact_id as user_linked_contact_id',
-          'rc.first_name as contact_first', 'rc.uuid as contact_uuid',
+          'users.first_name as user_first', 'users.last_name as user_last',
+          'users.linked_contact_id as user_linked_contact_id',
+          'rc.first_name as contact_first', 'rc.last_name as contact_last',
+          'rc.uuid as contact_uuid',
           'portal_guests.display_name as guest_name'),
-    ]) : [[], [], new Map(), [], []];
+      db('post_link_previews')
+        .whereIn('post_id', postIds)
+        .select('post_id', 'url', 'title', 'description', 'image_url', 'site_name'),
+    ]) : [[], [], new Map(), [], [], []];
 
     // Group by post
     const contactsByPost = {};
@@ -123,6 +128,13 @@ router.get('/', async (req, res, next) => {
       });
     }
 
+    const linkPreviewByPost = {};
+    for (const lp of linkPreviews) {
+      if (!linkPreviewByPost[lp.post_id]) {
+        linkPreviewByPost[lp.post_id] = { url: lp.url, title: lp.title, description: lp.description, image_url: lp.image_url, site_name: lp.site_name };
+      }
+    }
+
     const commentCountByPost = {};
     for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
 
@@ -130,12 +142,20 @@ router.get('/', async (req, res, next) => {
     const currentUser = await db('users').where({ id: req.user.id }).select('linked_contact_id').first();
     const userLinkedContactId = currentUser?.linked_contact_id;
 
-    // Resolve linked contact UUIDs for users who reacted
+    // Resolve linked contacts for users who reacted (UUID + name + avatar)
     const userLinkedIds = reactions.map(r => r.user_linked_contact_id).filter(Boolean);
-    const linkedUuidMap = new Map();
+    const linkedContactMap = new Map();
     if (userLinkedIds.length) {
-      const contacts = await db('contacts').whereIn('id', [...new Set(userLinkedIds)]).select('id', 'uuid');
-      for (const c of contacts) linkedUuidMap.set(c.id, c.uuid);
+      const contacts = await db('contacts').whereIn('id', [...new Set(userLinkedIds)]).select('id', 'uuid', 'first_name', 'last_name');
+      for (const c of contacts) linkedContactMap.set(c.id, c);
+    }
+
+    // Get avatars for all reaction contacts
+    const allReactionContactIds = reactions.map(r => r.contact_id || r.user_linked_contact_id).filter(Boolean);
+    const reactionAvatarMap = new Map();
+    if (allReactionContactIds.length) {
+      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(allReactionContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) reactionAvatarMap.set(p.contact_id, p.thumbnail_path);
     }
 
     const reactionsByPost = {};
@@ -145,11 +165,18 @@ router.get('/', async (req, res, next) => {
       if (r.user_id === req.user.id || (userLinkedContactId && r.contact_id === userLinkedContactId)) {
         reactionsByPost[r.post_id].reacted = true;
       }
-      const name = r.contact_first || r.guest_name || r.user_first;
-      const contactUuid = r.contact_uuid || linkedUuidMap.get(r.user_linked_contact_id) || null;
-      if (name) {
-        reactionsByPost[r.post_id].names.push(name);
-        reactionsByPost[r.post_id].people.push({ name, contact_uuid: contactUuid });
+      const linked = linkedContactMap.get(r.user_linked_contact_id);
+      const firstName = r.contact_first || r.guest_name || linked?.first_name || r.user_first;
+      const fullName = r.contact_first
+        ? `${r.contact_first} ${r.contact_last || ''}`.trim()
+        : linked ? `${linked.first_name} ${linked.last_name || ''}`.trim()
+        : r.guest_name || `${r.user_first || ''} ${r.user_last || ''}`.trim();
+      const contactUuid = r.contact_uuid || linked?.uuid || null;
+      const avatarContactId = r.contact_id || r.user_linked_contact_id;
+      const avatar = reactionAvatarMap.get(avatarContactId) || null;
+      if (firstName) {
+        reactionsByPost[r.post_id].names.push(firstName);
+        reactionsByPost[r.post_id].people.push({ name: fullName, contact_uuid: contactUuid, avatar });
       }
     }
 
@@ -171,6 +198,7 @@ router.get('/', async (req, res, next) => {
         // Tagged contacts (for activity posts)
         contacts: contactsByPost[p.id] || [],
         media: mediaByPost[p.id] || [],
+        link_preview: linkPreviewByPost[p.id] || null,
         comment_count: commentCountByPost[p.id] || 0,
         reaction_count: reactionsByPost[p.id]?.count || 0,
         reaction_names: reactionsByPost[p.id]?.names || [],
@@ -303,6 +331,48 @@ router.get('/gallery', async (req, res, next) => {
   }
 });
 
+// GET /api/posts/link-preview — scrape URL metadata
+router.get('/link-preview', async (req, res, next) => {
+  try {
+    const { url } = req.query;
+    if (!url) throw new AppError('URL is required', 400);
+
+    const result = { url, title: '', description: '', image_url: '', site_name: '' };
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      });
+      clearTimeout(timeout);
+      const html = await response.text();
+
+      // Bot-blocked detection
+      const blocked = /security checkpoint|access denied|captcha|just a moment|cloudflare|verify you are human/i;
+      if (blocked.test(html.slice(0, 2000))) {
+        return res.json(result);
+      }
+
+      const meta = (prop) =>
+        html.match(new RegExp(`<meta[^>]*property=["']${prop}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1]
+        || html.match(new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*property=["']${prop}["']`, 'i'))?.[1];
+      const metaName = (name) =>
+        html.match(new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1];
+
+      result.title = (meta('og:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || '').replace(/\s+/g, ' ').trim();
+      result.description = (meta('og:description') || metaName('description') || '').replace(/\s+/g, ' ').trim();
+      result.site_name = (meta('og:site_name') || new URL(url).hostname.replace(/^www\./, '')) || '';
+      const ogImage = meta('og:image');
+      if (ogImage && !/apple-touch-icon|favicon|logo/i.test(ogImage)) {
+        result.image_url = ogImage.startsWith('/') ? new URL(ogImage, url).href : ogImage;
+      }
+    } catch { /* scrape failed — return empty */ }
+
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // POST /api/posts — create post
 router.post('/', async (req, res, next) => {
   try {
@@ -350,6 +420,19 @@ router.post('/', async (req, res, next) => {
             .whereIn('id', contacts.map((c) => c.id))
             .update({ last_contacted_at: trx.fn.now() });
         }
+      }
+
+      // Save link preview if provided
+      if (req.body.link_preview?.url) {
+        const lp = req.body.link_preview;
+        await trx('post_link_previews').insert({
+          post_id: postId,
+          url: lp.url.slice(0, 2048),
+          title: (lp.title || '').slice(0, 500),
+          description: (lp.description || '').slice(0, 2000),
+          image_url: (lp.image_url || '').slice(0, 2048),
+          site_name: (lp.site_name || '').slice(0, 200),
+        });
       }
 
       return { id: postId, uuid };
@@ -453,7 +536,7 @@ router.delete('/:uuid', async (req, res, next) => {
 async function getPostWithDetails(postId, tenantId) {
   const post = await db('posts').where({ id: postId, tenant_id: tenantId }).first();
 
-  const [contacts, media] = await Promise.all([
+  const [contacts, media, linkPreview] = await Promise.all([
     db('post_contacts')
       .join('contacts', 'post_contacts.contact_id', 'contacts.id')
       .where('post_contacts.post_id', postId)
@@ -462,6 +545,7 @@ async function getPostWithDetails(postId, tenantId) {
       .where('post_id', postId)
       .select('file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
       .orderBy('sort_order'),
+    db('post_link_previews').where({ post_id: postId }).first(),
   ]);
 
   // Get "about" contact
@@ -482,6 +566,7 @@ async function getPostWithDetails(postId, tenantId) {
     about,
     contacts,
     media,
+    link_preview: linkPreview ? { url: linkPreview.url, title: linkPreview.title, description: linkPreview.description, image_url: linkPreview.image_url, site_name: linkPreview.site_name } : null,
   };
 }
 
@@ -681,24 +766,40 @@ router.post('/:uuid/reactions', async (req, res, next) => {
       .leftJoin('users', 'post_reactions.user_id', 'users.id')
       .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
       .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
-      .select('rc.first_name as contact_first', 'rc.uuid as contact_uuid',
-        'users.first_name as user_first', 'users.linked_contact_id as user_linked_contact_id',
+      .select('rc.first_name as contact_first', 'rc.last_name as contact_last',
+        'rc.uuid as contact_uuid', 'post_reactions.contact_id',
+        'users.first_name as user_first', 'users.last_name as user_last',
+        'users.linked_contact_id as user_linked_contact_id',
         'portal_guests.display_name as guest_name');
-    // Resolve linked contact UUIDs for users
+    // Resolve linked contacts for users
     const toggleLinkedIds = allReactions.map(r => r.user_linked_contact_id).filter(Boolean);
     const toggleLinkedMap = new Map();
     if (toggleLinkedIds.length) {
-      const lc = await db('contacts').whereIn('id', [...new Set(toggleLinkedIds)]).select('id', 'uuid');
-      for (const c of lc) toggleLinkedMap.set(c.id, c.uuid);
+      const lc = await db('contacts').whereIn('id', [...new Set(toggleLinkedIds)]).select('id', 'uuid', 'first_name', 'last_name');
+      for (const c of lc) toggleLinkedMap.set(c.id, c);
+    }
+    // Get avatars
+    const toggleAvatarIds = allReactions.map(r => r.contact_id || r.user_linked_contact_id).filter(Boolean);
+    const toggleAvatarMap = new Map();
+    if (toggleAvatarIds.length) {
+      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(toggleAvatarIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) toggleAvatarMap.set(p.contact_id, p.thumbnail_path);
     }
     const names = [];
     const people = [];
     for (const r of allReactions) {
-      const name = r.contact_first || r.guest_name || r.user_first;
-      const cuuid = r.contact_uuid || toggleLinkedMap.get(r.user_linked_contact_id) || null;
-      if (name) {
-        names.push(name);
-        people.push({ name, contact_uuid: cuuid });
+      const linked = toggleLinkedMap.get(r.user_linked_contact_id);
+      const firstName = r.contact_first || r.guest_name || linked?.first_name || r.user_first;
+      const fullName = r.contact_first
+        ? `${r.contact_first} ${r.contact_last || ''}`.trim()
+        : linked ? `${linked.first_name} ${linked.last_name || ''}`.trim()
+        : r.guest_name || `${r.user_first || ''} ${r.user_last || ''}`.trim();
+      const cuuid = r.contact_uuid || linked?.uuid || null;
+      const avatarId = r.contact_id || r.user_linked_contact_id;
+      const avatar = toggleAvatarMap.get(avatarId) || null;
+      if (firstName) {
+        names.push(firstName);
+        people.push({ name: fullName, contact_uuid: cuuid, avatar });
       }
     }
     res.json({

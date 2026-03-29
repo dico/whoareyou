@@ -4,6 +4,23 @@ import { attachMention } from './mention.js';
 import { t, formatDate, timeAgo, formatDateTime } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 
+// Store reaction people per post (avoids JSON-in-HTML-attribute issues)
+const reactionPeopleMap = new Map();
+
+function renderLinkPreview(lp) {
+  if (!lp?.url) return '';
+  const title = lp.title || lp.url;
+  const domain = lp.site_name || (() => { try { return new URL(lp.url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+  return `<a href="${lp.url}" target="_blank" rel="noopener noreferrer" class="link-preview-card">
+    ${lp.image_url ? `<div class="link-preview-image"><img src="${lp.image_url}" alt="" loading="lazy"></div>` : ''}
+    <div class="link-preview-body">
+      ${domain ? `<span class="link-preview-site">${escapeHtml(domain)}</span>` : ''}
+      <span class="link-preview-title">${escapeHtml(title)}</span>
+      ${lp.description ? `<span class="link-preview-desc">${escapeHtml(lp.description)}</span>` : ''}
+    </div>
+  </a>`;
+}
+
 function formatLikeNames(names, count) {
   if (!names?.length) return count;
   if (names.length <= 2) return names.join(` ${t('common.and')} `);
@@ -128,13 +145,13 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             }
             return html;
           })()}
+          ${p.link_preview ? renderLinkPreview(p.link_preview) : ''}
           ${p.reaction_count || p.comment_count ? `
           <div class="post-engagement-bar">
-            ${p.reaction_count ? `<button class="post-engagement-likes btn-show-likes" data-uuid="${p.uuid}"
-              data-people="${escapeHtml(JSON.stringify(p.reaction_people || []))}">
+            ${p.reaction_count ? (() => { reactionPeopleMap.set(p.uuid, p.reaction_people || []); return `<button class="post-engagement-likes btn-show-likes" data-uuid="${p.uuid}">
               <i class="bi bi-heart-fill text-danger"></i>
               <span>${formatLikeNames(p.reaction_names, p.reaction_count)}</span>
-            </button>` : ''}
+            </button>`; })() : ''}
             ${p.comment_count ? `<button class="post-engagement-comments btn-toggle-comments" data-uuid="${p.uuid}">
               ${p.comment_count} ${p.comment_count === 1 ? t('posts.commentSingular') : t('posts.commentPlural')}
             </button>` : ''}
@@ -436,8 +453,8 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         const engagementBar = post.querySelector('.post-engagement-bar');
         const likesEl = post.querySelector('.post-engagement-likes');
         if (reaction_count > 0) {
-          const likesHtml = `<button class="post-engagement-likes btn-show-likes" data-uuid="${uuid}"
-            data-people="${escapeHtml(JSON.stringify(reaction_people || []))}">
+          reactionPeopleMap.set(uuid, reaction_people || []);
+          const likesHtml = `<button class="post-engagement-likes btn-show-likes" data-uuid="${uuid}">
             <i class="bi bi-heart-fill text-danger"></i>
             <span>${formatLikeNames(reaction_names || [], reaction_count)}</span>
           </button>`;
@@ -461,8 +478,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       const likesBtn = e.target.closest('.btn-show-likes');
       if (!likesBtn) return;
       e.preventDefault();
-      let people;
-      try { people = JSON.parse(likesBtn.dataset.people || '[]'); } catch { people = []; }
+      const people = reactionPeopleMap.get(likesBtn.dataset.uuid) || [];
       if (!people.length) return;
 
       const modalEl = document.createElement('div');
@@ -472,13 +488,22 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           <div class="modal-content glass-card">
             <div class="modal-header"><h6 class="modal-title">${t('posts.like')}</h6>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body">
-              ${people.map(p => `<div class="d-flex align-items-center gap-2 py-1">
-                <i class="bi bi-heart-fill text-danger"></i>
-                ${p.contact_uuid
-                  ? `<a href="/contacts/${p.contact_uuid}" data-link class="text-decoration-none">${escapeHtml(p.name)}</a>`
-                  : `<span>${escapeHtml(p.name)}</span>`}
-              </div>`).join('')}
+            <div class="modal-body d-flex flex-wrap gap-2">
+              ${people.map(p => {
+                const initials = (p.name?.[0] || '?');
+                const avatarHtml = p.avatar
+                  ? `<img src="${authUrl(p.avatar)}" alt="">`
+                  : `<span>${initials}</span>`;
+                return p.contact_uuid
+                  ? `<a href="/contacts/${p.contact_uuid}" data-link class="contact-chip">
+                      <span class="contact-chip-avatar">${avatarHtml}</span>
+                      ${escapeHtml(p.name)}
+                    </a>`
+                  : `<span class="contact-chip">
+                      <span class="contact-chip-avatar">${avatarHtml}</span>
+                      ${escapeHtml(p.name)}
+                    </span>`;
+              }).join('')}
             </div>
           </div>
         </div>`;
