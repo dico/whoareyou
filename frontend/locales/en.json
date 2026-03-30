@@ -152,6 +152,7 @@
     "chooseType": "Choose type...",
     "type": "Relationship type",
     "swap": "Swap direction",
+    "isRelationTo": "is {type} of",
     "since": "Since",
     "until": "Until",
     "optional": "optional",

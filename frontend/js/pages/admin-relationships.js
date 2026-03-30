@@ -2,6 +2,8 @@ import { api } from '../api/client.js';
 import { state, navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
 import { confirmDialog } from '../components/dialogs.js';
+import { authUrl } from '../utils/auth-url.js';
+import { showFamilyTree } from './contact-detail.js';
 
 export async function renderRelationshipSuggestions() {
   const content = document.getElementById('app-content');
@@ -62,16 +64,21 @@ async function loadSuggestions() {
         return `
         <div class="settings-section glass-card mb-2 suggestion-card" data-index="${i}" data-key="${key}">
           <div class="d-flex align-items-center gap-3">
-            <div class="flex-fill">
-              <strong>${s.contact1.first_name} ${s.contact1.last_name || ''}</strong>
-              <span class="text-muted mx-1">↔</span>
-              <strong>${s.contact2.first_name} ${s.contact2.last_name || ''}</strong>
-              <div class="text-muted small mt-1">
-                <span class="badge bg-primary badge-sm">${t('relationships.types.' + s.suggested_type)}</span>
-                <span class="ms-1">${reasonLabels[s.reason] || s.reason}</span>
-              </div>
+            <div class="flex-fill d-flex align-items-center flex-wrap gap-2">
+              <a href="/contacts/${s.contact1.uuid}" data-link class="contact-chip">
+                <span class="contact-chip-avatar">${s.contact1.avatar ? `<img src="${authUrl(s.contact1.avatar)}" alt="">` : `<span>${(s.contact1.first_name[0] || '')}${(s.contact1.last_name?.[0] || '')}</span>`}</span>
+                ${s.contact1.first_name} ${s.contact1.last_name || ''}
+              </a>
+              <span class="text-muted small">${t('relationships.isRelationTo', { type: t('relationships.types.' + s.suggested_type).toLowerCase() })}</span>
+              <a href="/contacts/${s.contact2.uuid}" data-link class="contact-chip">
+                <span class="contact-chip-avatar">${s.contact2.avatar ? `<img src="${authUrl(s.contact2.avatar)}" alt="">` : `<span>${(s.contact2.first_name[0] || '')}${(s.contact2.last_name?.[0] || '')}</span>`}</span>
+                ${s.contact2.first_name} ${s.contact2.last_name || ''}
+              </a>
             </div>
             <div class="d-flex gap-1">
+              <button class="btn btn-outline-secondary btn-sm btn-preview-tree me-2" data-uuid="${s.contact1.uuid}" title="${t('relationships.familyTree')}">
+                <i class="bi bi-diagram-2"></i>
+              </button>
               <button class="btn btn-primary btn-sm btn-accept" data-index="${i}" title="${t('relationships.accept')}">
                 <i class="bi bi-check-lg"></i>
               </button>
@@ -118,6 +125,23 @@ async function loadSuggestions() {
         card.remove();
         const remaining = el.querySelectorAll('.suggestion-card').length;
         if (!remaining) loadSuggestions();
+      });
+    });
+
+    // Preview family tree with proposed relation
+    el.querySelectorAll('.btn-preview-tree').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.closest('.suggestion-card').dataset.index);
+        const s = suggestionsData[idx];
+        showFamilyTree(btn.dataset.uuid, s ? {
+          contact1_uuid: s.contact1.uuid,
+          contact1_name: `${s.contact1.first_name} ${s.contact1.last_name || ''}`.trim(),
+          contact1_avatar: s.contact1.avatar,
+          contact2_uuid: s.contact2.uuid,
+          contact2_name: `${s.contact2.first_name} ${s.contact2.last_name || ''}`.trim(),
+          contact2_avatar: s.contact2.avatar,
+          type: t('relationships.types.' + s.suggested_type),
+        } : null);
       });
     });
 

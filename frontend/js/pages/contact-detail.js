@@ -1707,7 +1707,7 @@ function renderGroupedRelationships(relationships, { hasAddress = false } = {}) 
 
 let _treeModal = null; // persistent modal instance
 
-async function showFamilyTree(contactUuid) {
+export async function showFamilyTree(contactUuid, proposedRelation = null) {
   // Create modal shell (recreate if DOM element was removed)
   if (_treeModal && !document.contains(_treeModal.el)) {
     _treeModal = null;
@@ -1813,7 +1813,8 @@ async function showFamilyTree(contactUuid) {
   }
 
   // Load and render tree content
-  await renderTreeContent(contactUuid, 3, ['family']);
+  _treeModal._proposedRelation = proposedRelation;
+  await renderTreeContent(contactUuid, 3, ['family'], 'full');
   _treeModal.bs.show();
 }
 
@@ -2044,14 +2045,18 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       relLabels[key] = t('relationships.types.' + key);
     }
 
-    // Build SVG
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block">`;
+    // Build SVG (dimensions may grow if phantom nodes are added)
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="__SVG_W__" height="__SVG_H__" viewBox="0 0 __SVG_W__ __SVG_H__" style="display:block">`;
     svg += `<defs><clipPath id="clip-circle" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath></defs>`;
     svg += `<style>
       .tree-edge { stroke: #d1d5db; stroke-width: 1.5; fill: none; transition: stroke 0.15s, stroke-width 0.15s; }
       .tree-edge.highlight { stroke: #007AFF; stroke-width: 2.5; }
       .tree-partner-edge { stroke: #f472b6; stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; transition: stroke 0.15s, stroke-width 0.15s; }
       .tree-partner-edge.highlight { stroke: #007AFF; stroke-width: 2.5; }
+      .tree-proposed-edge { stroke: #34C759; stroke-width: 2.5; fill: none; stroke-dasharray: 6 3; animation: proposedPulse 1.5s ease-in-out infinite; }
+      .tree-proposed-label { font-family: -apple-system, sans-serif; font-size: 9px; font-weight: 600; fill: #34C759; text-anchor: middle; }
+      .tree-node.proposed rect { stroke: #34C759; stroke-width: 2.5; fill: #f0fff4; animation: proposedPulse 1.5s ease-in-out infinite; }
+      @keyframes proposedPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
       .tree-node { cursor: pointer; }
       .tree-node rect { fill: #fff; stroke: #e5e7eb; stroke-width: 1.5; rx: 10; transition: stroke 0.15s; }
       .tree-node.root rect { stroke: #007AFF; stroke-width: 2; fill: #f0f7ff; }
@@ -2087,6 +2092,48 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       }
     }
 
+    // Draw proposed relation edge (if any)
+    const proposed = _treeModal?._proposedRelation;
+    const proposedNodeIds = new Set();
+    if (proposed) {
+      let n1 = [...nodeMap.values()].find(n => n.uuid === proposed.contact1_uuid);
+      let n2 = [...nodeMap.values()].find(n => n.uuid === proposed.contact2_uuid);
+
+      // If one node is missing from tree, add it as a phantom node next to the other
+      if (n1 && !n2 && proposed.contact2_name) {
+        const phantomId = -2;
+        const p1 = positions.get(n1.id);
+        const phantomPos = { x: p1.x + nodeW + gapX, y: p1.y + nodeH + gapY };
+        positions.set(phantomId, phantomPos);
+        nodeMap.set(phantomId, { id: phantomId, uuid: proposed.contact2_uuid, first_name: proposed.contact2_name, last_name: '', avatar: proposed.contact2_avatar });
+        n2 = nodeMap.get(phantomId);
+        // Expand SVG if needed
+        svgW = Math.max(svgW, phantomPos.x + nodeW + gapX);
+        svgH = Math.max(svgH, phantomPos.y + nodeH + gapY);
+      } else if (n2 && !n1 && proposed.contact1_name) {
+        const phantomId = -1;
+        const p2 = positions.get(n2.id);
+        const phantomPos = { x: p2.x + nodeW + gapX, y: p2.y - nodeH - gapY };
+        positions.set(phantomId, phantomPos);
+        nodeMap.set(phantomId, { id: phantomId, uuid: proposed.contact1_uuid, first_name: proposed.contact1_name, last_name: '', avatar: proposed.contact1_avatar });
+        n1 = nodeMap.get(phantomId);
+        svgW = Math.max(svgW, phantomPos.x + nodeW + gapX);
+        svgH = Math.max(svgH, phantomPos.y + nodeH + gapY);
+      }
+
+      if (n1 && n2 && positions.has(n1.id) && positions.has(n2.id)) {
+        proposedNodeIds.add(n1.id);
+        proposedNodeIds.add(n2.id);
+        const p1 = positions.get(n1.id), p2 = positions.get(n2.id);
+        const fx = p1.x + nodeW / 2, tx = p2.x + nodeW / 2;
+        const startY = p1.y < p2.y ? p1.y + nodeH : p1.y;
+        const endY = p2.y < p1.y ? p2.y + nodeH : p2.y;
+        const midY = (startY + endY) / 2;
+        svg += `<path class="tree-proposed-edge" d="M${fx},${startY} C${fx},${midY} ${tx},${midY} ${tx},${endY}" />`;
+        svg += `<text class="tree-proposed-label" x="${(fx + tx) / 2}" y="${midY - 6}">${proposed.type || ''}</text>`;
+      }
+    }
+
     for (const [nid, pos] of positions) {
       const node = nodeMap.get(nid);
       if (!node) continue;
@@ -2094,8 +2141,9 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       if (name.length > 12) name = name.substring(0, 11) + '…';
       const hasAvatar = !!node.avatar;
       const avatarSize = avatarR * 2, avatarX = 8, avatarY = (nodeH - avatarSize) / 2, textX = avatarX + avatarSize + 6;
+      const isProposed = proposedNodeIds.has(nid);
 
-      svg += `<g class="tree-node ${node.is_root ? 'root' : ''}" data-uuid="${node.uuid}" transform="translate(${pos.x},${pos.y})">`;
+      svg += `<g class="tree-node ${node.is_root ? 'root' : ''} ${isProposed ? 'proposed' : ''}" data-uuid="${node.uuid}" transform="translate(${pos.x},${pos.y})">`;
       svg += `<rect width="${nodeW}" height="${nodeH}" />`;
       if (hasAvatar) {
         svg += `<image href="${authUrl(node.avatar)}" x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-circle)" preserveAspectRatio="xMidYMid slice" />`;
@@ -2110,6 +2158,7 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       svg += `</g>`;
     }
     svg += '</svg>';
+    svg = svg.replaceAll('__SVG_W__', svgW).replaceAll('__SVG_H__', svgH);
 
     // Update SVG content
     inner.innerHTML = svg;

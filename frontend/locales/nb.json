@@ -152,6 +152,7 @@
     "chooseType": "Velg type...",
     "type": "Relasjonstype",
     "swap": "Snu retning",
+    "isRelationTo": "er {type} til",
     "since": "Siden",
     "until": "Til",
     "optional": "valgfri",

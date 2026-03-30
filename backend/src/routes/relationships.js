@@ -78,7 +78,8 @@ router.get('/suggestions', async (req, res, next) => {
     const contacts = await db('contacts')
       .where({ tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .select('id', 'uuid', 'first_name', 'last_name');
+      .select('id', 'uuid', 'first_name', 'last_name',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`));
 
     const contactMap = new Map(contacts.map(c => [c.id, c]));
 
@@ -108,8 +109,8 @@ router.get('/suggestions', async (req, res, next) => {
       if (!c1 || !c2) return;
       suggestionSet.add(key);
       suggestions.push({
-        contact1: { uuid: c1.uuid, first_name: c1.first_name, last_name: c1.last_name },
-        contact2: { uuid: c2.uuid, first_name: c2.first_name, last_name: c2.last_name },
+        contact1: { uuid: c1.uuid, first_name: c1.first_name, last_name: c1.last_name, avatar: c1.avatar || null },
+        contact2: { uuid: c2.uuid, first_name: c2.first_name, last_name: c2.last_name, avatar: c2.avatar || null },
         suggested_type: suggestedType,
         reason,
       });
