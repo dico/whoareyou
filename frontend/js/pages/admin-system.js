@@ -322,9 +322,6 @@ async function loadTenants() {
           <div class="dropdown">
             <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" data-bs-display="static"><i class="bi bi-three-dots"></i></button>
             <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="position:absolute;z-index:1050">
-              ${state.user.tenant_uuid !== tn.uuid ? `
-                <li><a class="dropdown-item btn-switch-tenant" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-arrow-left-right me-2"></i>${t('admin.switch')}</a></li>
-              ` : ''}
               <li><a class="dropdown-item btn-reset-pw" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-key me-2"></i>${t('admin.resetTenantPassword')}</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item text-danger btn-delete-tenant" href="#" data-uuid="${tn.uuid}" data-name="${escapeHtml(tn.name)}"><i class="bi bi-trash me-2"></i>${t('admin.deleteTenant')}</a></li>
@@ -334,25 +331,6 @@ async function loadTenants() {
       </div>
     `).join('');
 
-    el.querySelectorAll('.btn-switch-tenant').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const confirmed = await confirmDialog(
-          t('admin.switchConfirm', { name: btn.dataset.name }),
-          { title: t('admin.switchTenant'), confirmText: t('admin.switch') }
-        );
-        if (!confirmed) return;
-
-        try {
-          const { token } = await api.post('/auth/switch-tenant', { tenant_uuid: btn.dataset.uuid });
-          localStorage.setItem('token', token);
-          state.token = token;
-          state.user = null;
-          navigate('/');
-        } catch (err) {
-          confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
-        }
-      });
-    });
 
     // Reset tenant member password
     el.querySelectorAll('.btn-reset-pw').forEach(btn => {
