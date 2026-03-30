@@ -21,16 +21,26 @@ export async function authenticate(req, res, next) {
       return next(new AppError('User not found or inactive', 401));
     }
 
+    const activeTenantId = payload.tenantId || user.tenant_id;
+
+    // Verify user is a member of the active tenant
+    if (activeTenantId !== user.tenant_id) {
+      const membership = await db('tenant_members')
+        .where({ user_id: user.id, tenant_id: activeTenantId })
+        .first();
+      if (!membership) {
+        return next(new AppError('Tenant membership revoked', 403));
+      }
+    }
+
     req.user = {
       id: user.id,
       uuid: user.uuid,
       homeTenantId: user.tenant_id,
-      // Active tenant: from token (system admin may have switched), fallback to home
-      tenantId: payload.tenantId || user.tenant_id,
+      tenantId: activeTenantId,
       email: user.email,
       role: user.role,
       isSystemAdmin: !!user.is_system_admin,
-      // Session ID from new-style tokens (null for pre-upgrade tokens)
       sessionId: payload.sid || null,
     };
 

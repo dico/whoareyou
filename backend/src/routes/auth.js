@@ -75,6 +75,9 @@ router.post('/register', async (req, res, next) => {
         is_system_admin: isFirstUser,
       });
 
+      // Add to tenant_members
+      await trx('tenant_members').insert({ user_id: userId, tenant_id: tenantId, role: 'admin' });
+
       return {
         id: userId, tenant_id: tenantId, uuid: userUuid, email, first_name, last_name,
         role: 'admin', is_system_admin: isFirstUser,
@@ -853,21 +856,37 @@ router.get('/tenants', authenticate, async (req, res, next) => {
   }
 });
 
-// POST /api/auth/switch-tenant — switch active tenant (system admin only)
+// GET /api/auth/my-tenants — list tenants user has access to
+router.get('/my-tenants', authenticate, async (req, res, next) => {
+  try {
+    const memberships = await db('tenant_members')
+      .join('tenants', 'tenant_members.tenant_id', 'tenants.id')
+      .where({ 'tenant_members.user_id': req.user.id })
+      .select('tenants.uuid', 'tenants.name', 'tenant_members.role');
+
+    const currentTenant = await db('tenants').where({ id: req.user.tenantId }).select('uuid').first();
+    res.json({
+      tenants: memberships,
+      current_uuid: currentTenant?.uuid,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/switch-tenant — switch active tenant (membership required)
 router.post('/switch-tenant', authenticate, async (req, res, next) => {
   try {
-    if (!req.user.isSystemAdmin) {
-      throw new AppError('System admin access required', 403);
-    }
-
     const { tenant_uuid } = req.body;
-    if (!tenant_uuid) {
-      throw new AppError('tenant_uuid is required');
-    }
+    if (!tenant_uuid) throw new AppError('tenant_uuid is required');
 
     const tenant = await db('tenants').where({ uuid: tenant_uuid }).first();
-    if (!tenant) {
-      throw new AppError('Tenant not found', 404);
+    if (!tenant) throw new AppError('Tenant not found', 404);
+
+    // Check membership — only members can switch (even system admins must be members)
+    const membership = await db('tenant_members')
+      .where({ user_id: req.user.id, tenant_id: tenant.id })
+      .first();
+    if (!membership) {
+      throw new AppError('You are not a member of this household', 403);
     }
 
     const user = await db('users').where({ id: req.user.id }).first();
@@ -1060,6 +1079,13 @@ router.post('/invite', authenticate, async (req, res, next) => {
       is_active: loginEnabled,
       must_change_password: loginEnabled && req.body.send_email ? true : false,
     });
+
+    // Add to tenant_members
+    await db('tenant_members').insert({
+      user_id: userId,
+      tenant_id: req.user.tenantId,
+      role: req.body.role === 'admin' ? 'admin' : 'member',
+    }).catch(() => {}); // ignore duplicate
 
     const user = await db('users').where({ id: userId }).first();
 

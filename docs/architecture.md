@@ -114,7 +114,7 @@ Every data table includes `tenant_id`. The middleware chain ensures:
 2. `tenantScope` middleware sets `req.tenantId`
 3. Every query filters `WHERE tenant_id = req.tenantId`
 
-System admins can switch tenants via `POST /api/auth/switch-tenant`.
+Users can be members of multiple tenants via `tenant_members` table. Switching requires explicit membership — system admins cannot bypass this. Auth middleware validates membership on every request for non-home tenants.
 
 ## Deployment
 

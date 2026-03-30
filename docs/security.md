@@ -174,6 +174,16 @@ POST /api/auth/login (email + password)
 - Generic response prevents user enumeration
 - Configurable toggle in system settings (`password_reset_enabled`)
 
+## Multi-Tenant Access
+- Users can be members of multiple tenants/households via `tenant_members` table
+- Switching tenant requires explicit membership — no exceptions, not even for system admins
+- **Auth middleware validates membership on every request** — if user is on a non-home tenant, `tenant_members` is checked. Revoked memberships immediately block access (403)
+- System admins can manage tenants (reset passwords, delete) but NOT access their data
+- Tenant switching generates a new JWT with the target `tenantId`
+- `homeTenantId` in JWT preserves the user's original tenant
+- All data queries filter by `req.tenantId` from JWT — switching tenant switches all data context
+- Membership is managed by tenant admins (invite) or system seed (migration)
+
 ## Member Invitation
 - Admin creates member via `/api/auth/invite` (admin role required)
 - Password auto-generated (12-byte base64url) if not provided
@@ -191,3 +201,4 @@ POST /api/auth/login (email + password)
 - Round 5: Comments/reactions overhaul — XSS fix in data-people attribute (JSON in HTML), tenant_id check on portal comment deletion, thumbnail regex tightened to match only photo files (not arbitrary paths with `_thumb`)
 - Round 6: Portal posts + link preview — SSRF protection on URL scrape endpoints (blocklist for internal hosts/IPs, protocol whitelist), post_date validation (reject non-date values), portal post creation enforces tenant_id + contactIds access, portal media upload restricted to own posts
 - Round 7: Member invitation — forced password change on first login when credentials sent via email, must_change_password flag on all login paths (direct, 2FA, passkey)
+- Round 8: Multi-tenant — tenant_members junction table, switch-tenant requires membership (no system admin bypass), auth middleware validates membership on every request (revoked members blocked immediately), system.js tenant creation adds to tenant_members, idempotent migration, tenant switcher on profile page. Verified with API tests: forged JWT for non-member tenant returns 403.

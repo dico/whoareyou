@@ -187,6 +187,9 @@ router.post('/tenants', async (req, res, next) => {
         language: 'nb',
       });
 
+      // Add to tenant_members
+      await trx('tenant_members').insert({ user_id: userId, tenant_id: tenantId, role: 'admin' });
+
       return { tenantId, tenantUuid, userId, userUuid };
     });
 

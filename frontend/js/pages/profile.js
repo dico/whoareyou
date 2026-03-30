@@ -95,6 +95,12 @@ export async function renderProfile() {
         </form>
       </div>
 
+      <!-- Households -->
+      <div class="settings-section glass-card">
+        <h4><i class="bi bi-house-door"></i> ${t('settings.households')}</h4>
+        <div id="tenant-list"><div class="loading small">${t('app.loading')}</div></div>
+      </div>
+
       </div>
 
       <!-- Security tab (2FA + passkeys) -->
@@ -290,6 +296,44 @@ export async function renderProfile() {
       errorEl.classList.remove('d-none');
     }
   });
+
+  // ── Households ──
+  loadTenants();
+
+  async function loadTenants() {
+    const el = document.getElementById('tenant-list');
+    try {
+      const { tenants, current_uuid } = await api.get('/auth/my-tenants');
+      if (tenants.length <= 1) {
+        el.innerHTML = `<p class="text-muted small">${t('settings.singleHousehold')}</p>`;
+        return;
+      }
+      el.innerHTML = tenants.map(tn => `
+        <div class="d-flex align-items-center gap-2 py-2 ${tn.uuid === current_uuid ? 'fw-bold' : ''}">
+          <i class="bi bi-house-door${tn.uuid === current_uuid ? '-fill text-primary' : ''}"></i>
+          <span class="flex-fill">${tn.name}</span>
+          <span class="badge bg-light text-muted badge-sm">${tn.role}</span>
+          ${tn.uuid !== current_uuid
+            ? `<button class="btn btn-outline-primary btn-sm btn-switch-tenant" data-uuid="${tn.uuid}" data-name="${tn.name}">${t('settings.switchTo')}</button>`
+            : `<span class="badge bg-primary badge-sm">${t('settings.current')}</span>`}
+        </div>
+      `).join('');
+
+      el.querySelectorAll('.btn-switch-tenant').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            const { token } = await api.post('/auth/switch-tenant', { tenant_uuid: btn.dataset.uuid });
+            localStorage.setItem('token', token);
+            state.token = token;
+            state.user = null;
+            navigate('/');
+          } catch (err) {
+            confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+          }
+        });
+      });
+    } catch { el.innerHTML = ''; }
+  }
 
   // ── 2FA ──
   load2faStatus();
