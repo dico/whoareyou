@@ -76,6 +76,7 @@
     "month": "Month",
     "year": "Year",
     "bornYear": "Born {year}",
+    "approxAge": "~{age} years",
     "months": {
       "1": "January",
       "2": "February",

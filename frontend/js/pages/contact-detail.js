@@ -62,7 +62,7 @@ export async function renderContactDetail(uuid) {
                   ${contact.birth_month && contact.birth_day
                     ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatBirthParts(contact.birth_day, contact.birth_month, contact.birth_year, contact.deceased_date)}</p>`
                     : contact.birth_year
-                      ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${t('contacts.bornYear', { year: contact.birth_year })}</p>`
+                      ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${t('contacts.bornYear', { year: contact.birth_year })} (${t('contacts.approxAge', { age: new Date().getFullYear() - contact.birth_year })})</p>`
                       : ''
                   }
                   ${contact.deceased_date ? `<p class="detail-meta text-muted"><i class="bi bi-flower1"></i> ${formatDate(contact.deceased_date, { day: 'numeric', month: 'long', year: 'numeric' })}</p>` : ''}

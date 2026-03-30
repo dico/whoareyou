@@ -96,11 +96,14 @@ export function attachMention(textarea, onTag) {
     dropdown = document.createElement('div');
     dropdown.className = 'mention-dropdown glass-card';
 
-    // Position below textarea
+    // Position below the cursor line in textarea
     const rect = textarea.getBoundingClientRect();
+    const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+    const lines = textarea.value.substr(0, textarea.selectionStart).split('\n').length;
+    const cursorTop = rect.top + (lines * lineHeight) + parseFloat(getComputedStyle(textarea).paddingTop);
     dropdown.style.position = 'fixed';
     dropdown.style.left = `${rect.left}px`;
-    dropdown.style.top = `${rect.bottom + 4}px`;
+    dropdown.style.top = `${Math.min(cursorTop + lineHeight + 4, rect.bottom + 4)}px`;
     dropdown.style.width = `${Math.min(rect.width, 300)}px`;
     dropdown.style.zIndex = '2000';
 
