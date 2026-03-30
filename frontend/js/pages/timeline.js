@@ -33,7 +33,7 @@ export async function renderTimeline(contactUuid = null) {
       <div class="dashboard-main">
         <div id="new-post-area" class="d-none">
           <form id="new-post-form" class="glass-card post-compose">
-            <textarea id="post-body" class="form-control" placeholder="${t('posts.placeholder')}" rows="3" required></textarea>
+            <textarea id="post-body" class="form-control" placeholder="${t('posts.placeholder')}" rows="3"></textarea>
             <div id="post-media-preview" class="post-media-preview d-none"></div>
             <div class="post-compose-bar">
               <div class="visibility-pill" id="post-visibility-btn" data-visibility="shared">

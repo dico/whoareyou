@@ -1105,7 +1105,7 @@ export async function renderContactDetail(uuid) {
     document.getElementById('quick-post-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const body = document.getElementById('quick-post-body').value.trim();
-      if (!body) return;
+      if (!body && !quickPostMedia.length) return;
 
       const extraUuids = quickPostExtra.map((c) => c.uuid);
       const { post } = await api.post('/posts', {

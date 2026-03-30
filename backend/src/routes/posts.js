@@ -429,7 +429,8 @@ router.get('/link-preview', async (req, res, next) => {
 // POST /api/posts — create post
 router.post('/', async (req, res, next) => {
   try {
-    validateRequired(['body'], req.body);
+    // Body is optional if media will be uploaded after
+    if (!req.body.body?.trim() && !req.body.has_media) req.body.body = '';
 
     const uuid = uuidv4();
     const { body, post_date, contact_uuids, about_contact_uuid, visibility } = req.body;
