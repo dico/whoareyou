@@ -133,7 +133,7 @@ function renderGroupedFields(fields) {
 function renderFieldRow(f) {
   const isSocial = SOCIAL_TYPES.includes(f.type);
   const isWebsite = f.type === 'website';
-  const displayValue = isSocial ? formatSocialValue(f.value, f.type) : f.value;
+  const displayValue = isSocial ? (f.label || formatSocialValue(f.value, f.type)) : f.value;
   const href = buildFieldHref(f);
 
   // For websites: show label if available, otherwise show domain
@@ -259,11 +259,16 @@ function extractDomain(url) {
 }
 
 function formatSocialValue(value, type) {
-  // If value is a full URL, extract the username/handle part
+  // If value is a full URL, try to extract username/handle
   const url = value.replace(/\/+$/, '');
   const lastSegment = url.split('/').pop();
-  // Remove @ prefix if present
-  return lastSegment.replace(/^@/, '');
+  const clean = lastSegment.replace(/^@/, '').split('?')[0]; // remove query params
+  // If result is empty or looks like a file (e.g. profile.php), use type name
+  if (!clean || /\.\w{2,4}$/.test(clean) || clean.length < 2) {
+    const typeNames = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', twitter: 'X', snapchat: 'Snapchat', youtube: 'YouTube', tiktok: 'TikTok' };
+    return typeNames[type] || type;
+  }
+  return clean;
 }
 
 function buildFieldHref(f) {

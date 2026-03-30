@@ -313,7 +313,9 @@ export async function renderContactDetail(uuid) {
                 <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-company" title="${t('common.add')}"><i class="bi bi-plus-lg"></i></button>
               </h4>
               <div id="contact-companies-list" class="detail-relationships">
-                ${(contact.companies || []).map(c => renderCompanyRow(c)).join('')}
+                ${(contact.companies || []).length
+                  ? (contact.companies || []).map(c => renderCompanyRow(c)).join('')
+                  : `<p class="text-muted small">${t('companies.noCompanies')}</p>`}
               </div>
               <div id="add-company-form" class="d-none mt-2">
                 <div class="mb-2 position-relative">
