@@ -60,11 +60,12 @@ export async function renderContactDetail(uuid) {
                   <h3>${contact.first_name} ${contact.last_name || ''}</h3>
                   ${contact.nickname ? `<p class="text-muted">"${contact.nickname}"</p>` : ''}
                   ${contact.birth_month && contact.birth_day
-                    ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatBirthParts(contact.birth_day, contact.birth_month, contact.birth_year)}</p>`
+                    ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatBirthParts(contact.birth_day, contact.birth_month, contact.birth_year, contact.deceased_date)}</p>`
                     : contact.birth_year
                       ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${t('contacts.bornYear', { year: contact.birth_year })}</p>`
                       : ''
                   }
+                  ${contact.deceased_date ? `<p class="detail-meta text-muted"><i class="bi bi-flower1"></i> ${formatDate(contact.deceased_date, { day: 'numeric', month: 'long', year: 'numeric' })}</p>` : ''}
                   ${contact.visibility === 'private'
                     ? `<span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>`
                     : `<span class="badge bg-light text-muted"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>`
@@ -1324,8 +1325,16 @@ function renderEditMode(contact) {
           <textarea class="form-control" id="edit-notes" style="height:100px">${escapeHtml(contact.notes || '')}</textarea>
           <label>${t('contacts.notes')}</label>
         </div>
+        <div class="mb-3">
+          <button type="button" class="btn btn-link btn-sm p-0 text-muted" id="btn-more-info">
+            <i class="bi bi-chevron-right me-1" id="more-info-icon"></i>${t('contacts.moreInfo')}
+          </button>
+          <div id="more-info-section" class="d-none mt-2">
+            <label class="form-label small mb-1">${t('contacts.deceasedDate')}</label>
+            <input type="date" class="form-control form-control-sm" id="edit-deceased-date" value="${contact.deceased_date ? new Date(contact.deceased_date).toISOString().split('T')[0] : ''}">
+          </div>
+        </div>
         <div class="mt-3">
-          <label class="form-label small">${t('visibility.shared')} / ${t('visibility.private')}</label>
           <div class="visibility-pill" id="edit-visibility-btn" data-visibility="${contact.visibility}">
             <span class="visibility-pill-option ${contact.visibility === 'shared' ? 'active' : ''}" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
             <span class="visibility-pill-option ${contact.visibility === 'private' ? 'active' : ''}" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
@@ -1352,6 +1361,20 @@ function renderEditMode(contact) {
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
   });
 
+  // More info toggle
+  const moreInfoBtn = document.getElementById('btn-more-info');
+  const moreInfoSection = document.getElementById('more-info-section');
+  const moreInfoIcon = document.getElementById('more-info-icon');
+  // Auto-expand if deceased_date is set
+  if (contact.deceased_date) {
+    moreInfoSection.classList.remove('d-none');
+    moreInfoIcon.className = 'bi bi-chevron-down me-1';
+  }
+  moreInfoBtn.addEventListener('click', () => {
+    moreInfoSection.classList.toggle('d-none');
+    moreInfoIcon.className = moreInfoSection.classList.contains('d-none') ? 'bi bi-chevron-right me-1' : 'bi bi-chevron-down me-1';
+  });
+
   document.getElementById('edit-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById('edit-error');
@@ -1366,6 +1389,7 @@ function renderEditMode(contact) {
         birth_year: parseInt(document.getElementById('edit-birth-year').value) || null,
         how_we_met: document.getElementById('edit-how-met').value || null,
         notes: document.getElementById('edit-notes').value || null,
+        deceased_date: document.getElementById('edit-deceased-date').value || null,
         visibility: document.getElementById('edit-visibility-btn').dataset.visibility,
       });
       renderContactDetail(contact.uuid);
@@ -2159,16 +2183,18 @@ function escapeAttr(str) {
   return str.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function formatBirthParts(day, month, year) {
+function formatBirthParts(day, month, year, deceasedDate) {
   const date = new Date(year || 2000, month - 1, day);
   const opts = year ? { day: 'numeric', month: 'long', year: 'numeric' } : { day: 'numeric', month: 'long' };
   let str = date.toLocaleDateString(undefined, opts);
   if (year) {
-    const today = new Date();
-    let age = today.getFullYear() - year;
-    const m = today.getMonth() + 1 - month;
-    if (m < 0 || (m === 0 && today.getDate() < day)) age--;
-    str += ` (${age} ${t('contacts.years')})`;
+    const refDate = deceasedDate ? new Date(deceasedDate) : new Date();
+    let age = refDate.getFullYear() - year;
+    const m = refDate.getMonth() + 1 - month;
+    if (m < 0 || (m === 0 && refDate.getDate() < day)) age--;
+    str += deceasedDate
+      ? ` (${t('contacts.becameYears', { age })})`
+      : ` (${age} ${t('contacts.years')})`;
   }
   return str;
 }

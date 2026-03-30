@@ -63,7 +63,7 @@ router.get('/', async (req, res, next) => {
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
         'contacts.nickname', 'contacts.birth_day', 'contacts.birth_month', 'contacts.birth_year',
-        'contacts.is_favorite',
+        'contacts.deceased_date', 'contacts.is_favorite',
         'contacts.last_contacted_at', 'contacts.last_viewed_at', 'contacts.created_at',
         'contacts.visibility'
       )
@@ -201,6 +201,7 @@ router.get('/:uuid', async (req, res, next) => {
         birth_day: contact.birth_day,
         birth_month: contact.birth_month,
         birth_year: contact.birth_year,
+        deceased_date: contact.deceased_date,
         how_we_met: contact.how_we_met,
         notes: contact.notes,
         is_favorite: !!contact.is_favorite,
@@ -299,7 +300,7 @@ router.put('/:uuid', async (req, res, next) => {
     }
 
     const updates = {};
-    const allowed = ['first_name', 'last_name', 'nickname', 'birth_day', 'birth_month', 'birth_year', 'how_we_met', 'notes', 'is_favorite', 'visibility'];
+    const allowed = ['first_name', 'last_name', 'nickname', 'birth_day', 'birth_month', 'birth_year', 'how_we_met', 'notes', 'is_favorite', 'visibility', 'deceased_date'];
     for (const field of allowed) {
       if (req.body[field] !== undefined) {
         updates[field] = typeof req.body[field] === 'string' ? req.body[field].trim() : req.body[field];

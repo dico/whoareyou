@@ -127,6 +127,12 @@ router.post('/', async (req, res, next) => {
           );
         }
       }
+
+      // Auto-set deceased_date when "passed_away" event is created
+      const eventType = await trx('life_event_types').where({ id: event_type_id }).first();
+      if (eventType?.name === 'passed_away') {
+        await trx('contacts').where({ id: contact.id }).update({ deceased_date: event_date });
+      }
     });
 
     res.status(201).json({ uuid });
@@ -184,6 +190,12 @@ router.delete('/:uuid', async (req, res, next) => {
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .first();
     if (!event) throw new AppError('Life event not found', 404);
+
+    // Clear deceased_date if deleting a passed_away event
+    const eventType = await db('life_event_types').where({ id: event.event_type_id }).first();
+    if (eventType?.name === 'passed_away') {
+      await db('contacts').where({ id: event.contact_id }).update({ deceased_date: null });
+    }
 
     await db('life_event_contacts').where({ life_event_id: event.id }).del();
     await db('life_events').where({ id: event.id }).del();
