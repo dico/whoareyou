@@ -3,6 +3,7 @@ import { navigate } from '../app.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
+import { authUrl } from '../utils/auth-url.js';
 
 export async function renderCompanyDetail(uuid) {
   const content = document.getElementById('app-content');
@@ -65,14 +66,37 @@ export async function renderCompanyDetail(uuid) {
 
           <!-- Sidebar -->
           <div class="profile-sidebar">
+            <!-- Logo -->
+            <div class="sidebar-card glass-card text-center">
+              <div class="company-logo-wrap" id="company-logo-wrap">
+                ${company.logo_path
+                  ? `<img src="${authUrl(company.logo_path)}" alt="" class="company-logo">`
+                  : `<div class="company-logo-placeholder"><i class="bi bi-building"></i></div>`
+                }
+                <label class="company-logo-upload-btn" title="${t('companies.uploadLogo')}">
+                  <i class="bi bi-camera-fill"></i>
+                  <input type="file" id="logo-upload" accept="image/*" hidden>
+                </label>
+              </div>
+            </div>
+
             <div class="sidebar-card glass-card">
               <h4><i class="bi bi-building"></i> ${t('companies.info')}</h4>
+              ${company.org_number ? `<div class="settings-row"><span class="settings-label">${t('companies.orgNumber')}</span><span>${escapeHtml(company.org_number)}</span></div>` : ''}
               ${company.industry ? `<div class="settings-row"><span class="settings-label">${t('companies.industry')}</span><span>${escapeHtml(company.industry)}</span></div>` : ''}
+              ${company.address ? `<div class="settings-row"><span class="settings-label">${t('addresses.address')}</span><span>${escapeHtml(company.address)}</span></div>` : ''}
               ${company.website ? `<div class="settings-row"><span class="settings-label">${t('companies.website')}</span><a href="${company.website.startsWith('http') ? company.website : 'https://' + company.website}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></div>` : ''}
               ${company.phone ? `<div class="settings-row"><span class="settings-label">${t('companies.phone')}</span><a href="tel:${company.phone}">${escapeHtml(company.phone)}</a></div>` : ''}
               ${company.email ? `<div class="settings-row"><span class="settings-label">${t('companies.email')}</span><a href="mailto:${company.email}">${escapeHtml(company.email)}</a></div>` : ''}
               ${company.notes ? `<p class="text-muted small mt-2">${escapeHtml(company.notes)}</p>` : ''}
             </div>
+
+            ${company.latitude && company.longitude ? `
+            <div class="sidebar-card glass-card">
+              <h4><i class="bi bi-geo-alt"></i> ${t('addresses.map')}</h4>
+              <div id="company-map" class="contact-map" style="height:200px;border-radius:var(--radius-md)"></div>
+            </div>
+            ` : ''}
           </div>
         </div>
       </div>
@@ -115,6 +139,29 @@ export async function renderCompanyDetail(uuid) {
         navigate('/companies');
       }
     });
+
+    // Logo upload
+    document.getElementById('logo-upload')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('logo', file);
+      await api.upload(`/companies/${uuid}/logo`, formData);
+      renderCompanyDetail(uuid);
+    });
+
+    // Map
+    if (company.latitude && company.longitude) {
+      const mapEl = document.getElementById('company-map');
+      if (mapEl && window.L) {
+        const map = L.map(mapEl).setView([company.latitude, company.longitude], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap',
+        }).addTo(map);
+        L.marker([company.latitude, company.longitude]).addTo(map);
+        setTimeout(() => map.invalidateSize(), 100);
+      }
+    }
 
   } catch (err) {
     content.innerHTML = `<div class="page-container"><div class="alert alert-danger">${err.message}</div></div>`;
@@ -231,7 +278,7 @@ function showEditCompanyDialog(uuid, company, onDone) {
   const id = 'edit-co-' + Date.now();
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${id}" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">${t('common.edit')} — ${escapeHtml(company.name)}</h5>
@@ -239,11 +286,19 @@ function showEditCompanyDialog(uuid, company, onDone) {
           </div>
           <form id="${id}-form">
             <div class="modal-body">
+              <div class="d-flex gap-2 mb-2">
+                <div class="form-floating flex-grow-1"><input type="text" class="form-control" id="${id}-org" value="${escapeAttr(company.org_number || '')}" placeholder="123456789"><label>${t('companies.orgNumber')}</label></div>
+                <button type="button" class="btn btn-outline-primary btn-sm align-self-center" id="${id}-brreg" title="${t('companies.brregLookup')}"><i class="bi bi-search"></i> Brreg</button>
+              </div>
+              <div id="${id}-brreg-status" class="small text-muted mb-2 d-none"></div>
               <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-name" value="${escapeAttr(company.name)}" required><label>${t('companies.name')}</label></div>
               <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-industry" value="${escapeAttr(company.industry || '')}"><label>${t('companies.industry')}</label></div>
+              <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-address" value="${escapeAttr(company.address || '')}"><label>${t('addresses.address')}</label></div>
               <div class="form-floating mb-2"><input type="url" class="form-control" id="${id}-website" value="${escapeAttr(company.website || '')}"><label>${t('companies.website')}</label></div>
-              <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-phone" value="${escapeAttr(company.phone || '')}"><label>${t('companies.phone')}</label></div>
-              <div class="form-floating mb-2"><input type="email" class="form-control" id="${id}-email" value="${escapeAttr(company.email || '')}"><label>${t('companies.email')}</label></div>
+              <div class="row g-2 mb-2">
+                <div class="col"><div class="form-floating"><input type="text" class="form-control" id="${id}-phone" value="${escapeAttr(company.phone || '')}"><label>${t('companies.phone')}</label></div></div>
+                <div class="col"><div class="form-floating"><input type="email" class="form-control" id="${id}-email" value="${escapeAttr(company.email || '')}"><label>${t('companies.email')}</label></div></div>
+              </div>
               <div class="form-floating mb-2"><textarea class="form-control" id="${id}-notes" style="height:80px">${escapeHtml(company.notes || '')}</textarea><label>${t('contacts.notes')}</label></div>
             </div>
             <div class="modal-footer">
@@ -258,11 +313,49 @@ function showEditCompanyDialog(uuid, company, onDone) {
   const modalEl = document.getElementById(id);
   const modal = new bootstrap.Modal(modalEl);
 
+  // Brreg lookup
+  document.getElementById(`${id}-brreg`).addEventListener('click', async () => {
+    const orgNr = document.getElementById(`${id}-org`).value.replace(/\s/g, '');
+    if (!orgNr) return;
+    const statusEl = document.getElementById(`${id}-brreg-status`);
+    statusEl.textContent = t('companies.brregLooking');
+    statusEl.classList.remove('d-none');
+    try {
+      const data = await api.get(`/companies/brreg/${orgNr}`);
+      if (data.name) document.getElementById(`${id}-name`).value = data.name;
+      if (data.industry) document.getElementById(`${id}-industry`).value = data.industry;
+      if (data.address) document.getElementById(`${id}-address`).value = data.address;
+      if (data.website) document.getElementById(`${id}-website`).value = data.website;
+      if (data.org_number) document.getElementById(`${id}-org`).value = data.org_number;
+      statusEl.textContent = t('companies.brregFound', { name: data.name });
+      statusEl.className = 'small text-success mb-2';
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.className = 'small text-danger mb-2';
+    }
+  });
+
+  // Submit
   document.getElementById(`${id}-form`).addEventListener('submit', async (e) => {
     e.preventDefault();
+    const address = document.getElementById(`${id}-address`).value || null;
+
+    // Geocode address if changed
+    let latitude = company.latitude, longitude = company.longitude;
+    if (address && address !== company.address) {
+      try {
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`);
+        const results = await geo.json();
+        if (results[0]) { latitude = parseFloat(results[0].lat); longitude = parseFloat(results[0].lon); }
+      } catch {}
+    }
+
     await api.put(`/companies/${uuid}`, {
       name: document.getElementById(`${id}-name`).value,
+      org_number: document.getElementById(`${id}-org`).value || null,
       industry: document.getElementById(`${id}-industry`).value || null,
+      address,
+      latitude, longitude,
       website: document.getElementById(`${id}-website`).value || null,
       phone: document.getElementById(`${id}-phone`).value || null,
       email: document.getElementById(`${id}-email`).value || null,

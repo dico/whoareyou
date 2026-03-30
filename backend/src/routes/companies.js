@@ -1,9 +1,60 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
+import path from 'path';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
+import { processImage } from '../services/image.js';
+import { config } from '../config/index.js';
 
 const router = Router();
+
+const logoUpload = multer({
+  dest: path.join(config.uploads?.dir || path.join(process.cwd(), '..', 'uploads'), 'temp'),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'].includes(file.mimetype)) cb(null, true);
+    else cb(new AppError('Only images are allowed', 400));
+  },
+});
+
+// GET /api/companies/brreg/:orgNumber — lookup in Brønnøysundregistrene
+router.get('/brreg/:orgNumber', async (req, res, next) => {
+  try {
+    const orgNr = req.params.orgNumber.replace(/\s/g, '');
+    if (!/^\d{9}$/.test(orgNr)) throw new AppError('Invalid org number (must be 9 digits)', 400);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${orgNr}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      if (response.status === 404) throw new AppError('Organization not found', 404);
+      throw new AppError('Brreg lookup failed', 502);
+    }
+
+    const data = await response.json();
+    const addr = data.forretningsadresse || data.postadresse || {};
+    const address = [addr.adresse?.[0], `${addr.postnummer || ''} ${addr.poststed || ''}`.trim(), addr.kommune]
+      .filter(Boolean).join(', ');
+
+    res.json({
+      name: data.navn,
+      org_number: data.organisasjonsnummer?.toString(),
+      industry: data.naeringskode1?.beskrivelse || null,
+      address,
+      website: data.hjemmeside || null,
+      employees: data.antallAnsatte || null,
+      founded: data.stiftelsesdato || null,
+    });
+  } catch (err) {
+    if (err instanceof AppError) return next(err);
+    next(new AppError('Brreg lookup failed', 502));
+  }
+});
 
 // GET /api/companies — list all companies
 router.get('/', async (req, res, next) => {
@@ -24,7 +75,7 @@ router.get('/', async (req, res, next) => {
     const companies = await query
       .select(
         'companies.id', 'companies.uuid', 'companies.name', 'companies.industry',
-        'companies.website', 'companies.phone', 'companies.email',
+        'companies.website', 'companies.phone', 'companies.email', 'companies.logo_path',
         db.raw('(SELECT COUNT(*) FROM contact_companies cc WHERE cc.company_id = companies.id AND cc.end_date IS NULL) as employee_count')
       )
       .orderBy('companies.name');
@@ -79,6 +130,11 @@ router.get('/:uuid', async (req, res, next) => {
         phone: company.phone,
         email: company.email,
         notes: company.notes,
+        org_number: company.org_number,
+        logo_path: company.logo_path,
+        address: company.address,
+        latitude: company.latitude,
+        longitude: company.longitude,
       },
       currentEmployees,
       previousEmployees,
@@ -121,15 +177,38 @@ router.put('/:uuid', async (req, res, next) => {
     if (!company) throw new AppError('Company not found', 404);
 
     const updates = {};
-    for (const field of ['name', 'industry', 'website', 'phone', 'email', 'notes']) {
+    for (const field of ['name', 'industry', 'website', 'phone', 'email', 'notes', 'org_number', 'address']) {
       if (req.body[field] !== undefined) updates[field] = req.body[field]?.trim() || null;
     }
+    if (req.body.latitude !== undefined) updates.latitude = req.body.latitude || null;
+    if (req.body.longitude !== undefined) updates.longitude = req.body.longitude || null;
 
     if (Object.keys(updates).length) {
       await db('companies').where({ id: company.id }).update(updates);
     }
 
     res.json({ message: 'Company updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/companies/:uuid/logo — upload company logo
+router.post('/:uuid/logo', logoUpload.single('logo'), async (req, res, next) => {
+  try {
+    if (!req.file) throw new AppError('No file uploaded', 400);
+
+    const company = await db('companies')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .first();
+    if (!company) throw new AppError('Company not found', 404);
+
+    const processed = await processImage(
+      req.file.path, `companies/${company.uuid}`, `logo_${Date.now()}`
+    );
+
+    await db('companies').where({ id: company.id }).update({ logo_path: processed.thumbnailPath });
+    res.json({ logo_path: processed.thumbnailPath });
   } catch (err) {
     next(err);
   }

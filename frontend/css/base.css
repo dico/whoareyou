@@ -147,6 +147,53 @@ a:hover {
   opacity: 1;
 }
 
+/* Company logo */
+.company-logo-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.company-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+  background: var(--color-bg);
+}
+
+.company-logo-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--color-text-muted);
+}
+
+.company-logo-upload-btn {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.company-logo-upload-btn:hover {
+  background: var(--color-primary-dark, #0056b3);
+}
+
 .contact-row-avatar {
   width: 32px;
   height: 32px;
