@@ -540,7 +540,11 @@
     "deleteConfirm": "Delete {name}? All employee links will be removed.",
     "jobTitle": "Job title",
     "jobTitlePlaceholder": "e.g. Developer, Manager...",
-    "info": "Company info"
+    "info": "Company info",
+    "searchOrCreate": "Search or create company...",
+    "role": "Role / title",
+    "createNew": "Create \"{name}\"",
+    "removeConfirm": "Remove this company link?"
   },
   "reminders": {
     "title": "Reminders",

@@ -304,24 +304,29 @@ export async function renderContactDetail(uuid) {
             </div>
 
             <!-- Companies -->
-            ${contact.companies?.length ? `
             <div class="sidebar-card glass-card">
-              <h4><i class="bi bi-building"></i> ${t('companies.title')}</h4>
-              <div class="detail-relationships">
-                ${contact.companies.map(c => `
-                  <a href="/companies/${c.company_uuid}" data-link class="contact-row">
-                    <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
-                      <i class="bi bi-building" style="font-size:0.7rem"></i>
-                    </div>
-                    <div class="contact-row-info">
-                      <div class="contact-row-name">${escapeHtml(c.company_name)}</div>
-                      <div class="contact-row-meta">${[c.title, c.end_date ? t('addresses.previous') : ''].filter(Boolean).join(' — ')}</div>
-                    </div>
-                  </a>
-                `).join('')}
+              <h4>
+                <i class="bi bi-building"></i> ${t('companies.title')}
+                <button type="button" class="btn btn-link btn-sm float-end" id="btn-add-company" title="${t('common.add')}"><i class="bi bi-plus-lg"></i></button>
+              </h4>
+              <div id="contact-companies-list" class="detail-relationships">
+                ${(contact.companies || []).map(c => renderCompanyRow(c)).join('')}
+              </div>
+              <div id="add-company-form" class="d-none mt-2">
+                <div class="mb-2 position-relative">
+                  <input type="text" class="form-control form-control-sm" id="company-search-input" placeholder="${t('companies.searchOrCreate')}">
+                  <div id="company-search-results" class="dropdown-menu w-100" style="display:none;position:absolute;z-index:10"></div>
+                </div>
+                <div class="d-flex gap-2 mb-2">
+                  <input type="text" class="form-control form-control-sm" id="company-role-input" placeholder="${t('companies.role')}">
+                  <input type="date" class="form-control form-control-sm" id="company-start-input" style="max-width:140px">
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-cancel-company">${t('common.cancel')}</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-save-company" disabled>${t('common.save')}</button>
+                </div>
               </div>
             </div>
-            ` : ''}
 
             <!-- Life events -->
             <div class="sidebar-card glass-card">
@@ -835,6 +840,94 @@ export async function renderContactDetail(uuid) {
         });
       } catch { results.innerHTML = ''; }
     }
+
+    // ── Company management ──
+    let selectedCompany = null;
+    const companyForm = document.getElementById('add-company-form');
+    const companySearchInput = document.getElementById('company-search-input');
+    const companyResults = document.getElementById('company-search-results');
+    const companySaveBtn = document.getElementById('btn-save-company');
+
+    document.getElementById('btn-add-company')?.addEventListener('click', () => {
+      companyForm.classList.toggle('d-none');
+      if (!companyForm.classList.contains('d-none')) companySearchInput.focus();
+    });
+
+    document.getElementById('btn-cancel-company')?.addEventListener('click', () => {
+      companyForm.classList.add('d-none');
+      selectedCompany = null;
+      companySearchInput.value = '';
+      document.getElementById('company-role-input').value = '';
+      document.getElementById('company-start-input').value = '';
+      companySaveBtn.disabled = true;
+    });
+
+    let companySearchTimeout;
+    companySearchInput?.addEventListener('input', () => {
+      clearTimeout(companySearchTimeout);
+      const q = companySearchInput.value.trim();
+      if (q.length < 2) { companyResults.style.display = 'none'; selectedCompany = null; companySaveBtn.disabled = true; return; }
+      companySearchTimeout = setTimeout(async () => {
+        const { companies } = await api.get(`/companies?search=${encodeURIComponent(q)}`);
+        companyResults.innerHTML = companies.slice(0, 5).map(c => `
+          <button type="button" class="dropdown-item company-result" data-uuid="${c.uuid}" data-name="${escapeHtml(c.name)}">
+            <i class="bi bi-building me-2"></i>${escapeHtml(c.name)}${c.industry ? ` <span class="text-muted small">— ${escapeHtml(c.industry)}</span>` : ''}
+          </button>
+        `).join('') + `
+          <button type="button" class="dropdown-item company-create text-primary">
+            <i class="bi bi-plus me-2"></i>${t('companies.createNew', { name: escapeHtml(q) })}
+          </button>`;
+        companyResults.style.display = 'block';
+
+        companyResults.querySelectorAll('.company-result').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedCompany = { uuid: btn.dataset.uuid, name: btn.dataset.name };
+            companySearchInput.value = btn.dataset.name;
+            companyResults.style.display = 'none';
+            companySaveBtn.disabled = false;
+          });
+        });
+
+        companyResults.querySelector('.company-create')?.addEventListener('click', async () => {
+          const { company } = await api.post('/companies', { name: q });
+          selectedCompany = { uuid: company.uuid, name: company.name };
+          companySearchInput.value = company.name;
+          companyResults.style.display = 'none';
+          companySaveBtn.disabled = false;
+        });
+      }, 200);
+    });
+
+    companySearchInput?.addEventListener('blur', () => setTimeout(() => { companyResults.style.display = 'none'; }, 200));
+
+    companySaveBtn?.addEventListener('click', async () => {
+      if (!selectedCompany) return;
+      await api.post(`/companies/${selectedCompany.uuid}/employees`, {
+        contact_uuid: uuid,
+        title: document.getElementById('company-role-input').value.trim() || null,
+        start_date: document.getElementById('company-start-input').value || null,
+      });
+      // Reset form and reload
+      companyForm.classList.add('d-none');
+      selectedCompany = null;
+      companySearchInput.value = '';
+      document.getElementById('company-role-input').value = '';
+      document.getElementById('company-start-input').value = '';
+      companySaveBtn.disabled = true;
+      renderContactDetail(contactUuid);
+    });
+
+    // Remove company link
+    document.querySelectorAll('.company-remove').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const row = btn.closest('.company-row');
+        const ok = await confirmDialog(t('companies.removeConfirm'));
+        if (!ok) return;
+        await api.delete(`/companies/employees/${row.dataset.linkId}`);
+        row.remove();
+      });
+    });
 
     // Load posts with edit/delete support
     const reloadPosts = () => renderPostList('contact-posts', uuid, reloadPosts);
@@ -2039,6 +2132,21 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
   } catch (err) {
     inner.innerHTML = `<div class="text-center p-4 text-danger">${err.message}</div>`;
   }
+}
+
+function renderCompanyRow(c) {
+  return `<div class="contact-row company-row" data-link-id="${c.link_id}">
+    <a href="/companies/${c.company_uuid}" data-link class="d-flex align-items-center gap-2 flex-grow-1 text-decoration-none">
+      <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
+        <i class="bi bi-building" style="font-size:0.7rem"></i>
+      </div>
+      <div class="contact-row-info">
+        <div class="contact-row-name">${escapeHtml(c.company_name)}</div>
+        <div class="contact-row-meta">${[c.title, c.end_date ? t('addresses.previous') : ''].filter(Boolean).join(' — ')}</div>
+      </div>
+    </a>
+    <button class="btn btn-link btn-sm company-remove" title="${t('common.delete')}"><i class="bi bi-x"></i></button>
+  </div>`;
 }
 
 function escapeHtml(str) {

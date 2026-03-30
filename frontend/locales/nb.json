@@ -540,7 +540,11 @@
     "deleteConfirm": "Slette {name}? Alle ansatt-koblinger fjernes.",
     "jobTitle": "Stillingstittel",
     "jobTitlePlaceholder": "f.eks. Utvikler, Leder...",
-    "info": "Bedriftsinfo"
+    "info": "Bedriftsinfo",
+    "searchOrCreate": "Søk eller opprett bedrift...",
+    "role": "Rolle / stilling",
+    "createNew": "Opprett \"{name}\"",
+    "removeConfirm": "Fjerne denne bedrift-koblingen?"
   },
   "reminders": {
     "title": "Påminnelser",
