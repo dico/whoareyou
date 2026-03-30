@@ -140,14 +140,24 @@ export async function renderCompanyDetail(uuid) {
       }
     });
 
-    // Logo upload
-    document.getElementById('logo-upload')?.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    // Logo upload (file input + drag & drop)
+    const logoWrap = document.getElementById('company-logo-wrap');
+    const uploadLogo = async (file) => {
+      if (!file || !file.type.startsWith('image/')) return;
       const formData = new FormData();
       formData.append('logo', file);
       await api.upload(`/companies/${uuid}/logo`, formData);
       renderCompanyDetail(uuid);
+    };
+
+    document.getElementById('logo-upload')?.addEventListener('change', (e) => uploadLogo(e.target.files[0]));
+
+    logoWrap?.addEventListener('dragover', (e) => { e.preventDefault(); logoWrap.classList.add('drop-active'); });
+    logoWrap?.addEventListener('dragleave', () => logoWrap.classList.remove('drop-active'));
+    logoWrap?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      logoWrap.classList.remove('drop-active');
+      uploadLogo(e.dataTransfer.files[0]);
     });
 
     // Map
@@ -294,7 +304,7 @@ function showEditCompanyDialog(uuid, company, onDone) {
               <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-name" value="${escapeAttr(company.name)}" required><label>${t('companies.name')}</label></div>
               <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-industry" value="${escapeAttr(company.industry || '')}"><label>${t('companies.industry')}</label></div>
               <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-address" value="${escapeAttr(company.address || '')}"><label>${t('addresses.address')}</label></div>
-              <div class="form-floating mb-2"><input type="url" class="form-control" id="${id}-website" value="${escapeAttr(company.website || '')}"><label>${t('companies.website')}</label></div>
+              <div class="form-floating mb-2"><input type="text" class="form-control" id="${id}-website" value="${escapeAttr(company.website || '')}" placeholder="example.com"><label>${t('companies.website')}</label></div>
               <div class="row g-2 mb-2">
                 <div class="col"><div class="form-floating"><input type="text" class="form-control" id="${id}-phone" value="${escapeAttr(company.phone || '')}"><label>${t('companies.phone')}</label></div></div>
                 <div class="col"><div class="form-floating"><input type="email" class="form-control" id="${id}-email" value="${escapeAttr(company.email || '')}"><label>${t('companies.email')}</label></div></div>
@@ -356,7 +366,7 @@ function showEditCompanyDialog(uuid, company, onDone) {
       industry: document.getElementById(`${id}-industry`).value || null,
       address,
       latitude, longitude,
-      website: document.getElementById(`${id}-website`).value || null,
+      website: (() => { let w = document.getElementById(`${id}-website`).value.trim(); if (w && !w.match(/^https?:\/\//)) w = 'https://' + w; return w || null; })(),
       phone: document.getElementById(`${id}-phone`).value || null,
       email: document.getElementById(`${id}-email`).value || null,
       notes: document.getElementById(`${id}-notes`).value || null,

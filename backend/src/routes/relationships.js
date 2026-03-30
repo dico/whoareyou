@@ -308,6 +308,12 @@ router.put('/:id', async (req, res, next) => {
     if (req.body.start_date !== undefined) updates.start_date = req.body.start_date || null;
     if (req.body.end_date !== undefined) updates.end_date = req.body.end_date || null;
 
+    // Swap direction: contact_id ↔ related_contact_id
+    if (req.body.swap) {
+      updates.contact_id = rel.related_contact_id;
+      updates.related_contact_id = rel.contact_id;
+    }
+
     if (Object.keys(updates).length) {
       await db('relationships').where({ id: rel.id }).update(updates);
     }

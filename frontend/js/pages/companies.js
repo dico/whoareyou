@@ -38,7 +38,7 @@ export async function renderCompanies() {
                 <label>${t('companies.industry')}</label>
               </div>
               <div class="form-floating mb-3">
-                <input type="url" class="form-control" id="new-company-website">
+                <input type="text" class="form-control" id="new-company-website" placeholder="example.com">
                 <label>${t('companies.website')}</label>
               </div>
               <div id="add-company-error" class="alert alert-danger d-none"></div>
@@ -67,7 +67,7 @@ export async function renderCompanies() {
       const { company } = await api.post('/companies', {
         name: document.getElementById('new-company-name').value,
         industry: document.getElementById('new-company-industry').value || undefined,
-        website: document.getElementById('new-company-website').value || undefined,
+        website: (() => { let w = document.getElementById('new-company-website').value.trim(); if (w && !w.match(/^https?:\/\//)) w = 'https://' + w; return w || undefined; })(),
       });
       bootstrap.Modal.getInstance(document.getElementById('add-company-modal')).hide();
       navigate(`/companies/${company.uuid}`);

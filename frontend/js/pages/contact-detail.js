@@ -1689,7 +1689,7 @@ function renderGroupedRelationships(relationships, { hasAddress = false } = {}) 
       html += `<div class="relationship-group-label">${catLabel}</div>`;
     }
     html += items.map(r => `
-      <div class="relationship-row-wrapper" data-rel-id="${r.relationship_id}" data-rel-type-id="${r.relationship_type_id}" data-start="${r.start_date || ''}" data-end="${r.end_date || ''}" data-contact-uuid="${r.uuid}">
+      <div class="relationship-row-wrapper" data-rel-id="${r.relationship_id}" data-rel-type-id="${r.relationship_type_id}" data-rel-inverse="${r.is_inverse ? 'true' : 'false'}" data-start="${r.start_date || ''}" data-end="${r.end_date || ''}" data-contact-uuid="${r.uuid}">
         ${contactRowHtml(r, { meta: t(`relationships.types.${r.relationship}`) })}
         <div class="relationship-actions">
           ${hasAddress ? `<button type="button" class="btn btn-link btn-sm btn-share-address" title="${t('addresses.shareAddress')}"><i class="bi bi-house-add"></i></button>` : ''}
@@ -2464,13 +2464,24 @@ async function showEditRelationshipDialog(wrapper, onDone) {
     return;
   }
 
+  // Determine if current relationship is stored as inverse
+  const isInverse = wrapper.dataset.relInverse === 'true';
+  const currentValue = isInverse ? `${currentTypeId}:inverse` : currentTypeId;
+
   const catLabels = { family: t('relationships.categories.family'), social: t('relationships.categories.social'), professional: t('relationships.categories.professional') };
   const typeOptions = ['family', 'social', 'professional'].map(cat => {
-    const catTypes = types.filter(t => t.category === cat);
+    const catTypes = types.filter(tp => tp.category === cat);
     if (!catTypes.length) return '';
-    return `<optgroup label="${catLabels[cat]}">
-      ${catTypes.map(tp => `<option value="${tp.id}" ${String(tp.id) === currentTypeId ? 'selected' : ''}>${t('relationships.types.' + tp.name) !== 'relationships.types.' + tp.name ? t('relationships.types.' + tp.name) : tp.name}</option>`).join('')}
-    </optgroup>`;
+    const options = [];
+    for (const tp of catTypes) {
+      const label = t('relationships.types.' + tp.name) !== 'relationships.types.' + tp.name ? t('relationships.types.' + tp.name) : tp.name;
+      options.push(`<option value="${tp.id}" ${String(tp.id) === currentValue ? 'selected' : ''}>${label}</option>`);
+      if (tp.inverse_name !== tp.name) {
+        const invLabel = t('relationships.types.' + tp.inverse_name) !== 'relationships.types.' + tp.inverse_name ? t('relationships.types.' + tp.inverse_name) : tp.inverse_name;
+        options.push(`<option value="${tp.id}:inverse" ${'${tp.id}:inverse' === currentValue ? 'selected' : ''}>${invLabel}</option>`);
+      }
+    }
+    return `<optgroup label="${catLabels[cat]}">${options.join('')}</optgroup>`;
   }).join('');
 
   const id = 'rel-edit-' + Date.now();
@@ -2515,8 +2526,12 @@ async function showEditRelationshipDialog(wrapper, onDone) {
 
   document.getElementById(`${id}-submit`).addEventListener('click', async () => {
     try {
+      const typeVal = document.getElementById(`${id}-type`).value;
+      const isInv = typeVal.includes(':inverse');
+      const typeId = parseInt(typeVal);
       await api.put(`/relationships/${relId}`, {
-        relationship_type_id: parseInt(document.getElementById(`${id}-type`).value),
+        relationship_type_id: typeId,
+        swap: isInv,
         start_date: document.getElementById(`${id}-start`).value || null,
         end_date: document.getElementById(`${id}-end`).value || null,
       });

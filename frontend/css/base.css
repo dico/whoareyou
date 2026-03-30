@@ -194,6 +194,12 @@ a:hover {
   background: var(--color-primary-dark, #0056b3);
 }
 
+.company-logo-wrap.drop-active {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+}
+
 .contact-row-avatar {
   width: 32px;
   height: 32px;

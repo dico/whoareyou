@@ -138,6 +138,7 @@ router.get('/:uuid', async (req, res, next) => {
           'relationship_types.name as relationship', 'relationship_types.id as relationship_type_id',
           'relationship_types.category',
           'relationships.notes', 'relationships.start_date', 'relationships.end_date',
+          db.raw('0 as is_inverse'),
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = related.id AND cp.is_primary = true LIMIT 1) as avatar`)
         )
         // Also get inverse relationships (where this contact is the "related" one)
@@ -152,6 +153,7 @@ router.get('/:uuid', async (req, res, next) => {
               'relationship_types.inverse_name as relationship', 'relationship_types.id as relationship_type_id',
               'relationship_types.category',
               'relationships.notes', 'relationships.start_date', 'relationships.end_date',
+              db.raw('1 as is_inverse'),
               db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = origin.id AND cp.is_primary = true LIMIT 1) as avatar`)
             );
         }),
