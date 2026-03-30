@@ -153,6 +153,8 @@
     "type": "Relasjonstype",
     "swap": "Snu retning",
     "isRelationTo": "er {type} til",
+    "extended": "Utvidet familie",
+    "showMore": "Vis mer ({count})",
     "since": "Siden",
     "until": "Til",
     "optional": "valgfri",
@@ -594,7 +596,8 @@
     "select": "Velg",
     "open": "Åpne",
     "done": "Ferdig",
-    "and": "og"
+    "and": "og",
+    "showLess": "Vis mindre"
   },
   "time": {
     "justNow": "akkurat nå",

@@ -153,6 +153,8 @@
     "type": "Relationship type",
     "swap": "Swap direction",
     "isRelationTo": "is {type} of",
+    "extended": "Extended family",
+    "showMore": "Show more ({count})",
     "since": "Since",
     "until": "Until",
     "optional": "optional",
@@ -594,7 +596,8 @@
     "select": "Select",
     "open": "Open",
     "done": "Done",
-    "and": "and"
+    "and": "and",
+    "showLess": "Show less"
   },
   "time": {
     "justNow": "just now",

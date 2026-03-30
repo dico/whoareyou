@@ -710,6 +710,34 @@ export async function renderContactDetail(uuid) {
       });
     });
 
+    // Toggle extended relationships with slide animation
+    document.getElementById('rel-toggle-extended')?.addEventListener('click', (e) => {
+      const section = document.getElementById('rel-extended-section');
+      const isHidden = section.classList.contains('d-none');
+      const btn = e.target.closest('#rel-toggle-extended') || e.target;
+
+      if (isHidden) {
+        // Expand
+        section.classList.remove('d-none');
+        section.style.maxHeight = '0';
+        section.style.overflow = 'hidden';
+        section.style.transition = 'max-height 0.3s ease';
+        requestAnimationFrame(() => { section.style.maxHeight = section.scrollHeight + 'px'; });
+        setTimeout(() => { section.style.maxHeight = ''; section.style.overflow = ''; section.style.transition = ''; }, 300);
+        localStorage.setItem('rel_expanded', 'true');
+        btn.innerHTML = `<i class="bi bi-chevron-up me-1"></i>${t('common.showLess')}`;
+      } else {
+        // Collapse
+        section.style.maxHeight = section.scrollHeight + 'px';
+        section.style.overflow = 'hidden';
+        section.style.transition = 'max-height 0.3s ease';
+        requestAnimationFrame(() => { section.style.maxHeight = '0'; });
+        setTimeout(() => { section.classList.add('d-none'); section.style.maxHeight = ''; section.style.overflow = ''; section.style.transition = ''; }, 300);
+        localStorage.setItem('rel_expanded', 'false');
+        btn.innerHTML = `<i class="bi bi-chevron-down me-1"></i>${t('relationships.showMore', { count: section.querySelectorAll('.relationship-row-wrapper').length })}`;
+      }
+    });
+
     // Edit address
     document.querySelectorAll('.btn-edit-address').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1662,11 +1690,9 @@ async function loadContactReminders(contactUuid) {
 }
 
 function renderGroupedRelationships(relationships, { hasAddress = false } = {}) {
-  // Sort order for relationship types
   const typePriority = { spouse: 0, cohabitant: 1, boyfriend_girlfriend: 2, partner: 3, child: 4, parent: 5, sibling: 6, grandchild: 7, grandparent: 8, stepchild: 9, stepparent: 10 };
   const catPriority = { family: 0, social: 1, professional: 2 };
 
-  // Sort: family first, then by type priority, then alphabetically
   const sorted = [...relationships].sort((a, b) => {
     const catA = catPriority[a.category] ?? 9;
     const catB = catPriority[b.category] ?? 9;
@@ -1677,31 +1703,52 @@ function renderGroupedRelationships(relationships, { hasAddress = false } = {}) 
     return (a.first_name || '').localeCompare(b.first_name || '');
   });
 
-  // Group by category
-  const groups = new Map();
-  for (const r of sorted) {
-    const cat = r.category || 'other';
-    if (!groups.has(cat)) groups.set(cat, []);
-    groups.get(cat).push(r);
-  }
+  // Core family types always shown, extended hidden behind "show more"
+  const coreTypes = new Set(['spouse', 'cohabitant', 'boyfriend_girlfriend', 'partner', 'child', 'parent', 'sibling', 'grandchild', 'grandparent', 'stepchild', 'stepparent', 'godchild', 'godparent']);
+  const showExpanded = localStorage.getItem('rel_expanded') === 'true';
+
+  const renderRow = (r) => `
+    <div class="relationship-row-wrapper" data-rel-id="${r.relationship_id}" data-rel-type-id="${r.relationship_type_id}" data-rel-inverse="${r.is_inverse ? 'true' : 'false'}" data-start="${r.start_date || ''}" data-end="${r.end_date || ''}" data-contact-uuid="${r.uuid}">
+      ${contactRowHtml(r, { meta: t(`relationships.types.${r.relationship}`) })}
+      <div class="relationship-actions">
+        ${hasAddress ? `<button type="button" class="btn btn-link btn-sm btn-share-address" title="${t('addresses.shareAddress')}"><i class="bi bi-house-add"></i></button>` : ''}
+        <button type="button" class="btn btn-link btn-sm btn-edit-rel" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
+        <button type="button" class="btn btn-link btn-sm text-danger btn-delete-rel" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </div>`;
+
+  // Split family into core and extended
+  const familyCore = sorted.filter(r => r.category === 'family' && coreTypes.has(r.relationship));
+  const familyExtended = sorted.filter(r => r.category === 'family' && !coreTypes.has(r.relationship));
+  const social = sorted.filter(r => r.category === 'social');
+  const professional = sorted.filter(r => r.category === 'professional');
 
   let html = '';
-  for (const [cat, items] of groups) {
-    if (groups.size > 1) {
-      const catLabel = { family: t('relationships.categories.family'), social: t('relationships.categories.social'), professional: t('relationships.categories.professional') }[cat] || cat;
-      html += `<div class="relationship-group-label">${catLabel}</div>`;
+  // Core family — always visible
+  html += familyCore.map(renderRow).join('');
+
+  // Extended family + social + professional — behind toggle
+  const extended = [...familyExtended, ...social, ...professional];
+  if (extended.length) {
+    html += `<div class="rel-extended ${showExpanded ? '' : 'd-none'}" id="rel-extended-section">`;
+    if (familyExtended.length) {
+      html += `<div class="relationship-group-label mt-2">${t('relationships.extended')}</div>`;
+      html += familyExtended.map(renderRow).join('');
     }
-    html += items.map(r => `
-      <div class="relationship-row-wrapper" data-rel-id="${r.relationship_id}" data-rel-type-id="${r.relationship_type_id}" data-rel-inverse="${r.is_inverse ? 'true' : 'false'}" data-start="${r.start_date || ''}" data-end="${r.end_date || ''}" data-contact-uuid="${r.uuid}">
-        ${contactRowHtml(r, { meta: t(`relationships.types.${r.relationship}`) })}
-        <div class="relationship-actions">
-          ${hasAddress ? `<button type="button" class="btn btn-link btn-sm btn-share-address" title="${t('addresses.shareAddress')}"><i class="bi bi-house-add"></i></button>` : ''}
-          <button type="button" class="btn btn-link btn-sm btn-edit-rel" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
-          <button type="button" class="btn btn-link btn-sm text-danger btn-delete-rel" title="${t('common.delete')}"><i class="bi bi-x-lg"></i></button>
-        </div>
-      </div>
-    `).join('');
+    if (social.length) {
+      html += `<div class="relationship-group-label mt-2">${t('relationships.categories.social')}</div>`;
+      html += social.map(renderRow).join('');
+    }
+    if (professional.length) {
+      html += `<div class="relationship-group-label mt-2">${t('relationships.categories.professional')}</div>`;
+      html += professional.map(renderRow).join('');
+    }
+    html += `</div>`;
+    html += `<button type="button" class="btn btn-link btn-sm text-muted w-100 mt-1" id="rel-toggle-extended">
+      <i class="bi bi-chevron-${showExpanded ? 'up' : 'down'} me-1"></i>${showExpanded ? t('common.showLess') : t('relationships.showMore', { count: extended.length })}
+    </button>`;
   }
+
   return html;
 }
 
