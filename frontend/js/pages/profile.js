@@ -255,6 +255,16 @@ export async function renderProfile() {
     document.getElementById('current-password').focus();
   });
 
+  // Auto-open password form if redirected from login
+  if (new URLSearchParams(window.location.search).get('change_password')) {
+    document.getElementById('profile-view').classList.add('d-none');
+    document.getElementById('password-form').classList.remove('d-none');
+    document.getElementById('password-form').insertAdjacentHTML('afterbegin',
+      `<div class="alert alert-warning small mb-3">${t('auth.mustChangePassword')}</div>`);
+    document.getElementById('current-password').focus();
+    window.history.replaceState({}, '', '/profile');
+  }
+
   document.getElementById('btn-cancel-password').addEventListener('click', () => {
     document.getElementById('profile-view').classList.remove('d-none');
     document.getElementById('password-form').classList.add('d-none');

@@ -93,7 +93,7 @@ export async function renderCompanyDetail(uuid) {
 
             ${company.latitude && company.longitude ? `
             <div class="sidebar-card glass-card">
-              <h4><i class="bi bi-geo-alt"></i> ${t('addresses.map')}</h4>
+              <h4><i class="bi bi-geo-alt"></i> ${t('nav.map')}</h4>
               <div id="company-map" class="contact-map" style="height:200px;border-radius:var(--radius-md)"></div>
             </div>
             ` : ''}
@@ -163,8 +163,9 @@ export async function renderCompanyDetail(uuid) {
     // Map
     if (company.latitude && company.longitude) {
       const mapEl = document.getElementById('company-map');
-      if (mapEl && window.L) {
-        const map = L.map(mapEl).setView([company.latitude, company.longitude], 14);
+      if (mapEl) {
+        await loadLeaflet();
+        const map = L.map(mapEl, { scrollWheelZoom: false }).setView([company.latitude, company.longitude], 14);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap',
         }).addTo(map);
@@ -381,3 +382,17 @@ function showEditCompanyDialog(uuid, company, onDone) {
 
 function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 function escapeAttr(str) { return (str || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+async function loadLeaflet() {
+  if (window.L) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  document.head.appendChild(link);
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = resolve;
+    document.head.appendChild(script);
+  });
+}

@@ -174,6 +174,15 @@ POST /api/auth/login (email + password)
 - Generic response prevents user enumeration
 - Configurable toggle in system settings (`password_reset_enabled`)
 
+## Member Invitation
+- Admin creates member via `/api/auth/invite` (admin role required)
+- Password auto-generated (12-byte base64url) if not provided
+- `must_change_password` flag set when welcome email sent with credentials
+- On login, user is redirected to profile with forced password change prompt
+- Flag cleared after successful password change
+- Password sent in email only once (initial invite) — no resend option
+- All login paths (direct, 2FA, passkey) check and enforce the flag
+
 ## Security Audit History
 - Round 1: Initial implementation review
 - Round 2: Route-by-route review — fixed HIGH/MEDIUM issues (label-tenant injection, file-tenant bypass, type-validation)
@@ -181,3 +190,4 @@ POST /api/auth/login (email + password)
 - Round 4: Portal security — contact leakage fix, rate limiting, ephemeral guest traceability, idempotent migrations
 - Round 5: Comments/reactions overhaul — XSS fix in data-people attribute (JSON in HTML), tenant_id check on portal comment deletion, thumbnail regex tightened to match only photo files (not arbitrary paths with `_thumb`)
 - Round 6: Portal posts + link preview — SSRF protection on URL scrape endpoints (blocklist for internal hosts/IPs, protocol whitelist), post_date validation (reject non-date values), portal post creation enforces tenant_id + contactIds access, portal media upload restricted to own posts
+- Round 7: Member invitation — forced password change on first login when credentials sent via email, must_change_password flag on all login paths (direct, 2FA, passkey)

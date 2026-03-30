@@ -86,6 +86,7 @@ router.post('/register', async (req, res, next) => {
     res.status(201).json({
       token: accessToken,
       refreshToken,
+      must_change_password: !!user.must_change_password,
       user: {
         uuid: user.uuid,
         email: user.email,
@@ -234,6 +235,7 @@ router.post('/login', async (req, res, next) => {
     res.json({
       token: accessToken,
       refreshToken,
+      must_change_password: !!user.must_change_password,
       user: {
         uuid: user.uuid,
         email: user.email,
@@ -358,6 +360,7 @@ router.post('/2fa/verify', async (req, res, next) => {
     res.json({
       token: accessToken,
       refreshToken,
+      must_change_password: !!user.must_change_password,
       user: {
         uuid: user.uuid, email: user.email, first_name: user.first_name,
         last_name: user.last_name, role: user.role, is_system_admin: !!user.is_system_admin,
@@ -739,7 +742,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(req.body.new_password, SALT_ROUNDS);
-    await db('users').where({ id: req.user.id }).update({ password_hash: passwordHash });
+    await db('users').where({ id: req.user.id }).update({ password_hash: passwordHash, must_change_password: false });
 
     // Revoke all other sessions on password change
     if (req.user.sessionId) {
@@ -1055,6 +1058,7 @@ router.post('/invite', authenticate, async (req, res, next) => {
       role: req.body.role === 'admin' ? 'admin' : 'member',
       language: req.body.language || 'en',
       is_active: loginEnabled,
+      must_change_password: loginEnabled && req.body.send_email ? true : false,
     });
 
     const user = await db('users').where({ id: userId }).first();

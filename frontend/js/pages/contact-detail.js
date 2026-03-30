@@ -307,7 +307,7 @@ export async function renderContactDetail(uuid) {
             </div>
 
             <!-- Companies -->
-            <div class="sidebar-card glass-card">
+            <div class="sidebar-card glass-card" style="position:relative;z-index:2">
               <h4>
                 <i class="bi bi-building"></i> ${t('companies.title')}
                 <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-company" title="${t('common.add')}"><i class="bi bi-plus-lg"></i></button>
@@ -318,7 +318,7 @@ export async function renderContactDetail(uuid) {
               <div id="add-company-form" class="d-none mt-2">
                 <div class="mb-2 position-relative">
                   <input type="text" class="form-control form-control-sm" id="company-search-input" placeholder="${t('companies.searchOrCreate')}">
-                  <div id="company-search-results" class="dropdown-menu w-100" style="display:none;position:absolute;z-index:10"></div>
+                  <div id="company-search-results" class="dropdown-menu w-100" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto"></div>
                 </div>
                 <div class="d-flex gap-2 mb-2">
                   <input type="text" class="form-control form-control-sm" id="company-role-input" placeholder="${t('companies.role')}">
@@ -873,8 +873,9 @@ export async function renderContactDetail(uuid) {
       companySearchTimeout = setTimeout(async () => {
         const { companies } = await api.get(`/companies?search=${encodeURIComponent(q)}`);
         companyResults.innerHTML = companies.slice(0, 5).map(c => `
-          <button type="button" class="dropdown-item company-result" data-uuid="${c.uuid}" data-name="${escapeHtml(c.name)}">
-            <i class="bi bi-building me-2"></i>${escapeHtml(c.name)}${c.industry ? ` <span class="text-muted small">— ${escapeHtml(c.industry)}</span>` : ''}
+          <button type="button" class="dropdown-item company-result d-flex align-items-center gap-2" data-uuid="${c.uuid}" data-name="${escapeHtml(c.name)}" data-logo="${c.logo_path || ''}">
+            <div class="company-search-logo">${c.logo_path ? `<img src="${authUrl(c.logo_path)}" alt="">` : `<i class="bi bi-building"></i>`}</div>
+            <div class="text-truncate"><span>${escapeHtml(c.name)}</span>${c.industry ? `<br><span class="text-muted" style="font-size:0.75rem">${escapeHtml(c.industry)}</span>` : ''}</div>
           </button>
         `).join('') + `
           <button type="button" class="dropdown-item company-create text-primary">
@@ -884,7 +885,7 @@ export async function renderContactDetail(uuid) {
 
         companyResults.querySelectorAll('.company-result').forEach(btn => {
           btn.addEventListener('click', () => {
-            selectedCompany = { uuid: btn.dataset.uuid, name: btn.dataset.name };
+            selectedCompany = { uuid: btn.dataset.uuid, name: btn.dataset.name, logo: btn.dataset.logo };
             companySearchInput.value = btn.dataset.name;
             companyResults.style.display = 'none';
             companySaveBtn.disabled = false;
@@ -2228,7 +2229,7 @@ function renderCompanyRow(c) {
   return `<div class="contact-row company-row" data-link-id="${c.link_id}">
     <a href="/companies/${c.company_uuid}" data-link class="d-flex align-items-center gap-2 flex-grow-1 text-decoration-none">
       <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
-        <i class="bi bi-building" style="font-size:0.7rem"></i>
+        ${c.company_logo ? `<img src="${authUrl(c.company_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-full)">` : `<i class="bi bi-building" style="font-size:0.7rem"></i>`}
       </div>
       <div class="contact-row-info">
         <div class="contact-row-name">${escapeHtml(c.company_name)}</div>
@@ -2478,7 +2479,7 @@ async function showEditRelationshipDialog(wrapper, onDone) {
       options.push(`<option value="${tp.id}" ${String(tp.id) === currentValue ? 'selected' : ''}>${label}</option>`);
       if (tp.inverse_name !== tp.name) {
         const invLabel = t('relationships.types.' + tp.inverse_name) !== 'relationships.types.' + tp.inverse_name ? t('relationships.types.' + tp.inverse_name) : tp.inverse_name;
-        options.push(`<option value="${tp.id}:inverse" ${'${tp.id}:inverse' === currentValue ? 'selected' : ''}>${invLabel}</option>`);
+        options.push(`<option value="${tp.id}:inverse" ${`${tp.id}:inverse` === currentValue ? 'selected' : ''}>${invLabel}</option>`);
       }
     }
     return `<optgroup label="${catLabels[cat]}">${options.join('')}</optgroup>`;
@@ -2496,9 +2497,12 @@ async function showEditRelationshipDialog(wrapper, onDone) {
           <div class="modal-body">
             <div class="mb-3">
               <label class="form-label small">${t('relationships.type')}</label>
-              <select class="form-select form-select-sm" id="${id}-type">
-                ${typeOptions}
-              </select>
+              <div class="d-flex gap-2">
+                <select class="form-select form-select-sm" id="${id}-type">
+                  ${typeOptions}
+                </select>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="${id}-swap" title="${t('relationships.swap')}"><i class="bi bi-arrow-left-right"></i></button>
+              </div>
             </div>
             <div class="row g-2 mb-3">
               <div class="col">
@@ -2524,14 +2528,29 @@ async function showEditRelationshipDialog(wrapper, onDone) {
   const modalEl = document.getElementById(id);
   const modal = new bootstrap.Modal(modalEl);
 
+  // Swap button — toggle between forward and inverse
+  document.getElementById(`${id}-swap`).addEventListener('click', () => {
+    const sel = document.getElementById(`${id}-type`);
+    const val = sel.value;
+    if (val.includes(':inverse')) {
+      const fwd = val.replace(':inverse', '');
+      if (sel.querySelector(`option[value="${fwd}"]`)) sel.value = fwd;
+    } else {
+      const inv = val + ':inverse';
+      if (sel.querySelector(`option[value="${inv}"]`)) sel.value = inv;
+    }
+  });
+
   document.getElementById(`${id}-submit`).addEventListener('click', async () => {
     try {
       const typeVal = document.getElementById(`${id}-type`).value;
-      const isInv = typeVal.includes(':inverse');
+      const newIsInverse = typeVal.includes(':inverse');
       const typeId = parseInt(typeVal);
+      // Swap if direction changed from original
+      const needsSwap = newIsInverse !== isInverse;
       await api.put(`/relationships/${relId}`, {
         relationship_type_id: typeId,
-        swap: isInv,
+        swap: needsSwap,
         start_date: document.getElementById(`${id}-start`).value || null,
         end_date: document.getElementById(`${id}-end`).value || null,
       });

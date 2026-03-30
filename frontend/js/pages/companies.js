@@ -2,6 +2,7 @@ import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
 import { confirmDialog } from '../components/dialogs.js';
+import { authUrl } from '../utils/auth-url.js';
 
 export async function renderCompanies() {
   const content = document.getElementById('app-content');
@@ -98,7 +99,9 @@ async function loadCompanies() {
     el.innerHTML = `<div class="contacts-list">${companies.map(c => `
       <a href="/companies/${c.uuid}" data-link class="contact-card">
         <div class="contact-avatar" style="background:var(--color-text-secondary)">
-          <i class="bi bi-building" style="color:#fff;font-size:1rem"></i>
+          ${c.logo_path
+            ? `<img src="${authUrl(c.logo_path)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-full)">`
+            : `<i class="bi bi-building" style="color:#fff;font-size:1rem"></i>`}
         </div>
         <div class="contact-info">
           <div class="contact-name">${escapeHtml(c.name)}</div>

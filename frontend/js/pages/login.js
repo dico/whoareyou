@@ -207,7 +207,11 @@ export function renderLogin() {
       if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
       state.token = data.token;
       state.user = data.user;
-      navigate('/');
+      if (data.must_change_password) {
+        navigate('/profile?change_password=1');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.classList.remove('d-none');
@@ -239,7 +243,11 @@ export function renderLogin() {
         if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
         state.token = data.token;
         state.user = data.user;
-        navigate('/');
+        if (data.must_change_password) {
+          navigate('/profile?change_password=1');
+        } else {
+          navigate('/');
+        }
       } catch (err) {
         newErrorEl.textContent = err.message;
         newErrorEl.classList.remove('d-none');

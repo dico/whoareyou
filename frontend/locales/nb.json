@@ -21,6 +21,7 @@
   },
   "auth": {
     "login": "Logg inn",
+    "mustChangePassword": "Vennligst endre passordet ditt. Det nåværende passordet ble sendt på e-post og bør byttes.",
     "register": "Registrer",
     "email": "E-post",
     "password": "Passord",
@@ -150,6 +151,7 @@
     "noRelationships": "Ingen relasjoner ennå",
     "chooseType": "Velg type...",
     "type": "Relasjonstype",
+    "swap": "Snu retning",
     "since": "Siden",
     "until": "Til",
     "optional": "valgfri",

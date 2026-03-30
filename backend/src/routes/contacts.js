@@ -221,7 +221,7 @@ router.get('/:uuid', async (req, res, next) => {
           .where({ 'contact_companies.contact_id': contact.id, 'contact_companies.tenant_id': req.tenantId })
           .select(
             'contact_companies.id as link_id', 'contact_companies.title', 'contact_companies.start_date', 'contact_companies.end_date',
-            'companies.uuid as company_uuid', 'companies.name as company_name'
+            'companies.uuid as company_uuid', 'companies.name as company_name', 'companies.logo_path as company_logo'
           )
           .orderByRaw('contact_companies.end_date IS NOT NULL, contact_companies.start_date DESC'),
       },

@@ -21,6 +21,7 @@
   },
   "auth": {
     "login": "Log in",
+    "mustChangePassword": "Please change your password. Your current password was sent via email and should be replaced.",
     "register": "Register",
     "email": "Email",
     "password": "Password",
@@ -150,6 +151,7 @@
     "noRelationships": "No relationships yet",
     "chooseType": "Choose type...",
     "type": "Relationship type",
+    "swap": "Swap direction",
     "since": "Since",
     "until": "Until",
     "optional": "optional",

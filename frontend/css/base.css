@@ -196,7 +196,7 @@ a:hover {
 
 /* Info field — label above content (for sidebars) */
 .info-field {
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 .info-field .info-label {
@@ -212,6 +212,27 @@ a:hover {
 .info-field a {
   font-size: var(--font-size-sm);
   word-break: break-word;
+}
+
+/* Company search result logo */
+.company-search-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+}
+
+.company-search-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .company-logo-wrap.drop-active {
