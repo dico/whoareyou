@@ -74,17 +74,15 @@ export function showCropper(source, options = {}) {
       img.src = source;
     }
 
-    img.onload = () => {
-      const areaWidth = area.clientWidth || 400;
+    function initCanvas() {
+      const areaWidth = area.clientWidth || 460;
       const areaHeight = 450;
 
-      // Set canvas pixel dimensions to match display size (prevents stretching)
       canvas.width = areaWidth;
       canvas.height = areaHeight;
       canvas.style.width = areaWidth + 'px';
       canvas.style.height = areaHeight + 'px';
 
-      // Fit image to canvas initially
       const fitScale = Math.max(viewportSize / img.width, viewportSize / img.height);
       scale = fitScale;
       zoomSlider.min = fitScale;
@@ -92,16 +90,24 @@ export function showCropper(source, options = {}) {
       zoomSlider.step = fitScale * 0.02;
       zoomSlider.value = fitScale;
 
-      // Center image
       offsetX = (areaWidth - img.width * scale) / 2;
       offsetY = (areaHeight - img.height * scale) / 2;
 
       draw();
+    }
+
+    img.onload = () => {
+      // Wait for modal to be visible so area.clientWidth is correct
+      if (area.clientWidth > 0) {
+        initCanvas();
+      } else {
+        modalEl.addEventListener('shown.bs.modal', () => initCanvas(), { once: true });
+      }
     };
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#1a1a1a';
+      ctx.fillStyle = '#f0f0f0';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, offsetX, offsetY, img.width * scale, img.height * scale);
     }
