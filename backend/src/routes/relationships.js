@@ -213,17 +213,18 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
     const allRels = await relsQuery;
 
     // BFS from the contact to find connected members (configurable depth)
+    // Partners are included at same depth but don't expand further from partner's family
+    const partnerTypes = new Set(['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant']);
     const visited = new Set();
     const nodes = new Map();
     const edges = [];
-    const queue = [{ id: contact.id, depth: 0 }];
+    const queue = [{ id: contact.id, depth: 0, isPartner: false }];
     visited.add(contact.id);
 
     while (queue.length) {
-      const { id: currentId, depth } = queue.shift();
+      const { id: currentId, depth, isPartner } = queue.shift();
       if (depth > maxDepth) continue;
 
-      // Find all relationships for this contact
       for (const rel of allRels) {
         let otherId, relType;
         if (rel.contact_id === currentId) {
@@ -238,7 +239,15 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
 
         if (!visited.has(otherId)) {
           visited.add(otherId);
-          queue.push({ id: otherId, depth: depth + 1 });
+          const isPartnerEdge = partnerTypes.has(relType);
+          if (isPartnerEdge) {
+            // Partner: include at same depth, but mark as partner (won't expand their parents/siblings)
+            queue.push({ id: otherId, depth, isPartner: true });
+          } else if (!isPartner) {
+            // Non-partner: expand normally (but nodes reached via partner don't expand further)
+            queue.push({ id: otherId, depth: depth + 1, isPartner: false });
+          }
+          // If isPartner and non-partner edge: this is partner's family — skip (don't queue)
         }
       }
     }
@@ -249,7 +258,7 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
         .whereIn('id', [...visited])
         .whereNull('deleted_at')
         .select(
-          'id', 'uuid', 'first_name', 'last_name', 'birth_year',
+          'id', 'uuid', 'first_name', 'last_name', 'birth_year', 'deceased_date',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
         );
 
@@ -257,7 +266,7 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
         nodes.set(c.id, {
           id: c.id, uuid: c.uuid,
           first_name: c.first_name, last_name: c.last_name,
-          birth_year: c.birth_year, avatar: c.avatar,
+          birth_year: c.birth_year, deceased_date: c.deceased_date, avatar: c.avatar,
           is_root: c.id === contact.id,
         });
       }

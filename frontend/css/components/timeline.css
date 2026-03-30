@@ -115,10 +115,12 @@
   margin-bottom: var(--space-lg);
 }
 
-.post-compose textarea {
+.post-compose textarea,
+.post-compose-inline textarea {
   border: none;
   background: transparent;
   resize: none;
+  overflow: hidden;
   padding: var(--space-sm);
   font-size: var(--font-size-base);
 }
@@ -174,8 +176,14 @@
   margin-bottom: var(--space-sm);
 }
 
-.post-about-header:hover strong {
+.post-author-link {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.post-author-link:hover {
   color: var(--color-primary);
+  text-decoration: underline;
 }
 
 .post-about-header .post-date {

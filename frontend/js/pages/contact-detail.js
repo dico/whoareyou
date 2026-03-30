@@ -172,13 +172,15 @@ export async function renderContactDetail(uuid) {
                   contactRowHtml(h, { meta: h.street })
                 ).join('')}
               </div>
-              ${contact.addresses.filter(a => !a.moved_out_at && a.address_id).map(a => `
-                <div class="text-center mt-2">
-                  <a href="/addresses/${a.address_id}" data-link class="subtle-link">
-                    <i class="bi bi-house-door"></i> ${t('addresses.viewAddress')}
-                  </a>
-                </div>
-              `).join('')}
+              ${(() => {
+                const householdAddressIds = [...new Set(contact.household.map(h => h.address_id).filter(Boolean))];
+                return householdAddressIds.length ? `
+                  <div class="text-center mt-2">
+                    <a href="/addresses/${householdAddressIds[0]}" data-link class="subtle-link">
+                      <i class="bi bi-house-door"></i> ${t('addresses.viewAddress')}
+                    </a>
+                  </div>` : '';
+              })()}
             </div>
             ` : ''}
 
@@ -1039,6 +1041,10 @@ export async function renderContactDetail(uuid) {
     const urlRegex = /https?:\/\/[^\s<]+/g;
 
     const postBody = document.getElementById('quick-post-body');
+    postBody.addEventListener('input', () => {
+      postBody.style.height = 'auto';
+      postBody.style.height = postBody.scrollHeight + 'px';
+    });
     const linkPreviewEl = document.getElementById('quick-post-link-preview');
 
     function renderQuickLinkPreview() {
@@ -1115,6 +1121,7 @@ export async function renderContactDetail(uuid) {
       }
 
       document.getElementById('quick-post-body').value = '';
+      document.getElementById('quick-post-body').style.height = 'auto';
       quickPostMedia = [];
       renderQuickMediaPreview();
       quickPostExtra.length = 0;
@@ -1840,8 +1847,11 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
         if (isPartner) return true; // always follow partner edges
 
         if (treeMode === 'lineage') {
-          // Only parent/child — no siblings, uncles, etc.
           return parentTypes.includes(type) || childTypes.includes(type);
+        }
+        if (treeMode === 'blood') {
+          // Blood mode uses special two-pass BFS below — skip normal traversal
+          return false;
         }
         if (treeMode === 'ancestors') {
           // Only go up: from current's perspective, follow edges where the other is a parent
@@ -1876,14 +1886,54 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
         }
       }
 
+      // Blood mode: two-pass BFS — ancestors up, then descendants down from root
+      if (treeMode === 'blood') {
+        reachable.clear();
+        reachable.add(rootId);
+
+        // Helper: directional BFS
+        const bfsDirectional = (startId, isUpward) => {
+          const visited = new Set([startId]);
+          const queue = [startId];
+          while (queue.length) {
+            const cid = queue.shift();
+            for (const e of rawEdges) {
+              let otherId, ok = false;
+              if (e.from === cid) {
+                otherId = e.to;
+                ok = isUpward ? childTypes.includes(e.type) : parentTypes.includes(e.type);
+              } else if (e.to === cid) {
+                otherId = e.from;
+                ok = isUpward ? parentTypes.includes(e.type) : childTypes.includes(e.type);
+              }
+              if (ok && !visited.has(otherId)) {
+                visited.add(otherId);
+                reachable.add(otherId);
+                queue.push(otherId);
+              }
+            }
+          }
+        };
+
+        bfsDirectional(rootId, true);  // ancestors
+        bfsDirectional(rootId, false); // descendants
+
+        // Add partners of reachable nodes (but don't traverse their families)
+        for (const e of rawEdges) {
+          if (partnerTypes.includes(e.type)) {
+            if (reachable.has(e.from)) reachable.add(e.to);
+            if (reachable.has(e.to)) reachable.add(e.from);
+          }
+        }
+      }
+
       // Include only edges where both nodes are reachable
       edges = rawEdges.filter(e => reachable.has(e.from) && reachable.has(e.to));
-      // Also filter out sibling edges in lineage/ancestors/descendants modes
+      // Filter out sibling/uncle edges in directional modes
       if (treeMode !== 'full') {
         edges = edges.filter(e => {
           const t = e.type;
-          return parentTypes.includes(t) || childTypes.includes(t) || partnerTypes.includes(t)
-            || (treeMode === 'full');
+          return parentTypes.includes(t) || childTypes.includes(t) || partnerTypes.includes(t);
         });
       }
     }
@@ -2065,6 +2115,7 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
     const allCats = ['family', 'social', 'professional'];
     const modes = [
       { id: 'full', label: t('relationships.treeModeFull') },
+      { id: 'blood', label: t('relationships.treeModeBlood') },
       { id: 'lineage', label: t('relationships.treeModeLineage') },
       { id: 'ancestors', label: t('relationships.treeModeAncestors') },
       { id: 'descendants', label: t('relationships.treeModeDescendants') },
@@ -2081,6 +2132,10 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
         <label class="form-label mb-0 small text-muted">${t('relationships.treeDepth')}</label>
         <input type="range" class="form-range" id="tree-depth" min="1" max="6" value="${treeDepth}" style="width:80px">
         <span class="small text-muted" id="tree-depth-val">${treeDepth}</span>
+      </div>
+      <div class="form-check form-switch ms-2">
+        <input class="form-check-input" type="checkbox" id="tree-navigate" ${_treeModal._navigateMode ? 'checked' : ''}>
+        <label class="form-check-label small text-muted" for="tree-navigate">${t('relationships.treeNavigate')}</label>
       </div>
     `;
 
@@ -2120,16 +2175,27 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       });
     });
 
+    // --- Controls: navigate toggle ---
+    controlsEl.querySelector('#tree-navigate')?.addEventListener('change', (e) => {
+      _treeModal._navigateMode = e.target.checked;
+    });
+
     // --- Node interactions ---
     const modalEl = _treeModal.el;
     const allNodes = inner.querySelectorAll('.tree-node');
     const allEdges = inner.querySelectorAll('.tree-edge, .tree-partner-edge');
 
     allNodes.forEach(node => {
+      node.style.cursor = 'pointer';
       node.addEventListener('click', (e) => {
         e.stopPropagation();
-        _treeModal.bs.hide();
-        navigate(`/contacts/${node.dataset.uuid}`);
+        if (_treeModal._navigateMode) {
+          // Re-root tree from clicked node
+          renderTreeContent(node.dataset.uuid, treeDepth, treeCategories, treeMode);
+        } else {
+          _treeModal.bs.hide();
+          navigate(`/contacts/${node.dataset.uuid}`);
+        }
       });
 
       const nodeId = [...positions.entries()].find(([id]) => nodeMap.get(id)?.uuid === node.dataset.uuid)?.[0];

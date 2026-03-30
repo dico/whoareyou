@@ -61,25 +61,29 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         <div class="post-view">
           ${p.about ? (() => {
             const hasAuthor = p.posted_by?.name;
-            const showAuthor = hasAuthor && (contactUuid || true); // always show author when available
+            const showAuthor = hasAuthor;
             const avatar = showAuthor && p.posted_by.avatar ? p.posted_by.avatar : p.about.avatar;
-            const name = showAuthor ? p.posted_by.name : `${p.about.first_name} ${p.about.last_name || ''}`;
+            const authorName = showAuthor ? p.posted_by.name : `${p.about.first_name} ${p.about.last_name || ''}`;
             const initials = showAuthor ? (p.posted_by.name?.[0] || '?') : (p.about.first_name[0] || '') + (p.about.last_name?.[0] || '');
-            const target = !contactUuid && hasAuthor ? ` <i class="bi bi-arrow-right-short"></i> ${p.about.first_name}` : '';
-            const headerLink = showAuthor && p.posted_by.contact_uuid ? p.posted_by.contact_uuid : p.about.uuid;
+            const authorUuid = showAuthor && p.posted_by.contact_uuid ? p.posted_by.contact_uuid : p.about.uuid;
+            const showTarget = !contactUuid && hasAuthor;
             return `
-            <a href="/contacts/${headerLink}" data-link class="post-about-header">
-              <div class="post-about-avatar">
+            <div class="post-about-header">
+              <a href="/contacts/${authorUuid}" data-link class="post-about-avatar">
                 ${avatar
                   ? `<img src="${authUrl(avatar)}" alt="">`
                   : `<span>${initials}</span>`
                 }
-              </div>
+              </a>
               <div>
-                <strong>${escapeHtml(name)}${target}</strong>
+                <strong>
+                  <a href="/contacts/${authorUuid}" data-link class="post-author-link">${escapeHtml(authorName)}</a>${showTarget
+                    ? ` <i class="bi bi-arrow-right-short"></i> <a href="/contacts/${p.about.uuid}" data-link class="post-author-link">${p.about.first_name}</a>`
+                    : ''}
+                </strong>
                 <span class="post-date">${formatDate(p.post_date)}</span>
               </div>
-            </a>`;
+            </div>`;
           })() : `
             <div class="post-header">
               <span class="post-date">${formatDate(p.post_date)}</span>

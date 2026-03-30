@@ -224,6 +224,13 @@ export async function renderTimeline(contactUuid = null) {
     }, { acceptDocuments: true });
   }
 
+  // Auto-expand compose textarea
+  const composeTextarea = document.getElementById('post-body');
+  composeTextarea.addEventListener('input', () => {
+    composeTextarea.style.height = 'auto';
+    composeTextarea.style.height = composeTextarea.scrollHeight + 'px';
+  });
+
   // @-mention in compose textarea
   attachMention(document.getElementById('post-body'), (contact) => {
     if (!taggedContacts.find((c) => c.uuid === contact.uuid)) {
@@ -321,6 +328,7 @@ export async function renderTimeline(contactUuid = null) {
       }
 
       document.getElementById('post-body').value = '';
+      document.getElementById('post-body').style.height = 'auto';
       pendingMedia = [];
       renderMediaPreview();
       if (!contactUuid) taggedContacts = [];
