@@ -307,7 +307,7 @@ export async function renderContactDetail(uuid) {
             <div class="sidebar-card glass-card">
               <h4>
                 <i class="bi bi-building"></i> ${t('companies.title')}
-                <button type="button" class="btn btn-link btn-sm float-end" id="btn-add-company" title="${t('common.add')}"><i class="bi bi-plus-lg"></i></button>
+                <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-company" title="${t('common.add')}"><i class="bi bi-plus-lg"></i></button>
               </h4>
               <div id="contact-companies-list" class="detail-relationships">
                 ${(contact.companies || []).map(c => renderCompanyRow(c)).join('')}
@@ -914,7 +914,7 @@ export async function renderContactDetail(uuid) {
       document.getElementById('company-role-input').value = '';
       document.getElementById('company-start-input').value = '';
       companySaveBtn.disabled = true;
-      renderContactDetail(contactUuid);
+      renderContactDetail(uuid);
     });
 
     // Remove company link
