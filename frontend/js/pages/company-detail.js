@@ -82,13 +82,13 @@ export async function renderCompanyDetail(uuid) {
 
             <div class="sidebar-card glass-card">
               <h4><i class="bi bi-building"></i> ${t('companies.info')}</h4>
-              ${company.org_number ? `<div class="settings-row"><span class="settings-label">${t('companies.orgNumber')}</span><span>${escapeHtml(company.org_number)}</span></div>` : ''}
-              ${company.industry ? `<div class="settings-row"><span class="settings-label">${t('companies.industry')}</span><span>${escapeHtml(company.industry)}</span></div>` : ''}
-              ${company.address ? `<div class="settings-row"><span class="settings-label">${t('addresses.address')}</span><span>${escapeHtml(company.address)}</span></div>` : ''}
-              ${company.website ? `<div class="settings-row"><span class="settings-label">${t('companies.website')}</span><a href="${company.website.startsWith('http') ? company.website : 'https://' + company.website}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></div>` : ''}
-              ${company.phone ? `<div class="settings-row"><span class="settings-label">${t('companies.phone')}</span><a href="tel:${company.phone}">${escapeHtml(company.phone)}</a></div>` : ''}
-              ${company.email ? `<div class="settings-row"><span class="settings-label">${t('companies.email')}</span><a href="mailto:${company.email}">${escapeHtml(company.email)}</a></div>` : ''}
-              ${company.notes ? `<p class="text-muted small mt-2">${escapeHtml(company.notes)}</p>` : ''}
+              ${company.org_number ? `<div class="info-field"><span class="info-label">${t('companies.orgNumber')}</span><span>${escapeHtml(company.org_number)}</span></div>` : ''}
+              ${company.industry ? `<div class="info-field"><span class="info-label">${t('companies.industry')}</span><span>${escapeHtml(company.industry)}</span></div>` : ''}
+              ${company.address ? `<div class="info-field"><span class="info-label">${t('addresses.address')}</span><span>${escapeHtml(company.address)}</span></div>` : ''}
+              ${company.website ? `<div class="info-field"><span class="info-label">${t('companies.website')}</span><a href="${company.website.startsWith('http') ? company.website : 'https://' + company.website}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></div>` : ''}
+              ${company.phone ? `<div class="info-field"><span class="info-label">${t('companies.phone')}</span><a href="tel:${company.phone}">${escapeHtml(company.phone)}</a></div>` : ''}
+              ${company.email ? `<div class="info-field"><span class="info-label">${t('companies.email')}</span><a href="mailto:${company.email}">${escapeHtml(company.email)}</a></div>` : ''}
+              ${company.notes ? `<div class="info-field"><span class="info-label">${t('contacts.notes')}</span><span class="text-muted">${escapeHtml(company.notes)}</span></div>` : ''}
             </div>
 
             ${company.latitude && company.longitude ? `

@@ -48,10 +48,19 @@ async function loadSuggestions() {
       uncle_aunt: t('relationships.reason.uncleAunt'),
     };
 
+    // Filter out dismissed suggestions
+    const dismissed = JSON.parse(localStorage.getItem('dismissedSuggestions') || '[]');
+    const filtered = suggestions.filter(s => {
+      const key = `${s.contact1.uuid}_${s.contact2.uuid}_${s.suggested_type}`;
+      return !dismissed.includes(key);
+    });
+
     el.innerHTML = `
-      <p class="text-muted small mb-2">${t('relationships.suggestionsCount', { count: suggestions.length })}</p>
-      ${suggestions.map((s, i) => `
-        <div class="settings-section glass-card mb-2 suggestion-card" data-index="${i}">
+      <p class="text-muted small mb-2">${t('relationships.suggestionsCount', { count: filtered.length })}</p>
+      ${filtered.map((s, i) => {
+        const key = `${s.contact1.uuid}_${s.contact2.uuid}_${s.suggested_type}`;
+        return `
+        <div class="settings-section glass-card mb-2 suggestion-card" data-index="${i}" data-key="${key}">
           <div class="d-flex align-items-center gap-3">
             <div class="flex-fill">
               <strong>${s.contact1.first_name} ${s.contact1.last_name || ''}</strong>
@@ -71,11 +80,10 @@ async function loadSuggestions() {
               </button>
             </div>
           </div>
-        </div>
-      `).join('')}
+        </div>`; }).join('')}
     `;
 
-    const suggestionsData = suggestions;
+    const suggestionsData = filtered;
 
     // Accept
     el.querySelectorAll('.btn-accept').forEach(btn => {
@@ -98,10 +106,16 @@ async function loadSuggestions() {
       });
     });
 
-    // Dismiss (just remove from UI)
+    // Dismiss (remove from UI + remember in localStorage)
     el.querySelectorAll('.btn-dismiss').forEach(btn => {
       btn.addEventListener('click', () => {
-        btn.closest('.suggestion-card').remove();
+        const card = btn.closest('.suggestion-card');
+        const key = card?.dataset.key;
+        if (key) {
+          const dismissed = JSON.parse(localStorage.getItem('dismissedSuggestions') || '[]');
+          if (!dismissed.includes(key)) { dismissed.push(key); localStorage.setItem('dismissedSuggestions', JSON.stringify(dismissed)); }
+        }
+        card.remove();
         const remaining = el.querySelectorAll('.suggestion-card').length;
         if (!remaining) loadSuggestions();
       });
