@@ -181,7 +181,9 @@ POST /api/auth/login (email + password)
 - System admins can manage tenants (reset passwords, delete) but NOT access their data
 - Tenant switching generates a new JWT with the target `tenantId`
 - `homeTenantId` in JWT preserves the user's original tenant
+- `linked_contact_id` is stored per-tenant in `tenant_members`, NOT on the user — prevents cross-tenant data leakage
 - All data queries filter by `req.tenantId` from JWT — switching tenant switches all data context
+- Auto-created contact when user is invited to a new tenant
 - Membership is managed by tenant admins (invite) or system seed (migration)
 
 ## Member Invitation

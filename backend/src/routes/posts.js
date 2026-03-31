@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
+import { getLinkedContactId } from '../utils/tenant.js';
 
 const router = Router();
 
@@ -157,9 +158,14 @@ router.get('/', async (req, res, next) => {
       }
     }
     if (authorUserIds.length) {
+      // Use tenant_members.linked_contact_id (per-tenant) instead of users.linked_contact_id
       const users = await db('users').whereIn('users.id', authorUserIds)
-        .leftJoin('contacts as uc', 'users.linked_contact_id', 'uc.id')
-        .select('users.id', 'users.first_name', 'users.linked_contact_id',
+        .leftJoin('tenant_members as tm', function () {
+          this.on('users.id', 'tm.user_id').andOn('tm.tenant_id', '=', db.raw('?', [req.tenantId]));
+        })
+        .leftJoin('contacts as uc', 'tm.linked_contact_id', 'uc.id')
+        .select('users.id', 'users.first_name',
+          'tm.linked_contact_id',
           'uc.uuid as contact_uuid', 'uc.first_name as contact_first', 'uc.last_name as contact_last');
       const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
       const userAvatars = new Map();
@@ -176,9 +182,8 @@ router.get('/', async (req, res, next) => {
     const commentCountByPost = {};
     for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
 
-    // Get user's linked contact for matching contact-based reactions
-    const currentUser = await db('users').where({ id: req.user.id }).select('linked_contact_id').first();
-    const userLinkedContactId = currentUser?.linked_contact_id;
+    // Get user's linked contact for matching contact-based reactions (per-tenant)
+    const userLinkedContactId = await getLinkedContactId(req.user.id, req.tenantId);
 
     // Resolve linked contacts for users who reacted (UUID + name + avatar)
     const userLinkedIds = reactions.map(r => r.user_linked_contact_id).filter(Boolean);
@@ -724,9 +729,8 @@ router.post('/:uuid/comments', async (req, res, next) => {
 
     if (!req.body.body?.trim()) throw new AppError('Comment body is required', 400);
 
-    // Resolve contact_id from user's linked contact
-    const user = await db('users').where({ id: req.user.id }).first();
-    const contactId = user?.linked_contact_id || null;
+    // Resolve contact_id from user's linked contact (per-tenant)
+    const contactId = await getLinkedContactId(req.user.id, req.tenantId);
 
     const [id] = await db('post_comments').insert({
       post_id: post.id,
@@ -810,8 +814,7 @@ router.post('/:uuid/reactions', async (req, res, next) => {
     if (!post) throw new AppError('Post not found', 404);
 
     const emoji = req.body.emoji || '❤️';
-    const user = await db('users').where({ id: req.user.id }).first();
-    const contactId = user?.linked_contact_id || null;
+    const contactId = await getLinkedContactId(req.user.id, req.tenantId);
 
     // Match by user_id OR by contact_id (for MG-imported reactions)
     const existing = await db('post_reactions')

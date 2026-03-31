@@ -369,6 +369,16 @@ router.delete('/:uuid', async (req, res, next) => {
       throw new AppError('Contact not found', 404);
     }
 
+    // Prevent deleting contacts linked to user accounts
+    const linkedMember = await db('tenant_members')
+      .where({ linked_contact_id: contact.id, tenant_id: req.tenantId })
+      .join('users', 'tenant_members.user_id', 'users.id')
+      .select('users.first_name')
+      .first();
+    if (linkedMember) {
+      throw new AppError(`Cannot delete — linked to user ${linkedMember.first_name}`, 400);
+    }
+
     await db('contacts').where({ id: contact.id }).update({ deleted_at: db.fn.now() });
 
     res.json({ message: 'Contact deleted' });

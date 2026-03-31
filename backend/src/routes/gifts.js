@@ -26,10 +26,10 @@ function applyVisibilityFilter(query, userId, userLinkedContactId) {
   });
 }
 
-// Helper: get current user's linked contact id
-async function getUserLinkedContactId(userId) {
-  const user = await db('users').where({ id: userId }).select('linked_contact_id').first();
-  return user?.linked_contact_id || null;
+import { getLinkedContactId } from '../utils/tenant.js';
+// Helper: get current user's linked contact id (per-tenant)
+async function getUserLinkedContactId(userId, tenantId) {
+  return getLinkedContactId(userId, tenantId);
 }
 
 // ════════════════════════════════════════════
@@ -140,7 +140,7 @@ router.get('/products/:uuid', async (req, res, next) => {
     if (!product) throw new AppError('Product not found', 404);
 
     // Gift orders using this product
-    const linkedContactId = await getUserLinkedContactId(req.user.id);
+    const linkedContactId = await getUserLinkedContactId(req.user.id, req.tenantId);
     let ordersQuery = db('gift_orders')
       .where({ 'gift_orders.product_id': product.id, 'gift_orders.tenant_id': req.tenantId })
       .leftJoin('gift_events', 'gift_orders.event_id', 'gift_events.id')
@@ -402,7 +402,7 @@ router.get('/events/:uuid', async (req, res, next) => {
     if (!event) throw new AppError('Event not found', 404);
 
     // Get gifts for this event with visibility filter
-    const linkedContactId = await getUserLinkedContactId(req.user.id);
+    const linkedContactId = await getUserLinkedContactId(req.user.id, req.tenantId);
     let giftsQuery = db('gift_orders')
       .where({ 'gift_orders.event_id': event.id, 'gift_orders.tenant_id': req.tenantId })
       .leftJoin('gift_products', 'gift_orders.product_id', 'gift_products.id')
@@ -547,7 +547,7 @@ router.get('/orders', async (req, res, next) => {
   try {
     const { event_uuid, contact_uuid, status, type, limit: rawLimit } = req.query;
     const limit = Math.min(parseInt(rawLimit) || 50, 200);
-    const linkedContactId = await getUserLinkedContactId(req.user.id);
+    const linkedContactId = await getUserLinkedContactId(req.user.id, req.tenantId);
 
     let query = db('gift_orders')
       .where({ 'gift_orders.tenant_id': req.tenantId })

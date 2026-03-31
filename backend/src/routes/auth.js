@@ -75,8 +75,15 @@ router.post('/register', async (req, res, next) => {
         is_system_admin: isFirstUser,
       });
 
-      // Add to tenant_members
-      await trx('tenant_members').insert({ user_id: userId, tenant_id: tenantId, role: 'admin' });
+      // Auto-create contact for the user
+      const contactUuid = uuidv4();
+      const [contactId] = await trx('contacts').insert({
+        uuid: contactUuid, tenant_id: tenantId, created_by: userId,
+        first_name: first_name.trim(), last_name: last_name.trim(),
+      });
+
+      // Add to tenant_members with linked contact
+      await trx('tenant_members').insert({ user_id: userId, tenant_id: tenantId, role: 'admin', linked_contact_id: contactId });
 
       return {
         id: userId, tenant_id: tenantId, uuid: userUuid, email, first_name, last_name,
@@ -665,28 +672,26 @@ router.post('/passkey/login', async (req, res, next) => {
 // GET /api/auth/me — get current user
 router.get('/me', authenticate, async (req, res, next) => {
   try {
-    const user = await db('users')
-      .join('tenants', 'users.tenant_id', 'tenants.id')
-      .where('users.id', req.user.id)
-      .select(
-        'users.uuid',
-        'users.email',
-        'users.first_name',
-        'users.last_name',
-        'users.role',
-        'users.is_system_admin',
-        'users.language',
-        'users.linked_contact_id',
-        'tenants.name as tenant_name',
-        'tenants.uuid as tenant_uuid'
-      )
+    // Get user + active tenant info
+    const user = await db('users').where('users.id', req.user.id)
+      .select('users.uuid', 'users.email', 'users.first_name', 'users.last_name',
+        'users.role', 'users.is_system_admin', 'users.language')
       .first();
 
-    // Fetch linked contact avatar + uuid if exists
+    const activeTenant = await db('tenants').where({ id: req.user.tenantId })
+      .select('name', 'uuid').first();
+
+    // Get linked contact from tenant_members (per-tenant)
+    const membership = await db('tenant_members')
+      .where({ user_id: req.user.id, tenant_id: req.user.tenantId })
+      .select('linked_contact_id').first();
+
     let avatar = null;
     let linked_contact_uuid = null;
-    if (user.linked_contact_id) {
-      const contact = await db('contacts').where({ id: user.linked_contact_id }).select('uuid', 'id').first();
+    if (membership?.linked_contact_id) {
+      const contact = await db('contacts')
+        .where({ id: membership.linked_contact_id, tenant_id: req.user.tenantId })
+        .select('uuid', 'id').first();
       if (contact) {
         linked_contact_uuid = contact.uuid;
         const photo = await db('contact_photos')
@@ -695,7 +700,14 @@ router.get('/me', authenticate, async (req, res, next) => {
       }
     }
 
-    res.json({ user: { ...user, linked_contact_id: undefined, avatar, linked_contact_uuid } });
+    res.json({
+      user: {
+        uuid: user.uuid, email: user.email, first_name: user.first_name, last_name: user.last_name,
+        role: user.role, is_system_admin: !!user.is_system_admin, language: user.language,
+        avatar, linked_contact_uuid,
+        tenant_name: activeTenant?.name, tenant_uuid: activeTenant?.uuid,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -923,6 +935,19 @@ router.get('/tenant/security', authenticate, async (req, res, next) => {
   }
 });
 
+// PUT /api/auth/tenant — update tenant name
+router.put('/tenant', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
+      throw new AppError('Admin access required', 403);
+    }
+    const { name } = req.body;
+    if (!name?.trim()) throw new AppError('Name is required', 400);
+    await db('tenants').where({ id: req.user.tenantId }).update({ name: name.trim() });
+    res.json({ message: 'Tenant updated' });
+  } catch (err) { next(err); }
+});
+
 // PUT /api/auth/tenant/security — update tenant security settings
 router.put('/tenant/security', authenticate, async (req, res, next) => {
   try {
@@ -954,14 +979,17 @@ router.get('/members', authenticate, async (req, res, next) => {
     }
 
     const members = await db('users')
-      .where({ 'users.tenant_id': req.user.tenantId })
-      .leftJoin('contacts', 'users.linked_contact_id', 'contacts.id')
+      .join('tenant_members', function () {
+        this.on('users.id', 'tenant_members.user_id')
+          .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.user.tenantId]));
+      })
+      .leftJoin('contacts', 'tenant_members.linked_contact_id', 'contacts.id')
       .select(
         'users.id as _user_id',
         'users.uuid', 'users.email', 'users.first_name', 'users.last_name',
         'users.role', 'users.is_active', 'users.is_system_admin', 'users.totp_enabled',
         'users.last_login_at', 'users.created_at',
-        'users.linked_contact_id',
+        'tenant_members.linked_contact_id',
         'contacts.uuid as linked_contact_uuid',
         'contacts.first_name as linked_contact_first_name',
         'contacts.last_name as linked_contact_last_name',
@@ -1080,11 +1108,21 @@ router.post('/invite', authenticate, async (req, res, next) => {
       must_change_password: loginEnabled && req.body.send_email ? true : false,
     });
 
-    // Add to tenant_members
+    // Add to tenant_members + auto-create contact
+    const { v4: memberUuid } = await import('uuid');
+    const contactUuid = memberUuid();
+    const [contactId] = await db('contacts').insert({
+      uuid: contactUuid,
+      tenant_id: req.user.tenantId,
+      created_by: req.user.id,
+      first_name: req.body.first_name.trim(),
+      last_name: req.body.last_name?.trim() || null,
+    });
     await db('tenant_members').insert({
       user_id: userId,
       tenant_id: req.user.tenantId,
       role: req.body.role === 'admin' ? 'admin' : 'member',
+      linked_contact_id: contactId,
     }).catch(() => {}); // ignore duplicate
 
     const user = await db('users').where({ id: userId }).first();
@@ -1185,17 +1223,19 @@ router.put('/members/:uuid', authenticate, async (req, res, next) => {
     if (req.body.role !== undefined) updates.role = req.body.role === 'admin' ? 'admin' : 'member';
     if (req.body.is_active !== undefined) updates.is_active = !!req.body.is_active;
 
-    // Link to contact
+    // Link to contact — stored in tenant_members (per-tenant)
     if (req.body.linked_contact_uuid !== undefined) {
-      if (req.body.linked_contact_uuid === null) {
-        updates.linked_contact_id = null;
-      } else {
+      let contactId = null;
+      if (req.body.linked_contact_uuid) {
         const contact = await db('contacts')
           .where({ uuid: req.body.linked_contact_uuid, tenant_id: req.user.tenantId })
           .whereNull('deleted_at')
           .first();
-        if (contact) updates.linked_contact_id = contact.id;
+        if (contact) contactId = contact.id;
       }
+      await db('tenant_members')
+        .where({ user_id: member.id, tenant_id: req.user.tenantId })
+        .update({ linked_contact_id: contactId });
     }
 
     // Reset 2FA — requires admin's own password for confirmation

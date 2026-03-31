@@ -312,7 +312,6 @@ async function loadTenants() {
       <div class="tenant-row">
         <div class="tenant-info">
           <strong>${escapeHtml(tn.name)}</strong>
-          ${state.user.tenant_uuid === tn.uuid ? `<span class="badge bg-success ms-2">${t('admin.active')}</span>` : ''}
           <div class="text-muted small">
             ${tn.user_count} member${tn.user_count !== 1 ? 's' : ''} &middot;
             ${tn.contact_count} contact${tn.contact_count !== 1 ? 's' : ''}

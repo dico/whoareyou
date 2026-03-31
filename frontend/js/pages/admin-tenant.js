@@ -17,7 +17,10 @@ export async function renderTenantAdmin() {
     <div class="page-container">
       <div class="page-header">
         <button class="btn btn-link btn-back" id="btn-back"><i class="bi bi-arrow-left"></i></button>
-        <h2>${state.user?.tenant_name || t('settings.familyHousehold')}</h2>
+        <h2>
+          <span id="tenant-name-display">${state.user?.tenant_name || t('settings.familyHousehold')}</span>
+          <button class="btn btn-link btn-sm" id="btn-edit-tenant-name" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
+        </h2>
         <button class="btn btn-primary btn-sm d-none" id="btn-invite">
           <i class="bi bi-person-plus-fill"></i> ${t('admin.addMember')}
         </button>
@@ -145,6 +148,31 @@ export async function renderTenantAdmin() {
   `;
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/settings'));
+
+  // Edit tenant name
+  document.getElementById('btn-edit-tenant-name').addEventListener('click', async () => {
+    const nameEl = document.getElementById('tenant-name-display');
+    const current = nameEl.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control form-control-sm d-inline-block';
+    input.style.width = 'auto';
+    input.value = current;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const save = async () => {
+      const newName = input.value.trim();
+      if (newName && newName !== current) {
+        await api.put('/auth/tenant', { name: newName });
+        state.user.tenant_name = newName;
+      }
+      renderTenantAdmin();
+    };
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') renderTenantAdmin(); });
+  });
 
   // Tab switching
   const inviteBtn = document.getElementById('btn-invite');

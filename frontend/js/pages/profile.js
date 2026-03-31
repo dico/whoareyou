@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { state } from '../app.js';
+import { state, navigate } from '../app.js';
 import { t, getLocale, setLocale } from '../utils/i18n.js';
 import { renderNavbar } from '../components/navbar.js';
 import { confirmDialog } from '../components/dialogs.js';
@@ -309,13 +309,13 @@ export async function renderProfile() {
         return;
       }
       el.innerHTML = tenants.map(tn => `
-        <div class="d-flex align-items-center gap-2 py-2 ${tn.uuid === current_uuid ? 'fw-bold' : ''}">
+        <div class="d-flex align-items-center gap-2 py-2 px-2 rounded ${tn.uuid === current_uuid ? 'tenant-active' : ''}">
           <i class="bi bi-house-door${tn.uuid === current_uuid ? '-fill text-primary' : ''}"></i>
           <span class="flex-fill">${tn.name}</span>
           <span class="badge bg-light text-muted badge-sm">${tn.role}</span>
           ${tn.uuid !== current_uuid
             ? `<button class="btn btn-outline-primary btn-sm btn-switch-tenant" data-uuid="${tn.uuid}" data-name="${tn.name}">${t('settings.switchTo')}</button>`
-            : `<span class="badge bg-primary badge-sm">${t('settings.current')}</span>`}
+            : ''}
         </div>
       `).join('');
 
@@ -324,9 +324,7 @@ export async function renderProfile() {
           try {
             const { token } = await api.post('/auth/switch-tenant', { tenant_uuid: btn.dataset.uuid });
             localStorage.setItem('token', token);
-            state.token = token;
-            state.user = null;
-            navigate('/');
+            window.location.href = '/';
           } catch (err) {
             confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
           }

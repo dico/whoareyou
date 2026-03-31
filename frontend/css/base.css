@@ -235,6 +235,12 @@ a:hover {
   object-fit: contain;
 }
 
+/* Active tenant row */
+.tenant-active {
+  border: 2px solid var(--color-primary);
+  background: rgba(0, 122, 255, 0.04);
+}
+
 .company-logo-wrap.drop-active {
   outline: 2px dashed var(--color-primary);
   outline-offset: 4px;
