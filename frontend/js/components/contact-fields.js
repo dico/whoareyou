@@ -54,6 +54,42 @@ export async function renderContactFields(containerId, contactUuid, fields) {
     }
   });
 
+  // Auto-detect field type from value
+  el.querySelector('#field-add-form .field-value-input')?.addEventListener('input', (e) => {
+    const val = e.target.value.trim().toLowerCase();
+    const select = el.querySelector('#field-add-form .field-type-select');
+    const typeMap = {
+      'facebook.com': 'facebook', 'fb.com': 'facebook',
+      'instagram.com': 'instagram',
+      'linkedin.com': 'linkedin',
+      'x.com': 'twitter', 'twitter.com': 'twitter',
+      'snapchat.com': 'snapchat',
+      'youtube.com': 'youtube', 'youtu.be': 'youtube',
+      'tiktok.com': 'tiktok',
+    };
+    for (const [domain, type] of Object.entries(typeMap)) {
+      if (val.includes(domain)) {
+        const opt = [...select.options].find(o => o.text.toLowerCase() === type || o.text === capitalize(type));
+        if (opt) { select.value = opt.value; break; }
+      }
+    }
+    // Detect email
+    if (val.includes('@') && val.includes('.') && !val.includes('://')) {
+      const opt = [...select.options].find(o => o.text.toLowerCase().includes('e-post') || o.text.toLowerCase() === 'email');
+      if (opt) select.value = opt.value;
+    }
+    // Detect phone (starts with + or digits, mostly numbers)
+    if (/^[+\d][\d\s\-().]{6,}$/.test(val)) {
+      const opt = [...select.options].find(o => o.text.toLowerCase().includes('telefon') || o.text.toLowerCase() === 'phone');
+      if (opt) select.value = opt.value;
+    }
+    // Detect website
+    if ((val.startsWith('http') || val.startsWith('www.')) && !Object.keys(typeMap).some(d => val.includes(d))) {
+      const opt = [...select.options].find(o => o.text.toLowerCase().includes('nettside') || o.text.toLowerCase() === 'website');
+      if (opt) select.value = opt.value;
+    }
+  });
+
   // Add field form submit
   el.querySelector('#field-add-form form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -133,7 +169,8 @@ function renderGroupedFields(fields) {
 function renderFieldRow(f) {
   const isSocial = SOCIAL_TYPES.includes(f.type);
   const isWebsite = f.type === 'website';
-  const displayValue = isSocial ? (f.label || formatSocialValue(f.value, f.type)) : f.value;
+  const typeNames = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', twitter: 'X', snapchat: 'Snapchat', youtube: 'YouTube', tiktok: 'TikTok' };
+  const displayValue = isSocial ? (f.label || typeNames[f.type] || f.type) : f.value;
   const href = buildFieldHref(f);
 
   // For websites: show label if available, otherwise show domain
@@ -150,7 +187,7 @@ function renderFieldRow(f) {
       </a>
       ${!isSocial && !isWebsite ? `
       <div class="field-content">
-        <a href="${href}" target="_blank" rel="noopener">${escapeHtml(f.value)}</a>
+        <a href="${href}" target="_blank" rel="noopener">${escapeHtml(f.type === 'phone' ? formatPhone(f.value) : f.value)}</a>
         ${f.label ? `<span class="text-muted small">${escapeHtml(f.label)}</span>` : ''}
       </div>
       ` : ''}
@@ -269,6 +306,26 @@ function formatSocialValue(value, type) {
     return typeNames[type] || type;
   }
   return clean;
+}
+
+function formatPhone(value) {
+  // Normalize: remove all non-digit except leading +
+  const hasPlus = value.startsWith('+');
+  const digits = value.replace(/\D/g, '');
+  // Norwegian 8-digit: XX XX XX XX
+  if (digits.length === 8 && !hasPlus) {
+    return digits.replace(/(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4');
+  }
+  // +47 XX XX XX XX
+  if (digits.length === 10 && digits.startsWith('47')) {
+    return '+47 ' + digits.slice(2).replace(/(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4');
+  }
+  if (digits.length === 11 && digits.startsWith('47')) {
+    return '+47 ' + digits.slice(2).replace(/(\d{3})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4');
+  }
+  // International: keep + prefix, group by 3s
+  if (hasPlus) return '+' + digits.replace(/(\d{2})(\d{3})(\d{2})(\d{3})/, '$1 $2 $3 $4');
+  return value; // fallback: return as-is
 }
 
 function buildFieldHref(f) {
