@@ -123,7 +123,13 @@ When a URL is typed/pasted in post compose or edit, a link preview card is fetch
 - Preview data saved to `post_link_previews` table (persists if URL goes offline)
 - Auto-fetched when editing old posts that have URLs but no saved preview
 
-### 23. Portal post creation
+### 23. Contact fields — auto-detect
+When adding a contact field, the type select is hidden. A small "auto" badge shows instead. Pasting a URL auto-detects the platform (Facebook, Instagram, LinkedIn, YouTube, etc.), email addresses and phone numbers are also detected. Click the badge to manually override. Social media fields display the type name (e.g. "Facebook") rather than extracted usernames.
+
+### 24. Duplicate detection and merge
+`/admin/duplicates` finds potential duplicates by scoring name similarity, birthday, email, and phone matches. Merge transfers all data (posts, relationships, photos, fields, addresses, companies) to the kept contact and soft-deletes the other. Routes under `/contacts/tools/*` to avoid `/:uuid` collision.
+
+### 25. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 
 ## i18n

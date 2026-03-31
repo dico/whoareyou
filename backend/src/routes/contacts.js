@@ -652,4 +652,180 @@ router.delete('/:uuid/fields/:fieldId', async (req, res, next) => {
   }
 });
 
+// GET /api/contacts/tools/duplicates — find potential duplicate contacts
+router.get('/tools/duplicates', async (req, res, next) => {
+  try {
+    const contacts = await db('contacts')
+      .where({ tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .select('id', 'uuid', 'first_name', 'last_name', 'birth_year', 'birth_month', 'birth_day',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`));
+
+    // Get contact fields (email, phone) for matching
+    const fields = await db('contact_fields')
+      .join('contact_field_types', 'contact_fields.field_type_id', 'contact_field_types.id')
+      .whereIn('contact_fields.contact_id', contacts.map(c => c.id))
+      .whereIn('contact_field_types.name', ['email', 'phone'])
+      .select('contact_fields.contact_id', 'contact_field_types.name as type', 'contact_fields.value');
+
+    const fieldsByContact = new Map();
+    for (const f of fields) {
+      if (!fieldsByContact.has(f.contact_id)) fieldsByContact.set(f.contact_id, []);
+      fieldsByContact.get(f.contact_id).push(f);
+    }
+
+    // Compare all pairs
+    const duplicates = [];
+    const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const normalizePhone = (s) => (s || '').replace(/[\s\-().+]/g, '');
+
+    for (let i = 0; i < contacts.length; i++) {
+      for (let j = i + 1; j < contacts.length; j++) {
+        const a = contacts[i], b = contacts[j];
+        let score = 0;
+        const reasons = [];
+
+        const aFirst = normalize(a.first_name), bFirst = normalize(b.first_name);
+        const aLast = normalize(a.last_name), bLast = normalize(b.last_name);
+
+        // Exact name match
+        if (aFirst === bFirst && aLast === bLast && aFirst) {
+          score += 80;
+          reasons.push('exact_name');
+        }
+        // First name match + similar last name
+        else if (aFirst === bFirst && aFirst.length > 1) {
+          score += 30;
+          reasons.push('first_name');
+          // Last name similarity
+          if (aLast && bLast && (aLast.includes(bLast) || bLast.includes(aLast))) {
+            score += 30;
+            reasons.push('similar_last_name');
+          } else if (aLast === bLast) {
+            score += 40;
+            reasons.push('last_name');
+          }
+        }
+        // Last name match only
+        else if (aLast === bLast && aLast && aLast.length > 2) {
+          // Check if first names are similar (one contains the other, e.g. "Jon" vs "Jonathan")
+          if (aFirst && bFirst && (aFirst.includes(bFirst) || bFirst.includes(aFirst))) {
+            score += 50;
+            reasons.push('similar_first_name');
+          }
+        }
+
+        if (score < 30) continue;
+
+        // Birthday match bonus
+        if (a.birth_year && a.birth_year === b.birth_year) {
+          score += 10;
+          reasons.push('birth_year');
+        }
+        if (a.birth_month && a.birth_month === b.birth_month && a.birth_day && a.birth_day === b.birth_day) {
+          score += 15;
+          reasons.push('birthday');
+        }
+
+        // Email/phone match bonus
+        const aFields = fieldsByContact.get(a.id) || [];
+        const bFields = fieldsByContact.get(b.id) || [];
+        for (const af of aFields) {
+          for (const bf of bFields) {
+            if (af.type === 'email' && bf.type === 'email' && normalize(af.value) === normalize(bf.value)) {
+              score += 30;
+              reasons.push('email');
+            }
+            if (af.type === 'phone' && bf.type === 'phone' && normalizePhone(af.value) === normalizePhone(bf.value)) {
+              score += 25;
+              reasons.push('phone');
+            }
+          }
+        }
+
+        if (score >= 50) {
+          duplicates.push({
+            contact1: { uuid: a.uuid, first_name: a.first_name, last_name: a.last_name, avatar: a.avatar, birth_year: a.birth_year },
+            contact2: { uuid: b.uuid, first_name: b.first_name, last_name: b.last_name, avatar: b.avatar, birth_year: b.birth_year },
+            score: Math.min(score, 100),
+            reasons,
+          });
+        }
+      }
+    }
+
+    // Sort by score descending
+    duplicates.sort((a, b) => b.score - a.score);
+    res.json({ duplicates });
+  } catch (err) { next(err); }
+});
+
+// POST /api/contacts/tools/merge — merge two contacts into one
+router.post('/tools/merge', async (req, res, next) => {
+  try {
+    const { keep_uuid, merge_uuid } = req.body;
+    if (!keep_uuid || !merge_uuid) throw new AppError('keep_uuid and merge_uuid required', 400);
+
+    const keep = await db('contacts').where({ uuid: keep_uuid, tenant_id: req.tenantId }).whereNull('deleted_at').first();
+    const merge = await db('contacts').where({ uuid: merge_uuid, tenant_id: req.tenantId }).whereNull('deleted_at').first();
+    if (!keep || !merge) throw new AppError('Contact not found', 404);
+
+    await db.transaction(async (trx) => {
+      // Move posts from merge → keep
+      await trx('posts').where({ contact_id: merge.id, tenant_id: req.tenantId }).update({ contact_id: keep.id });
+      await trx('post_contacts').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+
+      // Move relationships (avoid duplicates)
+      const mergeRels = await trx('relationships').where({ contact_id: merge.id, tenant_id: req.tenantId });
+      for (const r of mergeRels) {
+        const exists = await trx('relationships').where({ contact_id: keep.id, related_contact_id: r.related_contact_id, relationship_type_id: r.relationship_type_id }).first();
+        if (!exists) await trx('relationships').where({ id: r.id }).update({ contact_id: keep.id }).catch(() => {});
+        else await trx('relationships').where({ id: r.id }).del();
+      }
+      const mergeInvRels = await trx('relationships').where({ related_contact_id: merge.id, tenant_id: req.tenantId });
+      for (const r of mergeInvRels) {
+        const exists = await trx('relationships').where({ related_contact_id: keep.id, contact_id: r.contact_id, relationship_type_id: r.relationship_type_id }).first();
+        if (!exists) await trx('relationships').where({ id: r.id }).update({ related_contact_id: keep.id }).catch(() => {});
+        else await trx('relationships').where({ id: r.id }).del();
+      }
+
+      // Move fields (avoid duplicates by type+value)
+      const mergeFields = await trx('contact_fields').where({ contact_id: merge.id });
+      const keepFields = await trx('contact_fields').where({ contact_id: keep.id });
+      for (const f of mergeFields) {
+        const exists = keepFields.find(kf => kf.field_type_id === f.field_type_id && kf.value === f.value);
+        if (!exists) await trx('contact_fields').where({ id: f.id }).update({ contact_id: keep.id }).catch(() => {});
+        else await trx('contact_fields').where({ id: f.id }).del();
+      }
+
+      // Move addresses, photos, companies, labels, life events, reactions, comments
+      await trx('contact_addresses').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('contact_photos').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('contact_companies').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('contact_labels').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('life_events').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('life_event_contacts').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('post_reactions').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+      await trx('post_comments').where({ contact_id: merge.id }).update({ contact_id: keep.id }).catch(() => {});
+
+      // Fill in missing fields on keep from merge
+      const updates = {};
+      if (!keep.last_name && merge.last_name) updates.last_name = merge.last_name;
+      if (!keep.nickname && merge.nickname) updates.nickname = merge.nickname;
+      if (!keep.birth_year && merge.birth_year) updates.birth_year = merge.birth_year;
+      if (!keep.birth_month && merge.birth_month) updates.birth_month = merge.birth_month;
+      if (!keep.birth_day && merge.birth_day) updates.birth_day = merge.birth_day;
+      if (!keep.how_we_met && merge.how_we_met) updates.how_we_met = merge.how_we_met;
+      if (!keep.notes && merge.notes) updates.notes = merge.notes;
+      if (!keep.deceased_date && merge.deceased_date) updates.deceased_date = merge.deceased_date;
+      if (Object.keys(updates).length) await trx('contacts').where({ id: keep.id }).update(updates);
+
+      // Soft-delete the merged contact
+      await trx('contacts').where({ id: merge.id }).update({ deleted_at: trx.fn.now() });
+    });
+
+    res.json({ message: 'Contacts merged', kept: keep_uuid });
+  } catch (err) { next(err); }
+});
+
 export default router;

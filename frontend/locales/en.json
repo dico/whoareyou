@@ -139,6 +139,7 @@
     "cancel": "Cancel",
     "noFields": "No contact info yet",
     "valuePlaceholder": "Value",
+    "autoPlaceholder": "Paste URL, phone, email...",
     "labelPlaceholder": "Label (optional)",
     "deleteConfirm": "Delete this contact info?",
     "deleteField": "Delete field",
@@ -693,6 +694,30 @@
     "cleanupBtn": "Delete unmapped data",
     "cleanupConfirm": "This will delete all loves and comments without a mapped contact. Are you sure?",
     "cleanupDone": "Deleted {reactions} loves and {comments} comments without contact mapping."
+  },
+  "duplicates": {
+    "title": "Duplicate contacts",
+    "desc": "Find contacts that may be duplicates and merge them.",
+    "cardDesc": "Find and merge duplicate contacts.",
+    "none": "No potential duplicates found.",
+    "found": "{count} potential duplicates found",
+    "keep": "Keep",
+    "keepFirst": "Keep first, merge second into it",
+    "keepSecond": "Keep second, merge first into it",
+    "merge": "Merge",
+    "mergeConfirm": "Merge these contacts? Posts, relationships, photos, and all data from the removed contact will be moved to the kept one.",
+    "notDuplicate": "Not a duplicate",
+    "reason": {
+      "exact_name": "exact name",
+      "first_name": "same first name",
+      "last_name": "same last name",
+      "similar_last_name": "similar last name",
+      "similar_first_name": "similar first name",
+      "birth_year": "same birth year",
+      "birthday": "same birthday",
+      "email": "same email",
+      "phone": "same phone"
+    }
   },
   "portal": {
     "title": "Family portal",

@@ -139,6 +139,7 @@
     "cancel": "Avbryt",
     "noFields": "Ingen kontaktinfo ennå",
     "valuePlaceholder": "Verdi",
+    "autoPlaceholder": "Lim inn URL, telefon, e-post...",
     "labelPlaceholder": "Etikett (valgfri)",
     "deleteConfirm": "Slette denne kontaktinfoen?",
     "deleteField": "Slett felt",
@@ -693,6 +694,30 @@
     "cleanupBtn": "Slett ukoblede data",
     "cleanupConfirm": "Dette sletter alle likes og kommentarer uten kontaktkobling. Er du sikker?",
     "cleanupDone": "Slettet {reactions} likes og {comments} kommentarer uten kontaktkobling."
+  },
+  "duplicates": {
+    "title": "Duplikate kontakter",
+    "desc": "Finn kontakter som kan være duplikater og slå de sammen.",
+    "cardDesc": "Finn og slå sammen duplikate kontakter.",
+    "none": "Ingen mulige duplikater funnet.",
+    "found": "{count} mulige duplikater funnet",
+    "keep": "Behold",
+    "keepFirst": "Behold første, slå andre inn i den",
+    "keepSecond": "Behold andre, slå første inn i den",
+    "merge": "Slå sammen",
+    "mergeConfirm": "Slå sammen disse kontaktene? Innlegg, relasjoner, bilder og all data fra den fjernede kontakten flyttes til den beholdte.",
+    "notDuplicate": "Ikke duplikat",
+    "reason": {
+      "exact_name": "likt navn",
+      "first_name": "likt fornavn",
+      "last_name": "likt etternavn",
+      "similar_last_name": "lignende etternavn",
+      "similar_first_name": "lignende fornavn",
+      "birth_year": "likt fødselsår",
+      "birthday": "lik bursdag",
+      "email": "lik e-post",
+      "phone": "likt telefonnr."
+    }
   },
   "portal": {
     "title": "Familieportal",

@@ -55,9 +55,18 @@ export async function renderContactFields(containerId, contactUuid, fields) {
   });
 
   // Auto-detect field type from value
-  el.querySelector('#field-add-form .field-value-input')?.addEventListener('input', (e) => {
+  const addForm = el.querySelector('#field-add-form');
+  const autoBadge = addForm?.querySelector('.field-auto-badge');
+  const addSelect = addForm?.querySelector('.field-type-select');
+
+  // Click badge to toggle manual select
+  autoBadge?.addEventListener('click', () => {
+    addSelect.style.display = addSelect.style.display === 'none' ? '' : 'none';
+    autoBadge.style.display = addSelect.style.display === 'none' ? '' : 'none';
+  });
+
+  addForm?.querySelector('.field-value-input')?.addEventListener('input', (e) => {
     const val = e.target.value.trim().toLowerCase();
-    const select = el.querySelector('#field-add-form .field-type-select');
     const typeMap = {
       'facebook.com': 'facebook', 'fb.com': 'facebook',
       'instagram.com': 'instagram',
@@ -67,26 +76,25 @@ export async function renderContactFields(containerId, contactUuid, fields) {
       'youtube.com': 'youtube', 'youtu.be': 'youtube',
       'tiktok.com': 'tiktok',
     };
+    let detected = null;
     for (const [domain, type] of Object.entries(typeMap)) {
-      if (val.includes(domain)) {
-        const opt = [...select.options].find(o => o.text.toLowerCase() === type || o.text === capitalize(type));
-        if (opt) { select.value = opt.value; break; }
-      }
+      if (val.includes(domain)) { detected = type; break; }
     }
-    // Detect email
-    if (val.includes('@') && val.includes('.') && !val.includes('://')) {
-      const opt = [...select.options].find(o => o.text.toLowerCase().includes('e-post') || o.text.toLowerCase() === 'email');
-      if (opt) select.value = opt.value;
-    }
-    // Detect phone (starts with + or digits, mostly numbers)
-    if (/^[+\d][\d\s\-().]{6,}$/.test(val)) {
-      const opt = [...select.options].find(o => o.text.toLowerCase().includes('telefon') || o.text.toLowerCase() === 'phone');
-      if (opt) select.value = opt.value;
-    }
-    // Detect website
-    if ((val.startsWith('http') || val.startsWith('www.')) && !Object.keys(typeMap).some(d => val.includes(d))) {
-      const opt = [...select.options].find(o => o.text.toLowerCase().includes('nettside') || o.text.toLowerCase() === 'website');
-      if (opt) select.value = opt.value;
+    if (!detected && val.includes('@') && val.includes('.') && !val.includes('://')) detected = 'email';
+    if (!detected && /^[+\d][\d\s\-().]{6,}$/.test(val)) detected = 'phone';
+    if (!detected && (val.startsWith('http') || val.startsWith('www.'))) detected = 'website';
+
+    if (detected) {
+      const opt = [...addSelect.options].find(o => {
+        const n = o.text.toLowerCase();
+        return n === detected || n.includes(detected) || (detected === 'email' && (n.includes('e-post') || n === 'email'))
+          || (detected === 'phone' && (n.includes('telefon') || n === 'phone'))
+          || (detected === 'website' && (n.includes('nettside') || n === 'website'));
+      });
+      if (opt) addSelect.value = opt.value;
+      if (autoBadge) autoBadge.innerHTML = `<i class="bi bi-check-circle me-1"></i>${capitalize(detected)}`;
+    } else if (autoBadge) {
+      autoBadge.innerHTML = '<i class="bi bi-magic me-1"></i>auto';
     }
   });
 
@@ -202,10 +210,11 @@ function renderFieldRow(f) {
 function renderFieldForm(types, field = null) {
   return `
     <form class="field-inline-form">
-      <select class="form-select form-select-sm field-type-select">
-        ${types.map(t => `<option value="${t.id}" ${field && field.type === t.name ? 'selected' : ''}>${capitalize(t.name)}</option>`).join('')}
+      <select class="form-select form-select-sm field-type-select" ${!field ? 'style="display:none"' : ''}>
+        ${types.map(tp => `<option value="${tp.id}" ${field && field.type === tp.name ? 'selected' : ''}>${capitalize(tp.name)}</option>`).join('')}
       </select>
-      <input type="text" class="form-control form-control-sm field-value-input" placeholder="${t('fields.valuePlaceholder')}" value="${field ? escapeAttr(field.value) : ''}" required>
+      ${!field ? '<span class="field-auto-badge text-muted small" style="white-space:nowrap"><i class="bi bi-magic me-1"></i>auto</span>' : ''}
+      <input type="text" class="form-control form-control-sm field-value-input" placeholder="${!field ? t('fields.autoPlaceholder') : t('fields.valuePlaceholder')}" value="${field ? escapeAttr(field.value) : ''}" required>
       <input type="text" class="form-control form-control-sm field-label-input" placeholder="${t('fields.labelPlaceholder')}" value="${field ? escapeAttr(field.label || '') : ''}">
       <div class="field-form-actions">
         <button type="submit" class="btn btn-primary btn-sm">${field ? 'Save' : 'Add'}</button>

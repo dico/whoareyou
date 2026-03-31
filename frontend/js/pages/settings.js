@@ -28,6 +28,11 @@ export async function renderSettings() {
           <div class="settings-card-label">${t('labels.manage')}</div>
           <div class="settings-card-desc">${t('settings.labelsCardDesc')}</div>
         </a>
+        <a href="/admin/duplicates" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(255,149,0,0.1);color:#FF9500"><i class="bi bi-people"></i></div>
+          <div class="settings-card-label">${t('duplicates.title')}</div>
+          <div class="settings-card-desc">${t('duplicates.cardDesc')}</div>
+        </a>
         <a href="/admin/addresses" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(52,199,89,0.1);color:#34C759"><i class="bi bi-geo-alt"></i></div>
           <div class="settings-card-label">${t('addresses.mergeDuplicates')}</div>
