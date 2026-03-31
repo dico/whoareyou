@@ -525,7 +525,7 @@ export async function renderContactDetail(uuid) {
     document.getElementById('btn-create-label')?.addEventListener('click', async () => {
       const name = document.getElementById('new-label-name').value.trim();
       if (!name) return;
-      const color = document.getElementById('new-label-color').value;
+      const color = document.getElementById('new-label-color')?.value || '#007aff';
       try {
         const { label } = await api.post('/labels', { name, color });
         await api.post(`/labels/${label.id}/contacts`, { contact_uuid: uuid });
