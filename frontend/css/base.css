@@ -565,6 +565,28 @@ a:hover {
   display: none;
 }
 
+/* Reusable contact search dropdown */
+.contact-search-dropdown {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.contact-search-dropdown .contact-row:hover,
+.contact-search-dropdown .contact-row.active {
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.contact-search-empty {
+  padding: var(--space-sm);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
 .label-search-result.active {
   background: rgba(0, 122, 255, 0.08);
 }

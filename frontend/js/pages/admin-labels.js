@@ -3,6 +3,7 @@ import { state, navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
 
 let allLabels = [];
@@ -222,63 +223,26 @@ async function loadPanel(side) {
     loadPanel(side);
   });
 
-  // Add contact to label — floating dropdown search
+  // Add contact to label
   document.getElementById(`${side}-add-contact`).addEventListener('click', () => {
-    // Remove existing search if open
     document.getElementById(`${side}-search-area`)?.remove();
-    const searchHtml = `<div class="label-search-floating" id="${side}-search-area">
-      <input type="text" class="form-control form-control-sm" id="${side}-contact-search" placeholder="${t('common.search')}">
-      <div id="${side}-search-results" class="label-search-dropdown"></div>
-    </div>`;
-    listEl.insertAdjacentHTML('beforebegin', searchHtml);
-    const searchInput = document.getElementById(`${side}-contact-search`);
-    let searchTimeout;
-    searchInput.focus();
-    searchInput.addEventListener('input', () => {
-      clearTimeout(searchTimeout);
-      const q = searchInput.value.trim();
-      const resultsEl = document.getElementById(`${side}-search-results`);
-      if (q.length < 2) { resultsEl.innerHTML = ''; resultsEl.style.display = 'none'; return; }
-      searchTimeout = setTimeout(async () => {
-        const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=8`);
-        resultsEl.innerHTML = data.contacts.map(c => `
-          <div class="contact-row label-search-result" data-uuid="${c.uuid}" style="cursor:pointer">
-            <div class="contact-row-avatar">
-              ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>`}
-            </div>
-            <div class="contact-row-info"><div class="contact-row-name">${c.first_name} ${c.last_name || ''}</div></div>
-          </div>
-        `).join('');
-        resultsEl.style.display = data.contacts.length ? 'block' : 'none';
-        resultsEl.querySelectorAll('.label-search-result').forEach(row => {
-          row.addEventListener('click', async () => {
-            await api.post(`/labels/${labelId}/contacts`, { contact_uuid: row.dataset.uuid });
-            document.getElementById(`${side}-search-area`)?.remove();
-            loadPanel(side);
-          });
-        });
-      }, 200);
+    const wrap = document.createElement('div');
+    wrap.id = `${side}-search-area`;
+    wrap.style.position = 'relative';
+    wrap.style.paddingBottom = 'var(--space-xs)';
+    wrap.innerHTML = `<input type="text" class="form-control form-control-sm" placeholder="${t('common.search')}">`;
+    listEl.parentNode.insertBefore(wrap, listEl);
+    const input = wrap.querySelector('input');
+    input.focus();
+    const search = attachContactSearch(input, {
+      onSelect: async (contact) => {
+        await api.post(`/labels/${labelId}/contacts`, { contact_uuid: contact.uuid });
+        search.destroy();
+        wrap.remove();
+        loadPanel(side);
+      },
     });
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { document.getElementById(`${side}-search-area`)?.remove(); return; }
-      const resultsEl = document.getElementById(`${side}-search-results`);
-      const items = resultsEl?.querySelectorAll('.label-search-result') || [];
-      const active = resultsEl?.querySelector('.label-search-result.active');
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const next = active ? active.nextElementSibling : items[0];
-        if (active) active.classList.remove('active');
-        if (next) { next.classList.add('active'); next.scrollIntoView({ block: 'nearest' }); }
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const prev = active?.previousElementSibling;
-        if (active) active.classList.remove('active');
-        if (prev) { prev.classList.add('active'); prev.scrollIntoView({ block: 'nearest' }); }
-      } else if (e.key === 'Enter' && active) {
-        e.preventDefault();
-        active.click();
-      }
-    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { search.destroy(); wrap.remove(); } });
   });
 
   try {

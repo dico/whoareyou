@@ -5,7 +5,7 @@
 ## High Priority
 
 ### Standardize contact search component
-**Status:** Not started
+**Status:** In progress — component created (`components/contact-search.js`), admin-labels refactored
 **Why:** 12 separate inline contact search implementations across 9 files, each with slightly different behavior (debounce, result count, keyboard nav, dropdown style). This leads to inconsistent UX and duplicated code.
 
 **Current implementations:**
@@ -47,7 +47,21 @@ attachContactSearch(inputElement, {
 - Auto-close on blur (with delay for click)
 - "No results" state
 
-**Files to refactor:** All 9 files listed above. Each implementation replaced with 1-3 lines.
+**Refactored:**
+- [x] `admin-labels.js` — add contact to label
+- [x] `admin-tenant.js:834` — portal guest linked contact
+- [x] `admin-tenant.js:1164` — portal contact search (setupPortalContactSearch)
+- [x] `admin-momentgarden.js:158` — select import target contact
+
+**Remaining (simple — not yet refactored):**
+
+**Remaining (complex — custom selection flows):**
+- [ ] `components/dialogs.js:138` — contactSearchDialog (full modal, used as standalone)
+- [ ] `contact-detail.js:2800` — relationship add (search + type picker + create-and-link)
+- [ ] `contact-detail.js:1587` — life event linked contacts (multi-select with chips)
+- [ ] `gift-event-detail.js:673` — gift recipient (inline chips with keyboard nav)
+- [ ] `gift-planning.js:404` — gift planning contact
+- [ ] `gifts.js:292` — gift event honoree
 
 ---
 

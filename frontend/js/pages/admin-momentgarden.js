@@ -2,6 +2,7 @@ import { api } from '../api/client.js';
 import { state, navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
 
 export async function renderMomentGarden() {
@@ -150,21 +151,11 @@ export async function renderMomentGarden() {
     loadSyncStatus();
   }
 
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimeout);
-    const q = searchInput.value.trim();
-    if (q.length < 2) { resultsEl.innerHTML = ''; return; }
-    searchTimeout = setTimeout(async () => {
-      const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=5`);
-      resultsEl.innerHTML = data.contacts.map(c => contactRowHtml(c, { tag: 'div' })).join('');
-      resultsEl.querySelectorAll('.contact-row').forEach(row => {
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', () => {
-          const c = data.contacts.find(c => c.uuid === row.dataset.uuid);
-          if (c) selectContact({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name, avatar: c.avatar });
-        });
-      });
-    }, 200);
+  attachContactSearch(searchInput, {
+    limit: 5,
+    onSelect: (c) => {
+      selectContact({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name, avatar: c.avatar });
+    },
   });
 
   function updateButtons() {

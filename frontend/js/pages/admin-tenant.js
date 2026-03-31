@@ -4,6 +4,7 @@ import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 
 export async function renderTenantAdmin() {
   const content = document.getElementById('app-content');
@@ -825,35 +826,32 @@ function showAddGuestModal() {
   let guestDebounce = null;
   const guestSearch = document.getElementById(`${mid}-contact-search`);
   const guestResults = document.getElementById(`${mid}-contact-results`);
-  guestSearch?.addEventListener('input', () => {
-    clearTimeout(guestDebounce);
-    const q = guestSearch.value.trim();
-    if (q.length < 2) { guestResults.classList.add('d-none'); return; }
-    guestDebounce = setTimeout(async () => {
-      try {
-        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
-        if (!contacts.length) { guestResults.classList.add('d-none'); return; }
-        guestResults.innerHTML = contacts.map(c => contactRowHtml(c, { tag: 'div' })).join('');
-        guestResults.classList.remove('d-none');
-        guestResults.querySelectorAll('.contact-row').forEach((el, i) => {
-          el.addEventListener('click', () => {
-            const c = contacts[i];
-            document.getElementById(`${mid}-linked-uuid`).value = c.uuid;
-            document.getElementById(`${mid}-name`).value = document.getElementById(`${mid}-name`).value || c.first_name + (c.last_name ? ' ' + c.last_name : '');
-            document.getElementById(`${mid}-linked-chip`).innerHTML = `
-              <span class="contact-chip">
-                <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '')}</span>`}</span>
-                ${c.first_name} ${c.last_name || ''}
-                <button type="button" class="contact-chip-remove" onclick="this.closest('.contact-chip').remove();document.getElementById('${mid}-linked-uuid').value=''"><i class="bi bi-x"></i></button>
-              </span>
-            `;
-            guestSearch.value = '';
-            guestResults.classList.add('d-none');
-          });
+  if (guestSearch) {
+    const guestSearchWrap = guestSearch.closest('.position-relative');
+    attachContactSearch(guestSearch, {
+      limit: 6,
+      onSelect: (c) => {
+        document.getElementById(`${mid}-linked-uuid`).value = c.uuid;
+        document.getElementById(`${mid}-name`).value = document.getElementById(`${mid}-name`).value || c.first_name + (c.last_name ? ' ' + c.last_name : '');
+        // Hide search, show chip
+        guestSearchWrap.style.display = 'none';
+        const chipEl = document.getElementById(`${mid}-linked-chip`);
+        chipEl.innerHTML = `
+          <span class="contact-chip">
+            <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '')}</span>`}</span>
+            ${c.first_name} ${c.last_name || ''}
+            <button type="button" class="contact-chip-remove"><i class="bi bi-x"></i></button>
+          </span>`;
+        chipEl.querySelector('.contact-chip-remove').addEventListener('click', () => {
+          chipEl.innerHTML = '';
+          document.getElementById(`${mid}-linked-uuid`).value = '';
+          guestSearchWrap.style.display = '';
+          guestSearch.value = '';
+          guestSearch.focus();
         });
-      } catch { guestResults.classList.add('d-none'); }
-    }, 200);
-  });
+      },
+    });
+  }
 
   // "Can see" contact search
   setupPortalContactSearch(`${mid}-search`, `${mid}-results`, `${mid}-chips`, selectedContacts);
@@ -1151,38 +1149,21 @@ async function showGuestLinksModal(guestUuid, guestName) {
 
 function setupPortalContactSearch(inputId, resultsId, chipsId, selectedContacts) {
   const input = document.getElementById(inputId);
-  const results = document.getElementById(resultsId);
-  if (!input || !results) return;
+  if (!input) return;
+  // Remove old results div — attachContactSearch creates its own dropdown
+  document.getElementById(resultsId)?.remove();
 
-  let debounce = null;
-  input.addEventListener('input', () => {
-    clearTimeout(debounce);
-    const q = input.value.trim();
-    if (q.length < 2) { results.classList.add('d-none'); return; }
-    debounce = setTimeout(async () => {
-      try {
-        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
-        const filtered = contacts.filter(c => !selectedContacts.some(s => s.uuid === c.uuid));
-        if (!filtered.length) { results.classList.add('d-none'); return; }
-        results.innerHTML = filtered.map(c =>
-          contactRowHtml(c, { tag: 'div' })
-        ).join('');
-        results.classList.remove('d-none');
-        results.querySelectorAll('.contact-row').forEach((el, i) => {
-          el.addEventListener('click', () => {
-            const c = filtered[i];
-            selectedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
-            renderPortalChips(chipsId, selectedContacts);
-            input.value = '';
-            results.classList.add('d-none');
-            input.focus();
-          });
-        });
-      } catch { results.classList.add('d-none'); }
-    }, 200);
+  attachContactSearch(input, {
+    limit: 6,
+    onSelect: (c) => {
+      if (!selectedContacts.some(s => s.uuid === c.uuid)) {
+        selectedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
+        renderPortalChips(chipsId, selectedContacts);
+      }
+      input.value = '';
+      input.focus();
+    },
   });
-
-  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') results.classList.add('d-none'); });
 }
 
 function renderPortalChips(chipsId, contacts) {
