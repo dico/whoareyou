@@ -294,7 +294,10 @@
     "copyRight": "Kopier valgte til høyre",
     "copyLeft": "Kopier valgte til venstre",
     "move": "Flytt",
-    "copy": "Kopier"
+    "copy": "Kopier",
+    "addContact": "Legg til kontakt i merkelapp",
+    "rename": "Endre navn",
+    "deleteConfirm": "Slette merkelappen \"{name}\"? Kontakter slettes ikke."
   },
   "sidebar": {
     "howWeMet": "Hvordan vi møttes",

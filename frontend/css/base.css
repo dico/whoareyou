@@ -501,18 +501,27 @@ a:hover {
 
 .label-panel {
   padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
   min-height: 300px;
 }
 
 .label-panel-header {
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   align-items: center;
   margin-bottom: var(--space-sm);
 }
 
-.label-panel-header select {
+.label-panel-header select,
+.label-panel-header input[type="text"] {
   flex: 1;
+}
+
+.label-panel-actions {
+  display: flex;
+  gap: 0;
+  flex-shrink: 0;
 }
 
 .label-panel-toolbar {
@@ -529,8 +538,35 @@ a:hover {
 }
 
 .label-panel-list {
-  max-height: 400px;
+  flex: 1;
+  max-height: calc(100vh - 350px);
   overflow-y: auto;
+  position: relative;
+}
+
+/* Label search floating dropdown */
+.label-search-floating {
+  position: relative;
+  padding: 0 0 var(--space-xs);
+}
+
+.label-search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 250px;
+  overflow-y: auto;
+  display: none;
+}
+
+.label-search-result.active {
+  background: rgba(0, 122, 255, 0.08);
 }
 
 .label-contact-row {

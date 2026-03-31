@@ -14,6 +14,7 @@
 | [Security](security.md) | Auth flow, tenant isolation, IP security, audit history |
 | [Integrations](integrations.md) | MomentGarden import, ipgeolocation.io, SMTP |
 | [Family Portal](portal.md) | Portal architecture, guest auth, share links |
+| [TODO](todo.md) | Development backlog — refactoring, known issues, planned improvements |
 
 ## Quick Start for Contributors
 

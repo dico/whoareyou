@@ -294,7 +294,10 @@
     "copyRight": "Copy selected to right label",
     "copyLeft": "Copy selected to left label",
     "move": "Move",
-    "copy": "Copy"
+    "copy": "Copy",
+    "addContact": "Add contact to label",
+    "rename": "Rename label",
+    "deleteConfirm": "Delete label \"{name}\"? Contacts will not be deleted."
   },
   "sidebar": {
     "howWeMet": "How we met",
