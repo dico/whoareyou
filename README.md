@@ -4,6 +4,8 @@
 
 ![WhoareYou Dashboard](docs/screenshots/dashboard.jpg)
 
+> **Not a social network.** Posts are your private journal about the people in your life — visible only to you and invited household members. Think of it as a personal log of shared moments, not a public feed.
+
 WhoareYou combines the best ideas from [Monica CRM](https://github.com/monicahq/monica), Facebook's timeline, family tree tools, and photo-sharing services like MomentGarden — into one private, self-hosted app for your family.
 
 Keep track of the people in your life: birthdays, addresses, how you met, what you talked about, and how everyone is connected. Share your children's milestones with grandparents through a built-in family portal. Plan gifts, map relationships, and never forget a birthday.
