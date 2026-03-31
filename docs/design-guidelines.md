@@ -129,7 +129,37 @@ When adding a contact field, the type select is hidden. A small "auto" badge sho
 ### 24. Duplicate detection and merge
 `/admin/duplicates` finds potential duplicates by scoring name similarity, birthday, email, and phone matches. Merge transfers all data (posts, relationships, photos, fields, addresses, companies) to the kept contact and soft-deletes the other. Routes under `/contacts/tools/*` to avoid `/:uuid` collision.
 
-### 25. Portal post creation
+### 25. Contact search component (`components/contact-search.js`)
+Reusable floating contact search dropdown. Use `attachContactSearch(inputElement, options)` instead of writing inline search logic.
+
+**Usage:**
+```javascript
+import { attachContactSearch } from '../components/contact-search.js';
+const search = attachContactSearch(inputEl, {
+  limit: 8,           // max results (default 8)
+  floating: true,     // absolute positioned dropdown (default true)
+  keyboard: true,     // arrow keys + enter (default true)
+  onSelect: (contact) => { /* { uuid, first_name, last_name, avatar } */ },
+  placeholder: '...', // override input placeholder
+});
+// Cleanup: search.destroy(), search.hide(), search.clear()
+```
+
+**Behavior:**
+- Debounced search (200ms) via `GET /contacts?search=`
+- Floating dropdown with `z-index: 1050`, `box-shadow`, max-height 280px
+- Keyboard: Arrow Up/Down to navigate, Enter to select, Escape to close
+- Active item highlighted with blue background
+- Auto-close on blur (200ms delay to allow click)
+- "No results" message when empty
+- For single-select: hide input after selection, show contact chip with X to clear
+- For multi-select: keep input visible, clear value after selection
+
+**CSS classes:** `.contact-search-dropdown`, `.contact-search-item`, `.contact-search-empty`
+
+**Refactoring status:** See [TODO](todo.md) for remaining files.
+
+### 26. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 
 ## i18n
