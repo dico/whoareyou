@@ -320,6 +320,183 @@ router.get('/suggestions/dismissed', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/relationships/family-tree/:contactUuid — generation-based family tree
+router.get('/family-tree/:contactUuid', async (req, res, next) => {
+  try {
+    const contact = await db('contacts')
+      .where({ uuid: req.params.contactUuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!contact) throw new AppError('Contact not found', 404);
+
+    const maxGen = Math.min(Math.max(parseInt(req.query.generations) || 3, 1), 6);
+
+    // Get all family relationships (parent/child/spouse/sibling only)
+    const familyTypes = await db('relationship_types')
+      .whereIn('name', ['parent', 'spouse', 'sibling', 'partner', 'cohabitant', 'boyfriend_girlfriend', 'stepparent'])
+      .select('id', 'name', 'inverse_name');
+    const typeMap = new Map(familyTypes.map(t => [t.id, t]));
+    const typeIds = familyTypes.map(t => t.id);
+
+    const allRels = await db('relationships')
+      .where({ tenant_id: req.tenantId })
+      .whereIn('relationship_type_id', typeIds)
+      .select('contact_id', 'related_contact_id', 'relationship_type_id');
+
+    // Build adjacency with typed edges
+    const adj = new Map();
+    const addEdge = (from, to, type) => {
+      if (!adj.has(from)) adj.set(from, []);
+      adj.get(from).push({ otherId: to, type });
+    };
+    for (const r of allRels) {
+      const t = typeMap.get(r.relationship_type_id);
+      if (!t) continue;
+      addEdge(r.contact_id, r.related_contact_id, t.name);
+      addEdge(r.related_contact_id, r.contact_id, t.inverse_name);
+    }
+
+    const partnerTypes = new Set(['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant']);
+    const parentType = new Set(['parent', 'stepparent']);
+    const childType = new Set(['child', 'stepchild']);
+
+    // Assign generations using BFS from root (generation 0)
+    // Parents = gen-1, children = gen+1, partners = same gen, siblings = same gen
+    const generations = new Map(); // id → generation number
+    const visited = new Set();
+    const queue = [{ id: contact.id, gen: 0, via: 'root' }];
+    generations.set(contact.id, 0);
+    visited.add(contact.id);
+
+    // Two-pass BFS: ancestors up, then descendants down from root
+    // This prevents cross-traversal (going up then back down into uncle/cousin branches)
+
+    // In adjacency: edge.type is what I AM to the other person
+    // "parent" means I am parent of other → other is my child → gen + 1
+    // "child" means I am child of other → other is my parent → gen - 1
+
+    // Pass 1: Go UP from root — find my parents (where I am "child" of them)
+    const upQueue = [{ id: contact.id, gen: 0 }];
+    while (upQueue.length) {
+      const { id: cid, gen } = upQueue.shift();
+      for (const edge of (adj.get(cid) || [])) {
+        if (visited.has(edge.otherId)) continue;
+        // I am child of other → other is my parent → gen - 1
+        if (childType.has(edge.type)) {
+          const nextGen = gen - 1;
+          if (Math.abs(nextGen) > maxGen) continue;
+          visited.add(edge.otherId);
+          generations.set(edge.otherId, nextGen);
+          upQueue.push({ id: edge.otherId, gen: nextGen });
+        }
+      }
+    }
+
+    // Pass 2: Go DOWN from root — find my children (where I am "parent" of them)
+    const downQueue = [{ id: contact.id, gen: 0 }];
+    const downVisited = new Set([contact.id]);
+    while (downQueue.length) {
+      const { id: cid, gen } = downQueue.shift();
+      for (const edge of (adj.get(cid) || [])) {
+        if (downVisited.has(edge.otherId)) continue;
+        // I am parent of other → other is my child → gen + 1
+        if (parentType.has(edge.type)) {
+          const nextGen = gen + 1;
+          if (nextGen > maxGen) continue;
+          downVisited.add(edge.otherId);
+          if (!visited.has(edge.otherId)) {
+            visited.add(edge.otherId);
+            generations.set(edge.otherId, nextGen);
+          }
+          downQueue.push({ id: edge.otherId, gen: nextGen });
+        }
+      }
+    }
+
+    // Pass 3: Add siblings of root (same generation)
+    for (const edge of (adj.get(contact.id) || [])) {
+      if (edge.type === 'sibling' && !visited.has(edge.otherId)) {
+        visited.add(edge.otherId);
+        generations.set(edge.otherId, 0);
+      }
+    }
+
+    // Pass 4: Add partners of all reachable nodes (same generation, no further traversal)
+    const reachableIds = [...visited];
+    for (const rid of reachableIds) {
+      for (const edge of (adj.get(rid) || [])) {
+        if (partnerTypes.has(edge.type) && !visited.has(edge.otherId)) {
+          visited.add(edge.otherId);
+          generations.set(edge.otherId, generations.get(rid));
+        }
+      }
+    }
+
+    // Fetch contact details
+    const contactIds = [...generations.keys()];
+    const contacts = contactIds.length ? await db('contacts')
+      .whereIn('id', contactIds)
+      .whereNull('deleted_at')
+      .select('id', 'uuid', 'first_name', 'last_name', 'birth_year', 'deceased_date',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
+      ) : [];
+
+    const nodes = contacts.map(c => ({
+      id: c.id, uuid: c.uuid, first_name: c.first_name, last_name: c.last_name,
+      birth_year: c.birth_year, deceased_date: c.deceased_date, avatar: c.avatar,
+      generation: generations.get(c.id),
+      is_root: c.id === contact.id,
+    }));
+
+    // Build edges between nodes in the tree
+    const nodeIds = new Set(contactIds);
+    const edges = [];
+    const edgeSet = new Set();
+    for (const r of allRels) {
+      if (!nodeIds.has(r.contact_id) || !nodeIds.has(r.related_contact_id)) continue;
+      const t = typeMap.get(r.relationship_type_id);
+      if (!t) continue;
+      const key = `${Math.min(r.contact_id, r.related_contact_id)}-${Math.max(r.contact_id, r.related_contact_id)}`;
+      if (edgeSet.has(key)) continue;
+      edgeSet.add(key);
+      edges.push({ from: r.contact_id, to: r.related_contact_id, type: t.name });
+    }
+
+    // Find missing parents (nodes that should have 2 parents but don't)
+    const placeholders = [];
+    let placeholderId = -100;
+    for (const node of nodes) {
+      const nodeRels = adj.get(node.id) || [];
+      const parentCount = nodeRels.filter(e => parentType.has(e.type) && nodeIds.has(e.otherId)).length;
+      const hasPartner = nodeRels.some(e => partnerTypes.has(e.type) && nodeIds.has(e.otherId));
+
+      // If this node has exactly 1 parent and that parent has no partner in the tree, add placeholder
+      if (parentCount === 1 && node.generation < 0) {
+        const parentId = nodeRels.find(e => parentType.has(e.type) && nodeIds.has(e.otherId))?.otherId;
+        if (parentId) {
+          const parentRels = adj.get(parentId) || [];
+          const parentHasPartner = parentRels.some(e => partnerTypes.has(e.type) && nodeIds.has(e.otherId));
+          if (!parentHasPartner) {
+            const pid = placeholderId--;
+            placeholders.push({
+              id: pid, uuid: null, first_name: '?', last_name: '',
+              generation: generations.get(parentId),
+              is_placeholder: true,
+            });
+            edges.push({ from: parentId, to: pid, type: 'spouse' });
+          }
+        }
+      }
+    }
+
+    res.json({
+      rootId: contact.id,
+      nodes: [...nodes, ...placeholders],
+      edges,
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/relationships/tree/:contactUuid — get relationship tree for visualization
 router.get('/tree/:contactUuid', async (req, res, next) => {
   try {

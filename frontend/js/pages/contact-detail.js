@@ -1873,7 +1873,9 @@ export async function showFamilyTree(contactUuid, proposedRelation = null) {
 
   // Load and render tree content
   _treeModal._proposedRelation = proposedRelation;
-  await renderTreeContent(contactUuid, 3, ['family'], 'full');
+  const savedTreeMode = localStorage.getItem('tree_mode') || 'family-tree';
+  const savedTreeDepth = parseInt(localStorage.getItem('tree_depth')) || 3;
+  await renderTreeContent(contactUuid, savedTreeDepth, ['family'], savedTreeMode);
   _treeModal.bs.show();
 }
 
@@ -1887,8 +1889,14 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
   const partnerTypes = ['spouse', 'partner', 'boyfriend_girlfriend', 'cohabitant'];
 
   try {
-    const params = `depth=${treeDepth}&categories=${treeCategories.join(',')}`;
-    const data = await api.get(`/relationships/tree/${contactUuid}?${params}`);
+    let data;
+    const isFamilyTree = treeMode === 'family-tree';
+    if (isFamilyTree) {
+      data = await api.get(`/relationships/family-tree/${contactUuid}?generations=${treeDepth}`);
+    } else {
+      const params = `depth=${treeDepth}&categories=${treeCategories.join(',')}`;
+      data = await api.get(`/relationships/tree/${contactUuid}?${params}`);
+    }
     const { rootId, nodes, edges: rawEdges } = data;
 
     if (nodes.length < 2) {
@@ -1982,7 +1990,15 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
         bfsDirectional(rootId, true, treeDepth);  // ancestors
         bfsDirectional(rootId, false, treeDepth); // descendants
 
-        // Add partners of reachable nodes (but don't traverse their families)
+        // Add siblings of root (always shown — same generation)
+        for (const e of rawEdges) {
+          if (e.type === 'sibling') {
+            if (e.from === rootId) reachable.add(e.to);
+            if (e.to === rootId) reachable.add(e.from);
+          }
+        }
+
+        // Add partners of reachable nodes only (not their families)
         for (const e of rawEdges) {
           if (partnerTypes.includes(e.type)) {
             if (reachable.has(e.from)) reachable.add(e.to);
@@ -2006,37 +2022,52 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
     const levels = new Map();
     const partners = new Map();
 
-    levels.set(rootId, 0);
-    const bfsQ = [rootId];
-    const bfsVisited = new Set([rootId]);
-
-    while (bfsQ.length) {
-      const cid = bfsQ.shift();
-      const cLevel = levels.get(cid);
+    if (isFamilyTree) {
+      // Use generation from backend directly
+      for (const n of nodes) {
+        if (n.generation !== undefined) levels.set(n.id, n.generation);
+      }
+      // Detect partner pairs
       for (const e of edges) {
-        let otherId;
-        if (e.from === cid) otherId = e.to;
-        else if (e.to === cid) otherId = e.from;
-        else continue;
-        if (bfsVisited.has(otherId)) continue;
-        bfsVisited.add(otherId);
-
-        let level = cLevel;
-
-        if (cid === e.from) {
-          if (parentTypes.includes(e.type)) level = cLevel - 1;
-          else if (childTypes.includes(e.type)) level = cLevel + 1;
-          else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
-        } else {
-          if (parentTypes.includes(e.type)) level = cLevel + 1;
-          else if (childTypes.includes(e.type)) level = cLevel - 1;
-          else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
+        if (partnerTypes.includes(e.type)) {
+          partners.set(e.from, e.to);
+          partners.set(e.to, e.from);
         }
+      }
+    } else {
+      // Existing BFS level computation for relationship graph
+      levels.set(rootId, 0);
+      const bfsQ = [rootId];
+      const bfsVisited = new Set([rootId]);
 
-        if (['sibling', 'friend', 'neighbor', 'classmate', 'colleague'].includes(e.type)) level = cLevel;
+      while (bfsQ.length) {
+        const cid = bfsQ.shift();
+        const cLevel = levels.get(cid);
+        for (const e of edges) {
+          let otherId;
+          if (e.from === cid) otherId = e.to;
+          else if (e.to === cid) otherId = e.from;
+          else continue;
+          if (bfsVisited.has(otherId)) continue;
+          bfsVisited.add(otherId);
 
-        levels.set(otherId, level);
-        bfsQ.push(otherId);
+          let level = cLevel;
+
+          if (cid === e.from) {
+            if (parentTypes.includes(e.type)) level = cLevel - 1;
+            else if (childTypes.includes(e.type)) level = cLevel + 1;
+            else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
+          } else {
+            if (parentTypes.includes(e.type)) level = cLevel + 1;
+            else if (childTypes.includes(e.type)) level = cLevel - 1;
+            else if (partnerTypes.includes(e.type)) { partners.set(cid, otherId); partners.set(otherId, cid); }
+          }
+
+          if (['sibling', 'friend', 'neighbor', 'classmate', 'colleague'].includes(e.type)) level = cLevel;
+
+          levels.set(otherId, level);
+          bfsQ.push(otherId);
+        }
       }
     }
 
@@ -2117,6 +2148,8 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       .tree-proposed-label { font-family: -apple-system, sans-serif; font-size: 9px; font-weight: 600; fill: #34C759; text-anchor: middle; }
       .tree-node.proposed rect { stroke: #34C759; stroke-width: 2.5; fill: #f0fff4; animation: proposedPulse 1.5s ease-in-out infinite; }
       @keyframes proposedPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+      .tree-node.placeholder rect { fill: #f9f9f9; stroke: #ddd; stroke-dasharray: 4 2; }
+      .tree-node.placeholder .tree-name { fill: #ccc; }
       .tree-node { cursor: pointer; }
       .tree-node rect { fill: #fff; stroke: #e5e7eb; stroke-width: 1.5; rx: 10; transition: stroke 0.15s; }
       .tree-node.root rect { stroke: #007AFF; stroke-width: 2; fill: #f0f7ff; }
@@ -2203,7 +2236,8 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       const avatarSize = avatarR * 2, avatarX = 8, avatarY = (nodeH - avatarSize) / 2, textX = avatarX + avatarSize + 6;
       const isProposed = proposedNodeIds.has(nid);
 
-      svg += `<g class="tree-node ${node.is_root ? 'root' : ''} ${isProposed ? 'proposed' : ''}" data-uuid="${node.uuid}" transform="translate(${pos.x},${pos.y})">`;
+      const isPlaceholder = node.is_placeholder;
+      svg += `<g class="tree-node ${node.is_root ? 'root' : ''} ${isProposed ? 'proposed' : ''} ${isPlaceholder ? 'placeholder' : ''}" data-uuid="${node.uuid || ''}" transform="translate(${pos.x},${pos.y})">`;
       svg += `<rect width="${nodeW}" height="${nodeH}" />`;
       if (hasAvatar) {
         svg += `<image href="${authUrl(node.avatar)}" x="${avatarX}" y="${avatarY}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-circle)" preserveAspectRatio="xMidYMid slice" />`;
@@ -2226,6 +2260,7 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
     // Update controls
     const allCats = ['family', 'social', 'professional'];
     const modes = [
+      { id: 'family-tree', label: t('relationships.treeModeFamilyTree') },
       { id: 'full', label: t('relationships.treeModeFull') },
       { id: 'blood', label: t('relationships.treeModeBlood') },
       { id: 'lineage', label: t('relationships.treeModeLineage') },
@@ -2237,7 +2272,7 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
       <select class="form-select form-select-sm" id="tree-mode" style="width:auto">
         ${modes.map(m => `<option value="${m.id}" ${treeMode === m.id ? 'selected' : ''}>${m.label}</option>`).join('')}
       </select>
-      <div class="d-flex align-items-center gap-1">
+      <div class="d-flex align-items-center gap-1 ${isFamilyTree ? 'd-none' : ''}" id="tree-cat-buttons">
         ${allCats.map(c => `<button class="btn btn-sm ${treeCategories.includes(c) ? 'btn-primary' : 'btn-outline-secondary'} tree-cat-btn" data-cat="${c}">${t('relationships.categories.' + c)}</button>`).join('')}
       </div>
       <div class="d-flex align-items-center gap-2">
@@ -2265,6 +2300,7 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
 
     // --- Controls: mode ---
     controlsEl.querySelector('#tree-mode').addEventListener('change', (e) => {
+      localStorage.setItem('tree_mode', e.target.value);
       renderTreeContent(contactUuid, treeDepth, treeCategories, e.target.value);
     });
 
@@ -2272,6 +2308,7 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
     let depthTimeout;
     controlsEl.querySelector('#tree-depth').addEventListener('input', (e) => {
       controlsEl.querySelector('#tree-depth-val').textContent = e.target.value;
+      localStorage.setItem('tree_depth', e.target.value);
       clearTimeout(depthTimeout);
       depthTimeout = setTimeout(() => renderTreeContent(contactUuid, parseInt(e.target.value), treeCategories, treeMode), 400);
     });

@@ -122,6 +122,55 @@ attachContactSearch(inputElement, {
    - Missing: product picker, recipient/giver contact chips, status selector
    - Should reuse the same form as "Add gift" with pre-filled values
 
+### CRITICAL: Relationship direction convention is ambiguous
+**Status:** Must resolve before further relationship work
+**Why:** The meaning of `contact_id` → `related_contact_id` with `type.name` is inconsistent:
+
+The DB convention is: `contact_id` HAS the relationship `type.name` WITH `related_contact_id`.
+- `contact_id=Robert, related_contact_id=Ailo, type=parent` → "Robert is parent of Ailo"
+
+But when displaying on a profile page:
+- Forward query (my `contact_id`): shows `related` person with `type.name` → "Ailo — Parent" (meaning I am parent of Ailo) ✅ correct
+- Inverse query (my `related_contact_id`): shows `origin` person with `type.inverse_name` → "Robert — Child" (meaning Robert is my child) ❌ wrong — Robert is my parent!
+
+**Root cause:** `inverse_name` of `parent` is `child`. When Ailo views Robert via inverse query, it shows `inverse_name=child`, but the intended display is "Robert is my parent" not "Robert is child".
+
+**The display should show what the OTHER person is TO ME:**
+- Forward: I am contact_id. I see related. type.name = what I am to them. But I want to show what THEY are to ME → use `inverse_name`
+- Inverse: I am related_contact_id. I see origin. origin has type.name toward me. So origin IS type.name to me → use `name`
+
+**Swapping name/inverse_name** was attempted but broke other relationships because some relationships were manually created with inconsistent direction.
+
+**Recommended fix:**
+1. First: audit ALL relationships in DB to ensure consistent direction (parent is always contact_id, child is always related_contact_id)
+2. Then: swap name/inverse_name in the query (forward shows inverse_name, inverse shows name)
+3. Update is_inverse flags accordingly
+4. Test thoroughly before deploying
+
+**DO NOT** change the query again without first auditing the data.
+
+### Separate family tree from relationship graph
+**Status:** Not started
+**Why:** Current tree component mixes relationship graph (hop-based) with family tree (generation-based). These are fundamentally different:
+
+| | Relationship graph | Family tree |
+|---|---|---|
+| **Purpose** | "Who knows who" | Ancestry & descendants |
+| **Depth** | Hop count (any relation) | Generations (parent/child only) |
+| **Layout** | Free-form | Strict: parents above, children below, partners beside |
+| **Missing data** | Not shown | Placeholder boxes ("Unknown father") |
+| **Includes** | Friends, colleagues, etc. | Only biological/family lines |
+
+**Proposed approach:**
+- Keep existing tree for "Full family" and "Social"/"Professional" modes
+- New "Family tree" mode with generation-based layout:
+  - Build from parent/child edges only
+  - Calculate generation number relative to root (0 = root, -1 = parents, +1 = children)
+  - Partners placed beside their partner, not as separate generation
+  - Placeholder nodes for missing parents (e.g. if only mother is registered, show empty box for father)
+  - Depth slider controls generations, not hops
+  - Siblings always shown in same generation row
+
 ### Performance: relationship suggestions at scale
 **Status:** Monitoring — currently 38ms for 450 contacts / 308 suggestions
 **Why:** Suggestions are computed on-the-fly (no cache). Algorithm is O(n*r) where n=contacts, r=relationships. With 2000+ contacts may reach 200-400ms. If it exceeds 1s, consider:
