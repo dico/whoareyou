@@ -711,6 +711,13 @@
     "cleanupConfirm": "Dette sletter alle likes og kommentarer uten kontaktkobling. Er du sikker?",
     "cleanupDone": "Slettet {reactions} likes og {comments} kommentarer uten kontaktkobling."
   },
+  "consistency": {
+    "title": "Relasjonskonsistens",
+    "desc": "Finn relasjoner som kan ha feil retning eller aldersmismatch.",
+    "cardDesc": "Sjekk for umulige eller mistenkelige relasjoner.",
+    "noIssues": "Ingen problemer funnet. Alle relasjoner ser konsistente ut.",
+    "found": "{count} problemer funnet"
+  },
   "duplicates": {
     "title": "Duplikate kontakter",
     "desc": "Finn kontakter som kan være duplikater og slå de sammen.",

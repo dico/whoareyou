@@ -12,6 +12,7 @@ import { renderSecurityAdmin } from './pages/admin-security.js';
 import { renderSystemAdmin } from './pages/admin-system.js';
 import { renderAddressDetail } from './pages/address-detail.js';
 import { renderDuplicates } from './pages/admin-duplicates.js';
+import { renderConsistencyReport } from './pages/admin-consistency.js';
 import { renderAddressMerge } from './pages/admin-addresses.js';
 import { renderCompanies } from './pages/companies.js';
 import { renderCompanyDetail } from './pages/company-detail.js';
@@ -44,6 +45,7 @@ const routes = {
   '/admin/security': () => renderSecurityAdmin(),
   '/admin/system': () => renderSystemAdmin(),
   '/admin/duplicates': () => renderDuplicates(),
+  '/admin/consistency': () => renderConsistencyReport(),
   '/admin/addresses': () => renderAddressMerge(),
   '/admin/labels': () => renderLabelAdmin(),
   '/admin/relationships': () => renderRelationshipSuggestions(),

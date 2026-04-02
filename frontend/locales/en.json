@@ -711,6 +711,13 @@
     "cleanupConfirm": "This will delete all loves and comments without a mapped contact. Are you sure?",
     "cleanupDone": "Deleted {reactions} loves and {comments} comments without contact mapping."
   },
+  "consistency": {
+    "title": "Relationship consistency",
+    "desc": "Find relationships that may have incorrect direction or age mismatches.",
+    "cardDesc": "Check for impossible or suspicious relationships.",
+    "noIssues": "No issues found. All relationships look consistent.",
+    "found": "{count} issues found"
+  },
   "duplicates": {
     "title": "Duplicate contacts",
     "desc": "Find contacts that may be duplicates and merge them.",

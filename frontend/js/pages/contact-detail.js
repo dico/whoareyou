@@ -2615,7 +2615,10 @@ async function showEditRelationshipDialog(wrapper, onDone) {
 
   // Determine if current relationship is stored as inverse
   const isInverse = wrapper.dataset.relInverse === 'true';
-  const currentValue = isInverse ? `${currentTypeId}:inverse` : currentTypeId;
+  // For symmetric types (sibling, spouse, etc.), inverse_name === name — don't use :inverse suffix
+  const typeInfo = types.find(tp => String(tp.id) === currentTypeId);
+  const isSymmetric = typeInfo && typeInfo.inverse_name === typeInfo.name;
+  const currentValue = (isInverse && !isSymmetric) ? `${currentTypeId}:inverse` : currentTypeId;
 
   const catLabels = { family: t('relationships.categories.family'), social: t('relationships.categories.social'), professional: t('relationships.categories.professional') };
   const typeOptions = ['family', 'social', 'professional'].map(cat => {
@@ -2930,7 +2933,12 @@ async function showAddRelationshipDialog(contactUuid, existingRelationships, onD
           first_name: firstName,
           last_name: document.getElementById(`${id}-new-last`).value.trim() || undefined,
         });
-        // Create relationship (handle inverse direction)
+        // Create relationship
+        // Convention: contact_uuid IS type.name OF related_contact_uuid
+        // From profile, dropdown shows what the OTHER person is to profile owner
+        // So "Parent" means "other is parent of me" → store: other IS parent OF me
+        // But current DB convention + display means: contact_uuid=me, type=parent → displays as "other — Parent"
+        // Keep existing convention to match all existing data
         const newIsInverse = newTypeSelect.value.includes(':inverse');
         const newTypeId = parseInt(newTypeSelect.value);
         await api.post('/relationships', {

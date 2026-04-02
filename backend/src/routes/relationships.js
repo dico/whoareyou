@@ -320,6 +320,96 @@ router.get('/suggestions/dismissed', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/relationships/consistency — check for relationship inconsistencies
+router.get('/consistency', async (req, res, next) => {
+  try {
+    const issues = [];
+
+    // Get all relationships with contact details
+    const rels = await db('relationships')
+      .join('relationship_types', 'relationships.relationship_type_id', 'relationship_types.id')
+      .join('contacts as c1', 'relationships.contact_id', 'c1.id')
+      .join('contacts as c2', 'relationships.related_contact_id', 'c2.id')
+      .where({ 'relationships.tenant_id': req.tenantId })
+      .whereNull('c1.deleted_at')
+      .whereNull('c2.deleted_at')
+      .select(
+        'relationships.id as rel_id',
+        'c1.id as c1_id', 'c1.uuid as c1_uuid', 'c1.first_name as c1_first', 'c1.last_name as c1_last', 'c1.birth_year as c1_birth',
+        'c2.id as c2_id', 'c2.uuid as c2_uuid', 'c2.first_name as c2_first', 'c2.last_name as c2_last', 'c2.birth_year as c2_birth',
+        'relationship_types.name as type', 'relationship_types.inverse_name',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = c1.id AND cp.is_primary = true LIMIT 1) as c1_avatar`),
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = c2.id AND cp.is_primary = true LIMIT 1) as c2_avatar`)
+      );
+
+    const seen = new Set();
+    for (const r of rels) {
+      // Self-relationship
+      if (r.c1_id === r.c2_id) {
+        issues.push({ type: 'self', severity: 'high', rel_id: r.rel_id,
+          contact1: { uuid: r.c1_uuid, first_name: r.c1_first, last_name: r.c1_last, avatar: r.c1_avatar },
+          contact2: { uuid: r.c2_uuid, first_name: r.c2_first, last_name: r.c2_last, avatar: r.c2_avatar },
+          rel_type: r.type, message: 'Person is related to themselves' });
+        continue;
+      }
+
+      // Duplicate check
+      const dupKey = `${Math.min(r.c1_id, r.c2_id)}-${Math.max(r.c1_id, r.c2_id)}-${r.type}`;
+      if (seen.has(dupKey)) {
+        issues.push({ type: 'duplicate', severity: 'medium', rel_id: r.rel_id,
+          contact1: { uuid: r.c1_uuid, first_name: r.c1_first, last_name: r.c1_last, avatar: r.c1_avatar },
+          contact2: { uuid: r.c2_uuid, first_name: r.c2_first, last_name: r.c2_last, avatar: r.c2_avatar },
+          rel_type: r.type, message: 'Duplicate relationship' });
+      }
+      seen.add(dupKey);
+
+      // Age-based checks (only if both have birth years)
+      if (r.c1_birth && r.c2_birth) {
+        const ageDiff = r.c2_birth - r.c1_birth;
+
+        // Convention: c2 (related) IS type OF c1 (contact)
+        // For parent: c2 is parent of c1 → c2 should be older (lower birth year)
+        if (r.type === 'parent' && r.c2_birth > r.c1_birth) {
+          issues.push({ type: 'age', severity: 'high', rel_id: r.rel_id,
+            contact1: { uuid: r.c1_uuid, first_name: r.c1_first, last_name: r.c1_last, avatar: r.c1_avatar },
+            contact2: { uuid: r.c2_uuid, first_name: r.c2_first, last_name: r.c2_last, avatar: r.c2_avatar },
+            rel_type: r.type, message: `Parent ${r.c2_first} (${r.c2_birth}) is younger than child ${r.c1_first} (${r.c1_birth})` });
+        }
+
+        // Parent too young (less than 12 years older)
+        if (r.type === 'parent' && r.c2_birth <= r.c1_birth && (r.c1_birth - r.c2_birth) < 12) {
+          issues.push({ type: 'age', severity: 'medium', rel_id: r.rel_id,
+            contact1: { uuid: r.c1_uuid, first_name: r.c1_first, last_name: r.c1_last, avatar: r.c1_avatar },
+            contact2: { uuid: r.c2_uuid, first_name: r.c2_first, last_name: r.c2_last, avatar: r.c2_avatar },
+            rel_type: r.type, message: `Parent only ${Math.abs(ageDiff)} years older than child` });
+        }
+
+        // Grandparent younger than grandchild (c2 is grandparent, should be older)
+        if (r.type === 'grandparent' && r.c2_birth > r.c1_birth) {
+          issues.push({ type: 'age', severity: 'high', rel_id: r.rel_id,
+            contact1: { uuid: r.c1_uuid, first_name: r.c1_first, last_name: r.c1_last, avatar: r.c1_avatar },
+            contact2: { uuid: r.c2_uuid, first_name: r.c2_first, last_name: r.c2_last, avatar: r.c2_avatar },
+            rel_type: r.type, message: `Grandparent (${r.c1_birth}) is younger than grandchild (${r.c2_birth})` });
+        }
+
+        // Spouse with huge age gap (>40 years)
+        if (r.type === 'spouse' && Math.abs(ageDiff) > 40) {
+          issues.push({ type: 'age', severity: 'low', rel_id: r.rel_id,
+            contact1: { uuid: r.c1_uuid, first_name: r.c1_first, last_name: r.c1_last, avatar: r.c1_avatar },
+            contact2: { uuid: r.c2_uuid, first_name: r.c2_first, last_name: r.c2_last, avatar: r.c2_avatar },
+            rel_type: r.type, message: `Spouse age gap: ${Math.abs(ageDiff)} years` });
+        }
+      }
+    }
+
+    // Sort: high severity first
+    const sevOrder = { high: 0, medium: 1, low: 2 };
+    issues.sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9));
+
+    res.json({ issues });
+  } catch (err) { next(err); }
+});
+
 // GET /api/relationships/family-tree/:contactUuid — generation-based family tree
 router.get('/family-tree/:contactUuid', async (req, res, next) => {
   try {
@@ -371,18 +461,17 @@ router.get('/family-tree/:contactUuid', async (req, res, next) => {
     // Two-pass BFS: ancestors up, then descendants down from root
     // This prevents cross-traversal (going up then back down into uncle/cousin branches)
 
-    // In adjacency: edge.type is what I AM to the other person
-    // "parent" means I am parent of other → other is my child → gen + 1
-    // "child" means I am child of other → other is my parent → gen - 1
+    // Convention: adj[me] has {otherId, type} where type is what OTHER is TO ME
+    // "parent" in adj → other is my parent → gen - 1
+    // "child" in adj → other is my child → gen + 1
 
-    // Pass 1: Go UP from root — find my parents (where I am "child" of them)
+    // Pass 1: Go UP — follow "parent" edges (other is my parent)
     const upQueue = [{ id: contact.id, gen: 0 }];
     while (upQueue.length) {
       const { id: cid, gen } = upQueue.shift();
       for (const edge of (adj.get(cid) || [])) {
         if (visited.has(edge.otherId)) continue;
-        // I am child of other → other is my parent → gen - 1
-        if (childType.has(edge.type)) {
+        if (parentType.has(edge.type)) {
           const nextGen = gen - 1;
           if (Math.abs(nextGen) > maxGen) continue;
           visited.add(edge.otherId);
@@ -392,15 +481,14 @@ router.get('/family-tree/:contactUuid', async (req, res, next) => {
       }
     }
 
-    // Pass 2: Go DOWN from root — find my children (where I am "parent" of them)
+    // Pass 2: Go DOWN — follow "child" edges (other is my child)
     const downQueue = [{ id: contact.id, gen: 0 }];
     const downVisited = new Set([contact.id]);
     while (downQueue.length) {
       const { id: cid, gen } = downQueue.shift();
       for (const edge of (adj.get(cid) || [])) {
         if (downVisited.has(edge.otherId)) continue;
-        // I am parent of other → other is my child → gen + 1
-        if (parentType.has(edge.type)) {
+        if (childType.has(edge.type)) {
           const nextGen = gen + 1;
           if (nextGen > maxGen) continue;
           downVisited.add(edge.otherId);

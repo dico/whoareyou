@@ -179,6 +179,18 @@ But when displaying on a profile page:
   - Depth slider controls generations, not hops
   - Siblings always shown in same generation row
 
+### Relationship consistency report
+**Status:** Not started
+**Why:** After manual edits and suggestion acceptance, some relationships may have inconsistent direction. Need a tool to detect:
+- Parents younger than children
+- Grandparents younger than grandchildren
+- Self-relationships (person related to themselves)
+- Duplicate relationships (same pair with same type)
+- Orphaned relationships (deleted contacts)
+- Direction anomalies (child registered as parent)
+
+Should be accessible from `/settings` as a card, similar to duplicate contacts.
+
 ### Performance: relationship suggestions at scale
 **Status:** Monitoring — currently 38ms for 450 contacts / 308 suggestions
 **Why:** Suggestions are computed on-the-fly (no cache). Algorithm is O(n*r) where n=contacts, r=relationships. With 2000+ contacts may reach 200-400ms. If it exceeds 1s, consider:
