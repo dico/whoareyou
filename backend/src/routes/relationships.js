@@ -201,7 +201,7 @@ router.get('/suggestions', async (req, res, next) => {
         const partnerRels = adj.get(partnerId) || [];
         const inLaws = partnerRels.filter(r => r.type === 'parent').map(r => r.otherId);
         for (const inLawId of inLaws) {
-          addSuggestion(inLawId, personId, 'in_law', 'in_law');
+          addSuggestion(inLawId, personId, 'in-law', 'in_law');
         }
       }
 

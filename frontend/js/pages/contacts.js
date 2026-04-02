@@ -10,6 +10,7 @@ let currentFilter = localStorage.getItem('contacts.filter') || 'all';
 let currentLabel = localStorage.getItem('contacts.label') || '';
 let currentSort = localStorage.getItem('contacts.sort') || 'first_name';
 let currentOrder = localStorage.getItem('contacts.order') || 'asc';
+let currentBirthYear = '';
 
 export async function renderContacts() {
   // Check URL params for label filter
@@ -48,9 +49,19 @@ export async function renderContacts() {
           <option value="last_viewed:desc" ${currentSort === 'last_viewed' ? 'selected' : ''}>${t('contacts.sortRecentlyViewed')}</option>
           <option value="last_contacted:desc" ${currentSort === 'last_contacted' ? 'selected' : ''}>${t('contacts.sortLastContacted')}</option>
         </select>
-        <select class="form-select form-select-sm sort-select" id="label-filter">
+        <button class="btn btn-outline-secondary btn-sm" id="btn-toggle-filters" title="${t('contacts.filters')}">
+          <i class="bi bi-funnel"></i>
+        </button>
+      </div>
+
+      <div class="contacts-filter-bar d-none" id="filter-bar">
+        <select class="form-select form-select-sm" id="label-filter" style="max-width:200px">
           <option value="">${t('labels.title')}</option>
         </select>
+        <select class="form-select form-select-sm" id="birth-year-filter" style="max-width:150px">
+          <option value="">${t('contacts.birthYear')}</option>
+        </select>
+        <button class="btn btn-link btn-sm text-muted" id="btn-clear-filters">${t('contacts.clearFilters')}</button>
       </div>
 
       <div id="contacts-list" class="contacts-list">
@@ -113,6 +124,41 @@ export async function renderContacts() {
     loadContacts();
   });
 
+  // Toggle filter bar
+  const filterBar = document.getElementById('filter-bar');
+  document.getElementById('btn-toggle-filters').addEventListener('click', () => {
+    filterBar.classList.toggle('d-none');
+    document.getElementById('btn-toggle-filters').classList.toggle('active', !filterBar.classList.contains('d-none'));
+  });
+  // Auto-show filter bar if filters are active
+  if (currentLabel) filterBar.classList.remove('d-none');
+
+  // Populate birth year filter
+  try {
+    const { contacts: allC } = await api.get('/contacts?limit=2000&sort=first_name:asc');
+    const years = [...new Set(allC.filter(c => c.birth_year).map(c => c.birth_year))].sort((a, b) => b - a);
+    const yearFilter = document.getElementById('birth-year-filter');
+    yearFilter.innerHTML = `<option value="">${t('contacts.birthYear')}</option>` +
+      years.map(y => `<option value="${y}">${y}</option>`).join('');
+  } catch {}
+
+  // Birth year filter
+  document.getElementById('birth-year-filter').addEventListener('change', (e) => {
+    currentBirthYear = e.target.value;
+    loadContacts();
+  });
+
+  // Clear all filters
+  document.getElementById('btn-clear-filters').addEventListener('click', () => {
+    document.getElementById('label-filter').value = '';
+    document.getElementById('birth-year-filter').value = '';
+    currentLabel = '';
+    currentBirthYear = '';
+    localStorage.removeItem('contacts.label');
+    window.history.replaceState({}, '', '/contacts');
+    loadContacts();
+  });
+
   // Add contact modal (shared component)
   initAddContactModal();
   document.getElementById('btn-add-contact').addEventListener('click', showAddContactModal);
@@ -129,6 +175,7 @@ async function loadContacts() {
     if (currentLabel) params.set('label', currentLabel);
     if (currentSort) params.set('sort', currentSort);
     if (currentOrder) params.set('order', currentOrder);
+    if (currentBirthYear) params.set('birth_year', currentBirthYear);
 
     const data = await api.get(`/contacts?${params}`);
 

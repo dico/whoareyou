@@ -47,6 +47,11 @@ router.get('/', async (req, res, next) => {
       `, [`${firstTerm}%`, `%${firstTerm}%`, `${firstTerm}%`]);
     }
 
+    // Filter by birth year
+    if (req.query.birth_year) {
+      query = query.where('contacts.birth_year', parseInt(req.query.birth_year));
+    }
+
     // Filter by favorite
     if (favorite === 'true') {
       query = query.where('contacts.is_favorite', true);

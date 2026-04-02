@@ -1,8 +1,26 @@
 .contacts-toolbar {
   display: flex;
   gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-sm);
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.contacts-filter-bar {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+
+#btn-toggle-filters.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
 }
 
 .search-box {
