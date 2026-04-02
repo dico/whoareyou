@@ -170,18 +170,148 @@ router.get('/suggestions', async (req, res, next) => {
           addSuggestion(uncleId, personId, 'uncle_aunt', 'uncle_aunt');
         }
       }
+
+      // Rule 6: Sibling's children → nephew/niece (I am uncle/aunt to them)
+      const siblings = rels.filter(r => r.type === 'sibling').map(r => r.otherId);
+      for (const sibId of siblings) {
+        const sibRels = adj.get(sibId) || [];
+        const niblings = sibRels.filter(r => r.type === 'child').map(r => r.otherId);
+        for (const nibId of niblings) {
+          addSuggestion(personId, nibId, 'uncle_aunt', 'nephew_niece');
+        }
+      }
+
+      // Rule 7: Parent's sibling's children → cousin
+      for (const parentId of parents) {
+        const parentRels = adj.get(parentId) || [];
+        const parentSiblings = parentRels.filter(r => r.type === 'sibling').map(r => r.otherId);
+        for (const uncleId of parentSiblings) {
+          const uncleRels = adj.get(uncleId) || [];
+          const cousins = uncleRels.filter(r => r.type === 'child').map(r => r.otherId);
+          for (const cousinId of cousins) {
+            if (cousinId !== personId) {
+              addSuggestion(personId, cousinId, 'cousin', 'cousin');
+            }
+          }
+        }
+      }
+
+      // Rule 8: Partner's parents → in-law (sviger)
+      for (const partnerId of partners) {
+        const partnerRels = adj.get(partnerId) || [];
+        const inLaws = partnerRels.filter(r => r.type === 'parent').map(r => r.otherId);
+        for (const inLawId of inLaws) {
+          addSuggestion(inLawId, personId, 'in_law', 'in_law');
+        }
+      }
+
+      // Rule 9: Grandparent's partner (if grandparent exists but partner not linked)
+      for (const parentId of parents) {
+        const parentRels = adj.get(parentId) || [];
+        const grandparents = parentRels.filter(r => r.type === 'parent').map(r => r.otherId);
+        for (const gpId of grandparents) {
+          const gpRels = adj.get(gpId) || [];
+          const gpPartners = gpRels.filter(r => ['spouse', 'partner', 'cohabitant'].includes(r.type)).map(r => r.otherId);
+          for (const gpPartnerId of gpPartners) {
+            addSuggestion(gpPartnerId, personId, 'grandparent', 'grandparent_partner');
+          }
+        }
+      }
     }
 
     // Add type_id to suggestions
-    const result = suggestions.map(s => ({
-      ...s,
-      type_id: typesByName[s.suggested_type] || null,
-    }));
+    // Filter out dismissed suggestions
+    const dismissed = await db('dismissed_suggestions')
+      .where({ tenant_id: req.tenantId })
+      .select('contact1_id', 'contact2_id', 'suggested_type');
+    const dismissedSet = new Set(dismissed.map(d =>
+      `${Math.min(d.contact1_id, d.contact2_id)}-${Math.max(d.contact1_id, d.contact2_id)}-${d.suggested_type}`
+    ));
+
+    const filtered = suggestions.filter(s => {
+      const c1 = contactMap.get(s.contact1.uuid)?.id || 0;
+      const c2 = contactMap.get(s.contact2.uuid)?.id || 0;
+      // contactMap uses uuid as key? No, it uses id. Let me look up ids from uuids.
+      return true; // We'll filter by uuid below
+    });
+
+    // Build id lookup from suggestions
+    const result = suggestions
+      .filter(s => {
+        const id1 = contacts.find(c => c.uuid === s.contact1.uuid)?.id;
+        const id2 = contacts.find(c => c.uuid === s.contact2.uuid)?.id;
+        if (!id1 || !id2) return true;
+        const key = `${Math.min(id1, id2)}-${Math.max(id1, id2)}-${s.suggested_type}`;
+        return !dismissedSet.has(key);
+      })
+      .map(s => ({
+        ...s,
+        type_id: typesByName[s.suggested_type] || null,
+      }));
 
     res.json({ suggestions: result });
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/relationships/suggestions/dismiss — dismiss a suggestion
+router.post('/suggestions/dismiss', async (req, res, next) => {
+  try {
+    const { contact1_uuid, contact2_uuid, suggested_type } = req.body;
+    if (!contact1_uuid || !contact2_uuid || !suggested_type) {
+      throw new AppError('contact1_uuid, contact2_uuid, and suggested_type required', 400);
+    }
+    const c1 = await db('contacts').where({ uuid: contact1_uuid, tenant_id: req.tenantId }).first();
+    const c2 = await db('contacts').where({ uuid: contact2_uuid, tenant_id: req.tenantId }).first();
+    if (!c1 || !c2) throw new AppError('Contact not found', 404);
+
+    await db('dismissed_suggestions').insert({
+      tenant_id: req.tenantId,
+      contact1_id: Math.min(c1.id, c2.id),
+      contact2_id: Math.max(c1.id, c2.id),
+      suggested_type,
+      dismissed_by: req.user.id,
+    }).catch(() => {}); // ignore duplicate
+
+    res.json({ message: 'Suggestion dismissed' });
+  } catch (err) { next(err); }
+});
+
+// POST /api/relationships/suggestions/restore — undismiss a suggestion
+router.post('/suggestions/restore', async (req, res, next) => {
+  try {
+    const { contact1_uuid, contact2_uuid, suggested_type } = req.body;
+    const c1 = await db('contacts').where({ uuid: contact1_uuid, tenant_id: req.tenantId }).first();
+    const c2 = await db('contacts').where({ uuid: contact2_uuid, tenant_id: req.tenantId }).first();
+    if (!c1 || !c2) throw new AppError('Contact not found', 404);
+
+    await db('dismissed_suggestions')
+      .where({ tenant_id: req.tenantId, contact1_id: Math.min(c1.id, c2.id), contact2_id: Math.max(c1.id, c2.id), suggested_type })
+      .del();
+
+    res.json({ message: 'Suggestion restored' });
+  } catch (err) { next(err); }
+});
+
+// GET /api/relationships/suggestions/dismissed — list dismissed suggestions
+router.get('/suggestions/dismissed', async (req, res, next) => {
+  try {
+    const dismissed = await db('dismissed_suggestions')
+      .where({ 'dismissed_suggestions.tenant_id': req.tenantId })
+      .join('contacts as c1', 'dismissed_suggestions.contact1_id', 'c1.id')
+      .join('contacts as c2', 'dismissed_suggestions.contact2_id', 'c2.id')
+      .select(
+        'c1.uuid as contact1_uuid', 'c1.first_name as contact1_first', 'c1.last_name as contact1_last',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = c1.id AND cp.is_primary = true LIMIT 1) as contact1_avatar`),
+        'c2.uuid as contact2_uuid', 'c2.first_name as contact2_first', 'c2.last_name as contact2_last',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = c2.id AND cp.is_primary = true LIMIT 1) as contact2_avatar`),
+        'dismissed_suggestions.suggested_type', 'dismissed_suggestions.created_at'
+      )
+      .orderBy('dismissed_suggestions.created_at', 'desc');
+
+    res.json({ dismissed });
+  } catch (err) { next(err); }
 });
 
 // GET /api/relationships/tree/:contactUuid — get relationship tree for visualization

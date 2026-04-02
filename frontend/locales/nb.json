@@ -183,11 +183,19 @@
     "suggestionsCount": "{count} forslag funnet",
     "accept": "Godkjenn",
     "dismiss": "Avvis",
+    "dismissed": "Avviste forslag",
+    "showDismissed": "Vis avviste",
+    "noDismissed": "Ingen avviste forslag.",
+    "restore": "Gjenopprett",
     "reason": {
       "siblings": "Barn av samme forelder er søsken",
       "partnerChildren": "Partners barn kan også være dine barn",
       "grandparent": "Forelders forelder er besteforelder",
-      "uncleAunt": "Forelders søsken er onkel/tante"
+      "uncleAunt": "Forelders søsken er onkel/tante",
+      "nephewNiece": "Søskens barn er nevø/niese",
+      "cousin": "Forelders søskens barn er fetter/kusine",
+      "inLaw": "Partners forelder er svigerfamilie",
+      "grandparentPartner": "Besteforelders partner"
     },
     "types": {
       "parent": "Forelder",

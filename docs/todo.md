@@ -72,6 +72,10 @@ attachContactSearch(inputElement, {
 **Status:** Partially done (tenant_members.linked_contact_id exists, utility function created)
 **Remaining:** Some code paths still reference `users.linked_contact_id` as fallback. Eventually remove `linked_contact_id` from `users` table entirely and rely solely on `tenant_members`.
 
+### Dismissed relationship suggestions should persist in backend
+**Status:** Done — migration 060, backend endpoints, frontend updated
+**Post-deploy cleanup:** Remove `localStorage.getItem('dismissedSuggestions')` references from any client code if found.
+
 ### Relationship edit: admin-relationships direction detection
 **Status:** Partially done
 **Remaining:** The relationship suggestion page (`admin-relationships.js`) creates relationships but doesn't always correctly determine direction. Should use the same inverse-aware logic as the edit dialog.
@@ -117,6 +121,13 @@ attachContactSearch(inputElement, {
    - Edit gift modal only shows title/notes text fields
    - Missing: product picker, recipient/giver contact chips, status selector
    - Should reuse the same form as "Add gift" with pre-filled values
+
+### Performance: relationship suggestions at scale
+**Status:** Monitoring — currently 38ms for 450 contacts / 308 suggestions
+**Why:** Suggestions are computed on-the-fly (no cache). Algorithm is O(n*r) where n=contacts, r=relationships. With 2000+ contacts may reach 200-400ms. If it exceeds 1s, consider:
+- Caching results in a `suggestion_cache` table, invalidated on relationship changes
+- Paginating suggestions (load 20 at a time)
+- Moving computation to a background job
 
 ### Standardize company search component
 **Status:** Not started

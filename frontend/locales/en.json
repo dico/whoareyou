@@ -183,11 +183,19 @@
     "suggestionsCount": "{count} suggestions found",
     "accept": "Accept",
     "dismiss": "Dismiss",
+    "dismissed": "Dismissed suggestions",
+    "showDismissed": "Show dismissed",
+    "noDismissed": "No dismissed suggestions.",
+    "restore": "Restore",
     "reason": {
       "siblings": "Children of the same parent are siblings",
       "partnerChildren": "Partner's children may also be your children",
       "grandparent": "Parent's parent is a grandparent",
-      "uncleAunt": "Parent's sibling is uncle/aunt"
+      "uncleAunt": "Parent's sibling is uncle/aunt",
+      "nephewNiece": "Sibling's child is nephew/niece",
+      "cousin": "Parent's sibling's child is cousin",
+      "inLaw": "Partner's parent is in-law",
+      "grandparentPartner": "Grandparent's partner"
     },
     "types": {
       "parent": "Parent",

@@ -47,19 +47,21 @@ async function loadSuggestions() {
       siblings: t('relationships.reason.siblings'),
       partner_children: t('relationships.reason.partnerChildren'),
       grandparent: t('relationships.reason.grandparent'),
+      grandparent_partner: t('relationships.reason.grandparentPartner'),
       uncle_aunt: t('relationships.reason.uncleAunt'),
+      nephew_niece: t('relationships.reason.nephewNiece'),
+      cousin: t('relationships.reason.cousin'),
+      in_law: t('relationships.reason.inLaw'),
     };
 
-    // Filter out dismissed suggestions
-    const dismissed = JSON.parse(localStorage.getItem('dismissedSuggestions') || '[]');
-    const filtered = suggestions.filter(s => {
-      const key = `${s.contact1.uuid}_${s.contact2.uuid}_${s.suggested_type}`;
-      return !dismissed.includes(key);
-    });
+    const filtered = suggestions;
 
     el.innerHTML = `
-      <p class="text-muted small mb-2">${t('relationships.suggestionsCount', { count: filtered.length })}</p>
-      ${filtered.map((s, i) => {
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="text-muted small">${t('relationships.suggestionsCount', { count: filtered.length })}</span>
+        <button class="btn btn-link btn-sm text-muted" id="btn-show-dismissed">${t('relationships.showDismissed')}</button>
+      </div>
+    ` + `${filtered.map((s, i) => {
         const key = `${s.contact1.uuid}_${s.contact2.uuid}_${s.suggested_type}`;
         return `
         <div class="settings-section glass-card mb-2 suggestion-card" data-index="${i}" data-key="${key}">
@@ -113,14 +115,18 @@ async function loadSuggestions() {
       });
     });
 
-    // Dismiss (remove from UI + remember in localStorage)
+    // Dismiss (save to backend)
     el.querySelectorAll('.btn-dismiss').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const card = btn.closest('.suggestion-card');
-        const key = card?.dataset.key;
-        if (key) {
-          const dismissed = JSON.parse(localStorage.getItem('dismissedSuggestions') || '[]');
-          if (!dismissed.includes(key)) { dismissed.push(key); localStorage.setItem('dismissedSuggestions', JSON.stringify(dismissed)); }
+        const idx = parseInt(card.dataset.index);
+        const s = suggestionsData[idx];
+        if (s) {
+          await api.post('/relationships/suggestions/dismiss', {
+            contact1_uuid: s.contact1.uuid,
+            contact2_uuid: s.contact2.uuid,
+            suggested_type: s.suggested_type,
+          }).catch(() => {});
         }
         card.remove();
         const remaining = el.querySelectorAll('.suggestion-card').length;
@@ -143,6 +149,62 @@ async function loadSuggestions() {
           type: t('relationships.types.' + s.suggested_type),
         } : null);
       });
+    });
+
+    // Show dismissed toggle
+    document.getElementById('btn-show-dismissed')?.addEventListener('click', async () => {
+      try {
+        const { dismissed } = await api.get('/relationships/suggestions/dismissed');
+        if (!dismissed.length) {
+          confirmDialog(t('relationships.noDismissed'), { title: t('relationships.dismissed'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+          return;
+        }
+        const mid = 'dismissed-' + Date.now();
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="${mid}" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+              <div class="modal-content glass-card">
+                <div class="modal-header">
+                  <h5 class="modal-title">${t('relationships.dismissed')} (${dismissed.length})</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" style="max-height:400px;overflow-y:auto">
+                  ${dismissed.map((d, i) => `
+                    <div class="d-flex align-items-center flex-wrap gap-2 py-2 dismissed-row" data-index="${i}">
+                      <a href="/contacts/${d.contact1_uuid}" data-link class="contact-chip">
+                        <span class="contact-chip-avatar">${d.contact1_avatar ? `<img src="${authUrl(d.contact1_avatar)}" alt="">` : `<span>${(d.contact1_first[0] || '')}${(d.contact1_last?.[0] || '')}</span>`}</span>
+                        ${d.contact1_first} ${d.contact1_last || ''}
+                      </a>
+                      <span class="text-muted small">${t('relationships.isRelationTo', { type: t('relationships.types.' + d.suggested_type).toLowerCase() })}</span>
+                      <a href="/contacts/${d.contact2_uuid}" data-link class="contact-chip">
+                        <span class="contact-chip-avatar">${d.contact2_avatar ? `<img src="${authUrl(d.contact2_avatar)}" alt="">` : `<span>${(d.contact2_first[0] || '')}${(d.contact2_last?.[0] || '')}</span>`}</span>
+                        ${d.contact2_first} ${d.contact2_last || ''}
+                      </a>
+                      <button class="btn btn-outline-primary btn-sm ms-auto btn-restore" data-c1="${d.contact1_uuid}" data-c2="${d.contact2_uuid}" data-type="${d.suggested_type}">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>${t('relationships.restore')}
+                      </button>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>`);
+        const modalEl = document.getElementById(mid);
+        const modal = new bootstrap.Modal(modalEl);
+        modalEl.querySelectorAll('.btn-restore').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            await api.post('/relationships/suggestions/restore', {
+              contact1_uuid: btn.dataset.c1, contact2_uuid: btn.dataset.c2, suggested_type: btn.dataset.type,
+            });
+            btn.closest('.dismissed-row').remove();
+            if (!modalEl.querySelectorAll('.dismissed-row').length) { modal.hide(); loadSuggestions(); }
+          });
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => { modalEl.remove(); loadSuggestions(); }, { once: true });
+        modal.show();
+      } catch (err) {
+        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      }
     });
 
   } catch (err) {
