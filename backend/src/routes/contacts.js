@@ -23,14 +23,28 @@ router.get('/', async (req, res, next) => {
 
     // Search
     if (search) {
-      const like = `%${search}%`;
-      query = query.where(function () {
-        this.where('contacts.first_name', 'like', like)
-          .orWhere('contacts.last_name', 'like', like)
-          .orWhere('contacts.nickname', 'like', like)
-          .orWhere('contacts.how_we_met', 'like', like)
-          .orWhere('contacts.notes', 'like', like);
-      });
+      const terms = search.trim().split(/\s+/).filter(Boolean);
+      // Each term must match somewhere (AND logic across words)
+      for (const term of terms) {
+        const like = `%${term}%`;
+        query = query.where(function () {
+          this.where('contacts.first_name', 'like', like)
+            .orWhere('contacts.last_name', 'like', like)
+            .orWhere('contacts.nickname', 'like', like)
+            .orWhere('contacts.how_we_met', 'like', like)
+            .orWhere('contacts.notes', 'like', like);
+        });
+      }
+      // Score: exact first_name start ranks highest
+      const firstTerm = terms[0];
+      query = query.orderByRaw(`
+        CASE
+          WHEN contacts.first_name LIKE ? THEN 0
+          WHEN contacts.first_name LIKE ? THEN 1
+          WHEN contacts.last_name LIKE ? THEN 2
+          ELSE 3
+        END ASC
+      `, [`${firstTerm}%`, `%${firstTerm}%`, `${firstTerm}%`]);
     }
 
     // Filter by favorite
@@ -405,19 +419,22 @@ router.get('/search/global', async (req, res, next) => {
         this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
       })
       .where(function () {
-        this.where('contacts.first_name', 'like', like)
-          .orWhere('contacts.last_name', 'like', like)
-          .orWhere('contacts.nickname', 'like', like)
-          .orWhere('contacts.how_we_met', 'like', like)
-          .orWhere('contacts.notes', 'like', like)
-          .orWhereIn('contacts.id',
-            db('contact_fields').where('value', 'like', like).select('contact_id')
-          );
+        // Multi-word search: each term must match somewhere
+        const terms = q.trim().split(/\s+/).filter(Boolean);
+        for (const term of terms) {
+          const tLike = `%${term}%`;
+          this.where(function () {
+            this.where('contacts.first_name', 'like', tLike)
+              .orWhere('contacts.last_name', 'like', tLike)
+              .orWhere('contacts.nickname', 'like', tLike);
+          });
+        }
       })
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.nickname',
         db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
       )
+      .orderByRaw(`CASE WHEN contacts.first_name LIKE ? THEN 0 WHEN contacts.first_name LIKE ? THEN 1 ELSE 2 END ASC`, [`${q.split(/\s+/)[0]}%`, `%${q.split(/\s+/)[0]}%`])
       .limit(10);
 
     // Search posts

@@ -575,6 +575,18 @@ a:hover {
   overflow-y: auto;
 }
 
+.contact-search-dropdown[style*="display: none"],
+.contact-search-dropdown:empty {
+  border: none;
+  box-shadow: none;
+}
+
+/* Inside modals: no shadow, lighter border */
+.contact-search-dropdown.in-modal {
+  box-shadow: none;
+  border-color: var(--color-border);
+}
+
 .contact-search-dropdown .contact-row:hover,
 .contact-search-dropdown .contact-row.active {
   background: rgba(0, 122, 255, 0.08);

@@ -53,15 +53,16 @@ attachContactSearch(inputElement, {
 - [x] `admin-tenant.js:1164` — portal contact search (setupPortalContactSearch)
 - [x] `admin-momentgarden.js:158` — select import target contact
 
-**Remaining (simple — not yet refactored):**
+- [x] `company-detail.js:238` — add employee search
+- [x] `gifts.js:292` — gift event honoree
+- [x] `gift-planning.js:404` — setupInlineContactSearch helper
+- [x] `gift-event-detail.js:673` — setupContactSearch helper
 
-**Remaining (complex — custom selection flows):**
+**Remaining (complex — custom selection flows, may not be worth refactoring):**
 - [ ] `components/dialogs.js:138` — contactSearchDialog (full modal, used as standalone)
-- [ ] `contact-detail.js:2800` — relationship add (search + type picker + create-and-link)
-- [ ] `contact-detail.js:1587` — life event linked contacts (multi-select with chips)
-- [ ] `gift-event-detail.js:673` — gift recipient (inline chips with keyboard nav)
-- [ ] `gift-planning.js:404` — gift planning contact
-- [ ] `gifts.js:292` — gift event honoree
+- [ ] `contact-detail.js:2800` — relationship add (multi-step modal: search + type picker + create-and-link)
+- [ ] `contact-detail.js:1587` — life event linked contacts (multi-select with chips, filter already linked)
+- [ ] `admin-momentgarden.js:546` — MG user mapping (per-row search with pre-filled alias)
 
 ---
 
@@ -82,6 +83,40 @@ attachContactSearch(inputElement, {
 ### Remove `users.linked_contact_id` column
 **Status:** Blocked by multi-tenant migration above
 **When:** After all code paths use `tenant_members.linked_contact_id` exclusively.
+
+### Gift module UX improvements
+**Status:** Not started
+**Why:** Several UX issues identified during testing.
+
+**Issues:**
+
+1. **New event defaults to Christmas with pre-filled title**
+   - Select should show "Choose type..." as default, not auto-select Christmas
+   - Title should only auto-fill when type is actively changed (not on initial load)
+   - Date can auto-fill on type change (e.g. Dec 24 for Christmas)
+
+2. **Birthday/wedding events don't need "Giving" tab**
+   - Birthdays: you typically receive gifts, not give many
+   - Weddings: same — one gift received from each guest
+   - Christmas: both giving and receiving many gifts
+   - Suggestion: hide "Giving" tab for birthday/wedding, show only "Receiving"
+   - Or: default to "Receiving" tab for birthday/wedding
+
+3. **Wedding events should support two honorees**
+   - Current: single honoree picker
+   - Need: second honoree field when type is "wedding"
+   - Backend: `honoree_contact_id_2` column or a junction table
+   - Display: "Erik & Marte's wedding" in header
+
+4. **Planning page dropdown z-index**
+   - File: `gift-planning.js`
+   - Three-dots dropdown on gift cards clips behind the next card
+   - Fix: add `z-index` or use `data-bs-display="static"` on dropdown
+
+5. **Planning page edit modal incomplete**
+   - Edit gift modal only shows title/notes text fields
+   - Missing: product picker, recipient/giver contact chips, status selector
+   - Should reuse the same form as "Add gift" with pre-filled values
 
 ### Standardize company search component
 **Status:** Not started

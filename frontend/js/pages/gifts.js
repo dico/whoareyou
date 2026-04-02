@@ -3,6 +3,7 @@ import { navigate } from '../app.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
 
 const EVENT_TYPES = ['christmas', 'birthday', 'wedding', 'other'];
@@ -187,7 +188,7 @@ const EVENT_DEFAULTS = {
   other: {},
 };
 
-async function showEventModal(existing = null) {
+async function showEventModal(existing = null, onSaved = null) {
   const isEdit = !!existing;
   const title = isEdit ? t('gifts.editEvent') : t('gifts.newEvent');
   const currentYear = new Date().getFullYear();
@@ -222,12 +223,16 @@ async function showEventModal(existing = null) {
               </div>
               <div class="mb-3 ${showHonoree ? '' : 'd-none'}" id="${modalId}-honoree-section">
                 <label class="form-label">${t('gifts.honoree')}</label>
-                <div class="position-relative">
-                  <input type="text" class="form-control" id="${modalId}-honoree-search" placeholder="${t('nav.searchPlaceholder')}" autocomplete="off"
-                    value="${existing?.honoree ? `${existing.honoree.first_name} ${existing.honoree.last_name || ''}` : ''}">
-                  <div class="product-picker-dropdown d-none" id="${modalId}-honoree-results"></div>
+                <div class="position-relative" id="${modalId}-honoree-search-wrap" ${existing?.honoree ? 'style="display:none"' : ''}>
+                  <input type="text" class="form-control" id="${modalId}-honoree-search" placeholder="${t('nav.searchPlaceholder')}" autocomplete="off">
                   <input type="hidden" id="${modalId}-honoree-uuid" value="${existing?.honoree?.uuid || ''}">
                 </div>
+                <div id="${modalId}-honoree-chip">${existing?.honoree ? `
+                  <span class="contact-chip">
+                    <span class="contact-chip-avatar">${existing.honoree.avatar ? `<img src="${authUrl(existing.honoree.avatar)}" alt="">` : `<span>${existing.honoree.first_name[0]}</span>`}</span>
+                    ${existing.honoree.first_name} ${existing.honoree.last_name || ''}
+                    <button type="button" class="contact-chip-remove" id="${modalId}-honoree-clear"><i class="bi bi-x"></i></button>
+                  </span>` : ''}</div>
               </div>
             </div>
             <div class="modal-footer">
@@ -249,6 +254,8 @@ async function showEventModal(existing = null) {
   const honoreeSearch = document.getElementById(`${modalId}-honoree-search`);
   const honoreeResults = document.getElementById(`${modalId}-honoree-results`);
   const honoreeUuid = document.getElementById(`${modalId}-honoree-uuid`);
+  const honoreeSearchWrap = document.getElementById(`${modalId}-honoree-search-wrap`);
+  const honoreeChip = document.getElementById(`${modalId}-honoree-chip`);
 
   // Auto-fill on type change
   typeSelect.addEventListener('change', () => {
@@ -270,6 +277,8 @@ async function showEventModal(existing = null) {
       honoreeSection.classList.add('d-none');
       honoreeUuid.value = '';
       honoreeSearch.value = '';
+      if (honoreeChip) honoreeChip.innerHTML = '';
+      if (honoreeSearchWrap) honoreeSearchWrap.style.display = '';
     } else {
       honoreeSection.classList.remove('d-none');
     }
@@ -282,30 +291,32 @@ async function showEventModal(existing = null) {
 
   // Inline honoree search (no modal-in-modal)
   let honoreeDebounce = null;
-  honoreeSearch.addEventListener('input', () => {
-    honoreeUuid.value = '';
-    clearTimeout(honoreeDebounce);
-    const q = honoreeSearch.value.trim();
-    if (q.length < 2) { honoreeResults.classList.add('d-none'); return; }
-    honoreeDebounce = setTimeout(async () => {
-      try {
-        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
-        if (!contacts.length) { honoreeResults.classList.add('d-none'); return; }
-        honoreeResults.innerHTML = contacts.map(c => contactRowHtml(c, { tag: 'div' })).join('');
-        honoreeResults.classList.remove('d-none');
-        honoreeResults.querySelectorAll('.contact-row').forEach(el => {
-          el.addEventListener('click', () => {
-            honoreeUuid.value = el.dataset.uuid;
-            honoreeSearch.value = `${el.dataset.first} ${el.dataset.last}`.trim();
-            honoreeResults.classList.add('d-none');
-          });
-        });
-      } catch { honoreeResults.classList.add('d-none'); }
-    }, 200);
-  });
+  function showHonoreeChip(c) {
+    honoreeUuid.value = c.uuid;
+    honoreeSearchWrap.style.display = 'none';
+    honoreeChip.innerHTML = `
+      <span class="contact-chip">
+        <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${c.first_name[0]}</span>`}</span>
+        ${c.first_name} ${c.last_name || ''}
+        <button type="button" class="contact-chip-remove" id="${modalId}-honoree-clear"><i class="bi bi-x"></i></button>
+      </span>`;
+    honoreeChip.querySelector(`#${modalId}-honoree-clear`).addEventListener('click', clearHonoree);
+  }
 
-  honoreeSearch.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') honoreeResults.classList.add('d-none');
+  function clearHonoree() {
+    honoreeUuid.value = '';
+    honoreeChip.innerHTML = '';
+    honoreeSearchWrap.style.display = '';
+    honoreeSearch.value = '';
+    honoreeSearch.focus();
+  }
+
+  // Wire up existing chip clear button (for edit mode)
+  document.getElementById(`${modalId}-honoree-clear`)?.addEventListener('click', clearHonoree);
+
+  attachContactSearch(honoreeSearch, {
+    limit: 6,
+    onSelect: (c) => showHonoreeChip(c),
   });
 
   // Submit
@@ -328,7 +339,8 @@ async function showEventModal(existing = null) {
         return;
       }
       modal.hide();
-      loadEventsList();
+      if (onSaved) onSaved();
+      else loadEventsList();
     } catch (err) {
       confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
     }

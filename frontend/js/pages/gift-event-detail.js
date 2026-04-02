@@ -6,6 +6,7 @@ import { createProductPicker } from '../components/product-picker.js';
 import { showEventModal, giftSubNav } from './gifts.js';
 import { authUrl } from '../utils/auth-url.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { showProductDetailModal } from '../components/product-detail-modal.js';
 
 const EVENT_ICONS = {
@@ -90,7 +91,10 @@ async function loadEventDetail(uuid) {
     // Back navigation removed — use browser back or sub-nav
 
     // Edit/delete event
-    document.getElementById('btn-edit-event').addEventListener('click', (e) => { e.preventDefault(); showEventModal(event); });
+    document.getElementById('btn-edit-event').addEventListener('click', (e) => {
+      e.preventDefault();
+      showEventModal(event, () => renderGiftEventDetail(uuid));
+    });
     document.getElementById('btn-delete-event').addEventListener('click', async (e) => {
       e.preventDefault();
       if (await confirmDialog(t('gifts.deleteEventConfirm'), { title: t('gifts.deleteEvent'), confirmText: t('common.delete') })) {
@@ -136,11 +140,11 @@ function updateEventMeta(event, gifts, direction) {
   const count = gifts.filter(g => g.order_type === direction).length;
   const parts = [
     event.event_date ? formatDate(event.event_date) : '',
-    event.honoree ? `${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}` : '',
+    event.honoree ? `<a href="/contacts/${event.honoree.uuid}" data-link class="text-muted">${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}</a>` : '',
     t('gifts.giftsCount', { count }),
   ].filter(Boolean);
   const el = document.getElementById('event-meta');
-  if (el) el.textContent = parts.join(' · ');
+  if (el) el.innerHTML = parts.join(' · ');
 }
 
 // ═══════════════════════════════════════
@@ -639,73 +643,15 @@ async function reloadGifts(eventUuid) {
  */
 function setupContactSearch(inputId, resultsId, onSelect) {
   const input = document.getElementById(inputId);
-  const results = document.getElementById(resultsId);
-  if (!input || !results) return;
-
-  let debounce = null;
-  let contactsCache = [];
-  let activeIdx = -1;
-
-  function updateHighlight() {
-    results.querySelectorAll('.contact-row').forEach((el, i) => {
-      el.classList.toggle('active', i === activeIdx);
-    });
-  }
-
-  function selectByIndex(i) {
-    const c = contactsCache[i];
-    if (!c) return;
-    onSelect({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
-    input.value = '';
-    results.classList.add('d-none');
-    activeIdx = -1;
-    contactsCache = [];
-    input.focus();
-  }
-
-  input.addEventListener('input', () => {
-    clearTimeout(debounce);
-    activeIdx = -1;
-    const q = input.value.trim();
-    if (q.length < 2) { results.classList.add('d-none'); contactsCache = []; return; }
-    debounce = setTimeout(async () => {
-      try {
-        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
-        contactsCache = contacts || [];
-        if (!contactsCache.length) { results.classList.add('d-none'); return; }
-        results.innerHTML = contactsCache.map(c => contactRowHtml(c, { tag: 'div' })).join('');
-        results.classList.remove('d-none');
-        results.querySelectorAll('.contact-row').forEach((el, i) => {
-          el.addEventListener('click', () => selectByIndex(i));
-        });
-      } catch { results.classList.add('d-none'); contactsCache = []; }
-    }, 200);
-  });
-
-  input.addEventListener('keydown', (e) => {
-    const visible = !results.classList.contains('d-none') && contactsCache.length;
-
-    if (e.key === 'Escape') {
-      results.classList.add('d-none');
-      activeIdx = -1;
-      return;
-    }
-
-    if (!visible) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      activeIdx = Math.min(activeIdx + 1, contactsCache.length - 1);
-      updateHighlight();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      activeIdx = Math.max(activeIdx - 1, 0);
-      updateHighlight();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (activeIdx >= 0) selectByIndex(activeIdx);
-      else if (contactsCache.length) selectByIndex(0);
-    }
+  if (!input) return;
+  document.getElementById(resultsId)?.remove();
+  attachContactSearch(input, {
+    limit: 6,
+    onSelect: (c) => {
+      onSelect({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
+      input.value = '';
+      input.focus();
+    },
   });
 }
 

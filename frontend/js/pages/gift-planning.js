@@ -1,6 +1,7 @@
 import { api } from '../api/client.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
 import { t } from '../utils/i18n.js';
 import { createProductPicker } from '../components/product-picker.js';
@@ -372,52 +373,15 @@ function groupHeader(contacts, count) {
 
 function setupInlineContactSearch(inputId, resultsId, onSelect) {
   const input = document.getElementById(inputId);
-  const results = document.getElementById(resultsId);
-  if (!input || !results) return;
-
-  let debounce = null;
-  let contactsCache = [];
-  let activeIdx = -1;
-
-  function updateHighlight() {
-    results.querySelectorAll('.contact-row').forEach((el, i) => el.classList.toggle('active', i === activeIdx));
-  }
-
-  function selectByIndex(i) {
-    const c = contactsCache[i];
-    if (!c) return;
-    onSelect({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
-    input.value = '';
-    results.classList.add('d-none');
-    activeIdx = -1;
-    contactsCache = [];
-    input.focus();
-  }
-
-  input.addEventListener('input', () => {
-    clearTimeout(debounce);
-    activeIdx = -1;
-    const q = input.value.trim();
-    if (q.length < 2) { results.classList.add('d-none'); contactsCache = []; return; }
-    debounce = setTimeout(async () => {
-      try {
-        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=6`);
-        contactsCache = contacts || [];
-        if (!contactsCache.length) { results.classList.add('d-none'); return; }
-        results.innerHTML = contactsCache.map(c => contactRowHtml(c, { tag: 'div' })).join('');
-        results.classList.remove('d-none');
-        results.querySelectorAll('.contact-row').forEach((el, i) => el.addEventListener('click', () => selectByIndex(i)));
-      } catch { results.classList.add('d-none'); contactsCache = []; }
-    }, 200);
-  });
-
-  input.addEventListener('keydown', (e) => {
-    const visible = !results.classList.contains('d-none') && contactsCache.length;
-    if (e.key === 'Escape') { results.classList.add('d-none'); activeIdx = -1; return; }
-    if (!visible) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, contactsCache.length - 1); updateHighlight(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); updateHighlight(); }
-    else if (e.key === 'Enter') { e.preventDefault(); selectByIndex(activeIdx >= 0 ? activeIdx : 0); }
+  if (!input) return;
+  document.getElementById(resultsId)?.remove(); // attachContactSearch creates its own dropdown
+  attachContactSearch(input, {
+    limit: 6,
+    onSelect: (c) => {
+      onSelect({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
+      input.value = '';
+      input.focus();
+    },
   });
 }
 

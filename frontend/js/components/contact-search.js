@@ -13,7 +13,7 @@ import { t } from '../utils/i18n.js';
  * @param {function} options.onSelect - Callback when contact is selected: (contact) => void
  * @param {function} options.onClear - Optional callback when input is cleared
  * @param {string} options.placeholder - Input placeholder override
- * @returns {{ destroy: function }} - Call destroy() to clean up
+ * @returns {{ destroy: function, hide: function, clear: function }}
  */
 export function attachContactSearch(input, options = {}) {
   const {
@@ -30,8 +30,9 @@ export function attachContactSearch(input, options = {}) {
   const dropdown = document.createElement('div');
   dropdown.className = 'contact-search-dropdown';
   if (floating) {
-    dropdown.style.cssText = 'position:absolute;top:100%;left:0;right:0;z-index:1050;display:none';
+    dropdown.style.cssText = 'position:absolute;top:100%;left:0;right:0;z-index:1050';
   }
+  dropdown.style.display = 'none';
 
   // Ensure parent is positioned for floating dropdown
   if (floating && input.parentElement) {
@@ -39,12 +40,18 @@ export function attachContactSearch(input, options = {}) {
     if (pos === 'static') input.parentElement.style.position = 'relative';
   }
 
+  // Detect if inside a modal (skip shadow, use simpler style)
+  const inModal = !!input.closest('.modal');
+  if (inModal) dropdown.classList.add('in-modal');
+
   input.parentElement.appendChild(dropdown);
 
   let searchTimeout;
   let activeIndex = -1;
+  let lastResults = []; // cache for re-showing on focus
 
   function showResults(contacts) {
+    lastResults = contacts;
     if (!contacts.length) {
       dropdown.innerHTML = `<div class="contact-search-empty">${t('common.noResults')}</div>`;
       dropdown.style.display = 'block';
@@ -69,7 +76,6 @@ export function attachContactSearch(input, options = {}) {
 
   function hide() {
     dropdown.style.display = 'none';
-    dropdown.innerHTML = '';
     activeIndex = -1;
   }
 
@@ -78,6 +84,7 @@ export function attachContactSearch(input, options = {}) {
     const q = input.value.trim();
     if (q.length < 2) {
       hide();
+      lastResults = [];
       if (q.length === 0 && onClear) onClear();
       return;
     }
@@ -91,9 +98,22 @@ export function attachContactSearch(input, options = {}) {
     }, 200);
   }
 
+  function handleFocus() {
+    // Re-show cached results if input still has text
+    if (input.value.trim().length >= 2 && lastResults.length && dropdown.style.display === 'none') {
+      showResults(lastResults);
+    }
+  }
+
   function handleKeydown(e) {
     if (!keyboard) return;
     const items = dropdown.querySelectorAll('.contact-search-item');
+
+    if (e.key === 'Escape') {
+      hide();
+      return;
+    }
+
     if (!items.length) return;
 
     if (e.key === 'ArrowDown') {
@@ -107,9 +127,6 @@ export function attachContactSearch(input, options = {}) {
     } else if (e.key === 'Enter' && activeIndex >= 0) {
       e.preventDefault();
       items[activeIndex]?.dispatchEvent(new MouseEvent('mousedown'));
-    } else if (e.key === 'Escape') {
-      hide();
-      input.blur();
     }
   }
 
@@ -128,12 +145,14 @@ export function attachContactSearch(input, options = {}) {
   }
 
   input.addEventListener('input', handleInput);
+  input.addEventListener('focus', handleFocus);
   input.addEventListener('keydown', handleKeydown);
   input.addEventListener('blur', handleBlur);
 
   return {
     destroy() {
       input.removeEventListener('input', handleInput);
+      input.removeEventListener('focus', handleFocus);
       input.removeEventListener('keydown', handleKeydown);
       input.removeEventListener('blur', handleBlur);
       clearTimeout(searchTimeout);
@@ -142,6 +161,7 @@ export function attachContactSearch(input, options = {}) {
     hide,
     clear() {
       input.value = '';
+      lastResults = [];
       hide();
     },
   };

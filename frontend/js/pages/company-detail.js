@@ -2,6 +2,7 @@ import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { contactRowHtml } from '../components/contact-row.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
 
@@ -227,31 +228,17 @@ async function showAddEmployeeDialog(companyUuid, onDone) {
 
   modalEl.addEventListener('shown.bs.modal', () => searchInput.focus());
 
-  // Search
-  let timeout;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(timeout);
-    const q = searchInput.value.trim();
-    if (q.length < 1) { resultsEl.innerHTML = ''; return; }
-    timeout = setTimeout(async () => {
-      try {
-        const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=8`);
-        resultsEl.innerHTML = data.contacts.map((c, i) =>
-          contactRowHtml(c, { tag: 'div', active: i === 0, meta: c.nickname ? `"${c.nickname}"` : '' })
-        ).join('') || `<p class="text-muted small p-2">${t('common.noResults')}</p>`;
-
-        resultsEl.querySelectorAll('.contact-row').forEach(item => {
-          item.addEventListener('click', () => {
-            selectedContact = { uuid: item.dataset.uuid, first_name: item.dataset.first, last_name: item.dataset.last };
-            document.getElementById(`${id}-name`).textContent = `${selectedContact.first_name} ${selectedContact.last_name}`;
-            document.getElementById(`${id}-selected`).classList.remove('d-none');
-            document.getElementById(`${id}-footer`).classList.remove('d-none');
-            document.getElementById(`${id}-search-area`).classList.add('d-none');
-            document.getElementById(`${id}-title`).focus();
-          });
-        });
-      } catch {}
-    }, 200);
+  attachContactSearch(searchInput, {
+    limit: 8,
+    floating: false, // results area is already in modal
+    onSelect: (c) => {
+      selectedContact = { uuid: c.uuid, first_name: c.first_name, last_name: c.last_name };
+      document.getElementById(`${id}-name`).textContent = `${c.first_name} ${c.last_name || ''}`;
+      document.getElementById(`${id}-selected`).classList.remove('d-none');
+      document.getElementById(`${id}-footer`).classList.remove('d-none');
+      document.getElementById(`${id}-search-area`).classList.add('d-none');
+      document.getElementById(`${id}-title`).focus();
+    },
   });
 
   // Clear

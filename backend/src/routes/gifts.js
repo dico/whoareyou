@@ -353,7 +353,8 @@ router.get('/events', async (req, res, next) => {
         'gift_events.uuid', 'gift_events.name', 'gift_events.event_type',
         'gift_events.event_date', 'gift_events.notes', 'gift_events.created_at',
         'contacts.uuid as honoree_uuid', 'contacts.first_name as honoree_first_name',
-        'contacts.last_name as honoree_last_name'
+        'contacts.last_name as honoree_last_name',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as honoree_avatar`)
       )
       .orderBy('gift_events.event_date', 'desc');
 
@@ -395,7 +396,8 @@ router.get('/events/:uuid', async (req, res, next) => {
       .select(
         'gift_events.*',
         'contacts.uuid as honoree_uuid', 'contacts.first_name as honoree_first_name',
-        'contacts.last_name as honoree_last_name'
+        'contacts.last_name as honoree_last_name',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as honoree_avatar`)
       )
       .first();
 
@@ -457,7 +459,7 @@ router.get('/events/:uuid', async (req, res, next) => {
       event: {
         uuid: event.uuid, name: event.name, event_type: event.event_type,
         event_date: event.event_date, notes: event.notes,
-        honoree: event.honoree_uuid ? { uuid: event.honoree_uuid, first_name: event.honoree_first_name, last_name: event.honoree_last_name } : null,
+        honoree: event.honoree_uuid ? { uuid: event.honoree_uuid, first_name: event.honoree_first_name, last_name: event.honoree_last_name, avatar: event.honoree_avatar || null } : null,
       },
       gifts,
     });
