@@ -122,9 +122,17 @@ attachContactSearch(inputElement, {
    - Missing: product picker, recipient/giver contact chips, status selector
    - Should reuse the same form as "Add gift" with pre-filled values
 
-### CRITICAL: Relationship direction convention is ambiguous
-**Status:** Must resolve before further relationship work
-**Why:** The meaning of `contact_id` → `related_contact_id` with `type.name` is inconsistent:
+### Relationship direction convention (RESOLVED)
+**Status:** Resolved — code is correct, data was manually corrupted
+**Convention:** `contact_id` IS `type.name` OF `related_contact_id`
+- `contact_id=Robert, related=Ailo, type=parent` → "Robert is parent of Ailo"
+- Forward query on Robert's profile: shows Ailo with `type.name=parent` (Robert is parent of Ailo)
+- Inverse query on Ailo's profile: shows Robert with `type.inverse_name=child` (Ailo is child of Robert)
+**Display:** Shows what I AM to the other person, not what they are to me. This is the correct convention.
+**Root cause of bug:** Manual editing via swap button in UI reversed some relationships.
+
+**Previous analysis (kept for reference):**
+The meaning of `contact_id` → `related_contact_id` with `type.name` was thought to be inconsistent:
 
 The DB convention is: `contact_id` HAS the relationship `type.name` WITH `related_contact_id`.
 - `contact_id=Robert, related_contact_id=Ailo, type=parent` → "Robert is parent of Ailo"
