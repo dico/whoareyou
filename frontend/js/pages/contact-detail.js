@@ -1732,8 +1732,20 @@ function renderGroupedRelationships(relationships, { hasAddress = false } = {}) 
   if (extended.length) {
     html += `<div class="rel-extended ${showExpanded ? '' : 'd-none'}" id="rel-extended-section">`;
     if (familyExtended.length) {
-      html += `<div class="relationship-group-label mt-2">${t('relationships.extended')}</div>`;
-      html += familyExtended.map(renderRow).join('');
+      // Group extended family by type, ordered
+      const extTypePriority = { 'uncle_aunt': 0, 'nephew_niece': 1, 'cousin': 2, 'in-law': 3 };
+      const extGroups = new Map();
+      for (const r of familyExtended) {
+        const type = r.relationship;
+        if (!extGroups.has(type)) extGroups.set(type, []);
+        extGroups.get(type).push(r);
+      }
+      const sortedGroups = [...extGroups.entries()].sort((a, b) => (extTypePriority[a[0]] ?? 9) - (extTypePriority[b[0]] ?? 9));
+      for (const [type, members] of sortedGroups) {
+        const label = t(`relationships.types.${type}`);
+        html += `<div class="relationship-group-label mt-2">${label}</div>`;
+        html += members.map(renderRow).join('');
+      }
     }
     if (social.length) {
       html += `<div class="relationship-group-label mt-2">${t('relationships.categories.social')}</div>`;
@@ -1942,12 +1954,13 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
         reachable.clear();
         reachable.add(rootId);
 
-        // Helper: directional BFS
-        const bfsDirectional = (startId, isUpward) => {
+        // Helper: directional BFS with depth limit
+        const bfsDirectional = (startId, isUpward, maxDepth) => {
           const visited = new Set([startId]);
-          const queue = [startId];
+          const queue = [{ id: startId, depth: 0 }];
           while (queue.length) {
-            const cid = queue.shift();
+            const { id: cid, depth } = queue.shift();
+            if (depth >= maxDepth) continue;
             for (const e of rawEdges) {
               let otherId, ok = false;
               if (e.from === cid) {
@@ -1960,14 +1973,14 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
               if (ok && !visited.has(otherId)) {
                 visited.add(otherId);
                 reachable.add(otherId);
-                queue.push(otherId);
+                queue.push({ id: otherId, depth: depth + 1 });
               }
             }
           }
         };
 
-        bfsDirectional(rootId, true);  // ancestors
-        bfsDirectional(rootId, false); // descendants
+        bfsDirectional(rootId, true, treeDepth);  // ancestors
+        bfsDirectional(rootId, false, treeDepth); // descendants
 
         // Add partners of reachable nodes (but don't traverse their families)
         for (const e of rawEdges) {
