@@ -81,6 +81,9 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 | `sessions` | Active login sessions with device/IP tracking |
 | `passkeys` | WebAuthn credentials |
 | `system_settings` | Key-value system config (SMTP, IP security, etc.) |
+| `tenant_members` | User ↔ tenant membership (multi-tenant), `linked_contact_id` per tenant |
+| `post_link_previews` | Cached og:image, og:title, og:description for URL previews |
+| `dismissed_suggestions` | Dismissed relationship suggestions (per tenant) |
 | `audit_log` | Sensitive operation logging |
 | `ip_geo_cache` | IP → country cache (30-day TTL) |
 
@@ -110,7 +113,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 50 migrations
+- Currently 63 migrations
 
 ### Creating a New Migration
 ```bash

@@ -70,6 +70,23 @@ System Admin → Email tab → configure host, port, user, password, from addres
 - `services/email.js` — `sendEmail()`, `sendLoginNotification()`, `verifySmtp()`
 - `utils/settings.js` — `getSetting('smtp_*')` reads from `system_settings` table
 
+## Brønnøysundregistrene (Brreg)
+
+Norwegian Business Register lookup for auto-populating company data.
+
+### How It Works
+1. On company detail page, enter org number and click "Brreg lookup"
+2. Backend calls `data.brreg.no/enhetsregisteret/api/enheter/{orgNumber}`
+3. Returns: company name, address, org form, industry codes
+4. Auto-fills company fields (user confirms before saving)
+
+### Endpoint
+- `GET /api/companies/brreg/:orgNumber` — proxy to Brreg API, returns formatted company data
+
+### Files
+- `routes/companies.js` — Brreg lookup endpoint with SSRF protection
+- `frontend/js/pages/company-detail.js` — UI button and auto-fill logic
+
 ## Monica CRM Import
 
 One-time migration script for users coming from Monica.

@@ -37,6 +37,9 @@ All endpoints require authentication unless noted. Responses are JSON.
 | PUT | `/members/:uuid` | Admin | Update member |
 | GET | `/tenant/security` | Admin | Get trusted IP ranges |
 | PUT | `/tenant/security` | Admin | Set trusted IP ranges |
+| GET | `/my-tenants` | Yes | List user's tenant memberships |
+| POST | `/switch-tenant` | Yes | Switch active tenant |
+| PUT | `/tenant/name` | Admin | Rename tenant |
 
 ## Contacts (`/api/contacts`)
 
@@ -53,6 +56,8 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/:uuid/fields` | Add contact field |
 | PUT | `/:uuid/fields/:id` | Update field |
 | DELETE | `/:uuid/fields/:id` | Delete field |
+| GET | `/tools/duplicates` | Find potential duplicate contacts |
+| POST | `/tools/merge` | Merge two contacts |
 
 ## Posts (`/api/posts`)
 
@@ -85,8 +90,13 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/` | Create relationship |
 | PUT | `/:id` | Update relationship |
 | DELETE | `/:id` | Delete relationship |
-| GET | `/tree/:uuid` | Family tree data (depth, categories) |
-| GET | `/suggestions` | Auto-suggested missing relationships |
+| GET | `/tree/:uuid` | Relationship graph (all types, hop-based depth) |
+| GET | `/family-tree/:uuid` | Generation-based family tree (parent/child only) |
+| GET | `/suggestions` | Auto-suggested missing relationships (9 rules) |
+| POST | `/suggestions/dismiss` | Dismiss a suggestion |
+| POST | `/suggestions/restore` | Restore dismissed suggestion |
+| GET | `/suggestions/dismissed` | List dismissed suggestions |
+| GET | `/consistency` | Relationship consistency report (age, direction, duplicates) |
 
 ## Other Modules
 
@@ -97,7 +107,7 @@ CRUD, geocoding, map data, merge duplicates, move in/out history.
 CRUD, batch assign/remove contacts, category (group/interest).
 
 ### Companies (`/api/companies`)
-CRUD, employee management with titles and dates.
+CRUD, employee management with titles and dates. Brreg lookup (`GET /brreg/:orgNumber`).
 
 ### Life Events (`/api/life-events`)
 CRUD, 10 types, annual reminder opt-in, linked contacts.

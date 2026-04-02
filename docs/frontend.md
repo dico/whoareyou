@@ -1,6 +1,6 @@
 # Frontend Guide
 
-## Components (11 files)
+## Components (12 files)
 
 Reusable UI building blocks. Check here before creating new patterns.
 
@@ -17,9 +17,10 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `attachMention()` | `mention.js` | @-mention autocomplete for textareas. |
 | `createProductPicker()` | `product-picker.js` | Inline product search/create for gift forms. URL-paste auto-fetch. |
 | `showProductDetailModal()` | `product-detail-modal.js` | Product detail modal with links, image, gift history. |
+| `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 
-## Pages (24 files)
+## Pages (26 files)
 
 Each page exports a `render*()` function called by the router in `app.js`.
 
@@ -30,6 +31,7 @@ Each page exports a `render*()` function called by the router in `app.js`.
 | Contacts | `/contacts` | `renderContacts()` |
 | Contact Detail | `/contacts/:uuid` | `renderContactDetail(uuid)` |
 | Map | `/map` | `renderMap()` |
+| Address Detail | `/contacts/:uuid/addresses/:id` | `renderAddressDetail(uuid, id)` |
 | Companies | `/companies` | `renderCompanies()` |
 | Company Detail | `/companies/:uuid` | `renderCompanyDetail(uuid)` |
 
@@ -48,13 +50,16 @@ Each page exports a `render*()` function called by the router in `app.js`.
 |------|-------|----------|
 | Settings | `/settings` | `renderSettings()` |
 | Profile | `/profile` | `renderProfile()` — 3 tabs: Account, Security, Sessions |
-| Tenant Admin | `/admin/tenant` | `renderTenantAdmin()` — 2 tabs: Members, Security |
+| Tenant Admin | `/admin/tenant` | `renderTenantAdmin()` — Members, invites, contact linking |
 | System Admin | `/admin/system` | `renderSystemAdmin()` — 4 tabs: Tenants, Settings, Email, IP Security |
 | Integrations | `/admin/integrations` | `renderIntegrations()` |
 | MomentGarden | `/admin/integrations/momentgarden` | `renderMomentGarden()` |
 | Labels | `/admin/labels` | `renderLabelAdmin()` |
 | Addresses | `/admin/addresses` | `renderAddressMerge()` |
 | Relationships | `/admin/relationships` | `renderRelationshipSuggestions()` |
+| Duplicates | `/admin/duplicates` | `renderDuplicates()` |
+| Consistency | `/admin/consistency` | `renderConsistencyReport()` |
+| Security | `/admin/security` | `renderSecurityAdmin()` |
 
 ### Portal Pages
 | Page | Route | Function |

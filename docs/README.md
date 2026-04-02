@@ -54,22 +54,22 @@ whoareyou/
 │       ├── index.js              # Express app entry point
 │       ├── config/               # App configuration
 │       ├── middleware/            # Auth, tenant scope, portal auth
-│       ├── routes/               # 17 route modules
+│       ├── routes/               # 16 route modules
 │       ├── services/             # Email, image, geocoding, geolocation
 │       ├── utils/                # Errors, validation, sessions, IP, settings
-│       └── migrations/           # 50 Knex migrations
+│       └── migrations/           # 63 Knex migrations
 ├── frontend/
 │   ├── index.html                # SPA entry point
 │   ├── portal.html               # Portal entry point (planned)
 │   ├── css/
 │   │   ├── variables.css         # CSS custom properties (theme)
 │   │   ├── base.css              # Base styles + utility classes
-│   │   └── components/           # Per-feature CSS (10 files)
+│   │   └── components/           # Per-feature CSS (9 files)
 │   ├── js/
 │   │   ├── app.js                # Router + state + init
 │   │   ├── api/client.js         # API client (fetch wrapper)
-│   │   ├── components/           # Reusable UI components (11 files)
-│   │   ├── pages/                # Page renderers (24 files)
+│   │   ├── components/           # Reusable UI components (12 files)
+│   │   ├── pages/                # Page renderers (26 files)
 │   │   └── utils/                # i18n, auth-url, drop-zone, visibility
 │   ├── locales/                  # en.json, nb.json
 │   └── img/                      # Logo, icons, flags
