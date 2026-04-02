@@ -102,6 +102,7 @@ router.get('/suggestions', async (req, res, next) => {
     const suggestionSet = new Set();
 
     function addSuggestion(id1, id2, suggestedType, reason) {
+      if (id1 === id2) return;
       const key = `${Math.min(id1, id2)}-${Math.max(id1, id2)}`;
       if (existingSet.has(key) || suggestionSet.has(key)) return;
       const c1 = contactMap.get(id1);
@@ -142,14 +143,19 @@ router.get('/suggestions', async (req, res, next) => {
       }
 
       // Rule 3: Partner + children → partner is also parent of children
+      // But only if child doesn't already have 2 parents
       for (const partnerId of partners) {
         for (const childId of children) {
-          // Check if partner already has parent relationship with child
           const partnerRels = adj.get(partnerId) || [];
           const alreadyParent = partnerRels.some(r => r.otherId === childId && (r.type === 'child' || r.type === 'parent'));
-          if (!alreadyParent) {
-            addSuggestion(partnerId, childId, 'parent', 'partner_children');
-          }
+          if (alreadyParent) continue;
+
+          // Count how many parents the child already has
+          const childRels = adj.get(childId) || [];
+          const existingParents = childRels.filter(r => r.type === 'parent').length;
+          if (existingParents >= 2) continue;
+
+          addSuggestion(partnerId, childId, 'parent', 'partner_children');
         }
       }
 
