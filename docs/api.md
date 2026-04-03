@@ -56,8 +56,11 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/:uuid/fields` | Add contact field |
 | PUT | `/:uuid/fields/:id` | Update field |
 | DELETE | `/:uuid/fields/:id` | Delete field |
-| GET | `/tools/duplicates` | Find potential duplicate contacts |
+| GET | `/tools/duplicates` | Find potential duplicate contacts (filters dismissed) |
 | POST | `/tools/merge` | Merge two contacts |
+| POST | `/tools/dismiss-duplicate` | Dismiss a duplicate pair |
+| POST | `/tools/restore-duplicate` | Restore a dismissed duplicate |
+| GET | `/tools/dismissed-duplicates` | List dismissed duplicate pairs |
 
 ## Posts (`/api/posts`)
 

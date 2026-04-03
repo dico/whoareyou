@@ -84,6 +84,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 | `tenant_members` | User ↔ tenant membership (multi-tenant), `linked_contact_id` per tenant |
 | `post_link_previews` | Cached og:image, og:title, og:description for URL previews |
 | `dismissed_suggestions` | Dismissed relationship suggestions (per tenant) |
+| `dismissed_duplicates` | Dismissed duplicate contact pairs (per tenant) |
 | `audit_log` | Sensitive operation logging |
 | `ip_geo_cache` | IP → country cache (30-day TTL) |
 
@@ -113,7 +114,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 63 migrations
+- Currently 64 migrations
 
 ### Creating a New Migration
 ```bash

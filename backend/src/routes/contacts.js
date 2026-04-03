@@ -776,9 +776,91 @@ router.get('/tools/duplicates', async (req, res, next) => {
       }
     }
 
+    // Filter out dismissed duplicates
+    const dismissed = await db('dismissed_duplicates')
+      .where({ tenant_id: req.tenantId })
+      .select('contact1_id', 'contact2_id');
+    const dismissedSet = new Set(dismissed.map(d =>
+      `${Math.min(d.contact1_id, d.contact2_id)}-${Math.max(d.contact1_id, d.contact2_id)}`
+    ));
+
+    const contactIdByUuid = new Map(contacts.map(c => [c.uuid, c.id]));
+    const filtered = duplicates.filter(d => {
+      const id1 = contactIdByUuid.get(d.contact1.uuid);
+      const id2 = contactIdByUuid.get(d.contact2.uuid);
+      if (!id1 || !id2) return true;
+      return !dismissedSet.has(`${Math.min(id1, id2)}-${Math.max(id1, id2)}`);
+    });
+
     // Sort by score descending
-    duplicates.sort((a, b) => b.score - a.score);
-    res.json({ duplicates });
+    filtered.sort((a, b) => b.score - a.score);
+    res.json({ duplicates: filtered });
+  } catch (err) { next(err); }
+});
+
+// POST /api/contacts/tools/dismiss-duplicate — dismiss a duplicate pair
+router.post('/tools/dismiss-duplicate', async (req, res, next) => {
+  try {
+    const { contact1_uuid, contact2_uuid } = req.body;
+    if (!contact1_uuid || !contact2_uuid) throw new AppError('contact1_uuid and contact2_uuid required', 400);
+
+    const c1 = await db('contacts').where({ uuid: contact1_uuid, tenant_id: req.tenantId }).first();
+    const c2 = await db('contacts').where({ uuid: contact2_uuid, tenant_id: req.tenantId }).first();
+    if (!c1 || !c2) throw new AppError('Contact not found', 404);
+
+    const minId = Math.min(c1.id, c2.id);
+    const maxId = Math.max(c1.id, c2.id);
+
+    const existing = await db('dismissed_duplicates')
+      .where({ tenant_id: req.tenantId, contact1_id: minId, contact2_id: maxId })
+      .first();
+
+    if (!existing) {
+      await db('dismissed_duplicates').insert({
+        tenant_id: req.tenantId,
+        contact1_id: minId,
+        contact2_id: maxId,
+        dismissed_by: req.user.id,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/contacts/tools/restore-duplicate — restore a dismissed duplicate
+router.post('/tools/restore-duplicate', async (req, res, next) => {
+  try {
+    const { contact1_uuid, contact2_uuid } = req.body;
+    const c1 = await db('contacts').where({ uuid: contact1_uuid, tenant_id: req.tenantId }).first();
+    const c2 = await db('contacts').where({ uuid: contact2_uuid, tenant_id: req.tenantId }).first();
+    if (!c1 || !c2) throw new AppError('Contact not found', 404);
+
+    await db('dismissed_duplicates')
+      .where({ tenant_id: req.tenantId, contact1_id: Math.min(c1.id, c2.id), contact2_id: Math.max(c1.id, c2.id) })
+      .del();
+
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/contacts/tools/dismissed-duplicates — list dismissed duplicates
+router.get('/tools/dismissed-duplicates', async (req, res, next) => {
+  try {
+    const dismissed = await db('dismissed_duplicates')
+      .where({ 'dismissed_duplicates.tenant_id': req.tenantId })
+      .join('contacts as c1', 'dismissed_duplicates.contact1_id', 'c1.id')
+      .join('contacts as c2', 'dismissed_duplicates.contact2_id', 'c2.id')
+      .select(
+        'c1.uuid as contact1_uuid', 'c1.first_name as contact1_first', 'c1.last_name as contact1_last',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = c1.id AND cp.is_primary = true LIMIT 1) as contact1_avatar`),
+        'c2.uuid as contact2_uuid', 'c2.first_name as contact2_first', 'c2.last_name as contact2_last',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = c2.id AND cp.is_primary = true LIMIT 1) as contact2_avatar`),
+        'dismissed_duplicates.created_at'
+      )
+      .orderBy('dismissed_duplicates.created_at', 'desc');
+
+    res.json({ dismissed });
   } catch (err) { next(err); }
 });
 

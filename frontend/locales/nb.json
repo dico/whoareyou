@@ -730,6 +730,10 @@
     "merge": "Slå sammen",
     "mergeConfirm": "Slå sammen disse kontaktene? Innlegg, relasjoner, bilder og all data fra den fjernede kontakten flyttes til den beholdte.",
     "notDuplicate": "Ikke duplikat",
+    "showDismissed": "Vis avviste",
+    "dismissed": "Avviste duplikater",
+    "noDismissed": "Ingen avviste duplikater.",
+    "restore": "Gjenopprett",
     "reason": {
       "exact_name": "likt navn",
       "first_name": "likt fornavn",

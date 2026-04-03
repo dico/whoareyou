@@ -730,6 +730,10 @@
     "merge": "Merge",
     "mergeConfirm": "Merge these contacts? Posts, relationships, photos, and all data from the removed contact will be moved to the kept one.",
     "notDuplicate": "Not a duplicate",
+    "showDismissed": "Show dismissed",
+    "dismissed": "Dismissed duplicates",
+    "noDismissed": "No dismissed duplicates.",
+    "restore": "Restore",
     "reason": {
       "exact_name": "exact name",
       "first_name": "same first name",
