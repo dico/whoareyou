@@ -22,10 +22,6 @@
 **Status:** Partially done
 **Why:** `tenant_members.linked_contact_id` exists and utility function created, but some code paths still reference `users.linked_contact_id` as fallback. Remove column after all code paths migrated.
 
-### Relationship edit: admin-relationships direction detection
-**Status:** Partially done
-**Why:** The relationship suggestion page (`admin-relationships.js`) creates relationships but doesn't always correctly determine direction. Should use the same inverse-aware logic as the edit dialog in contact-detail.js.
-
 ---
 
 ## Low Priority

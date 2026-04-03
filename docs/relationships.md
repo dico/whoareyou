@@ -71,7 +71,13 @@ Suggestions are generated on-the-fly by `GET /api/relationships/suggestions`. Th
 contact1 is suggested_type of contact2
 ```
 
-When accepted, it creates: `contact_id=contact1, related_contact_id=contact2, type=suggested_type`.
+**Important:** The suggestion format ("contact1 IS type OF contact2") is the opposite direction of the storage convention ("related IS type OF contact"). When accepted, the frontend swaps them:
+
+```
+contact_id = contact2, related_contact_id = contact1, type = suggested_type
+```
+
+This ensures `related_contact_id` (contact1) IS `type` OF `contact_id` (contact2), matching the storage convention.
 
 ### Rules (9 total)
 1. Children of same parent → siblings

@@ -100,9 +100,12 @@ async function loadSuggestions() {
         const s = suggestionsData[parseInt(btn.dataset.index)];
         if (!s || !s.type_id) return;
         try {
+          // Suggestion format: "contact1 IS type OF contact2"
+          // Storage convention: "related IS type OF contact"
+          // So: related=contact1, contact=contact2
           await api.post('/relationships', {
-            contact_uuid: s.contact1.uuid,
-            related_contact_uuid: s.contact2.uuid,
+            contact_uuid: s.contact2.uuid,
+            related_contact_uuid: s.contact1.uuid,
             relationship_type_id: s.type_id,
           });
           btn.closest('.suggestion-card').remove();
