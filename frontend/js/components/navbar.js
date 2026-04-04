@@ -268,23 +268,7 @@ export function renderNavbar() {
         ).join('');
       }
 
-      // Posts
-      if (data.posts.length) {
-        html += `<div class="search-section-label">${t('nav.timeline')}</div>`;
-        html += data.posts.map(p => `
-          <a class="contact-row search-post-result" href="${p.about ? `/contacts/${p.about.uuid}?post=${p.uuid}` : `/timeline?post=${p.uuid}`}" data-link data-post-uuid="${p.uuid}">
-            <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
-              <i class="bi bi-journal-text" style="font-size:0.8rem"></i>
-            </div>
-            <div class="contact-row-info">
-              <div class="contact-row-name">${escapeSearchHtml(p.body)}</div>
-              <div class="contact-row-meta">${p.about ? p.about.first_name + ' ' + (p.about.last_name || '') : ''}</div>
-            </div>
-          </a>
-        `).join('');
-      }
-
-      // Companies
+      // Groups
       if (data.companies?.length) {
         html += `<div class="search-section-label">${t('nav.companies')}</div>`;
         const typeIcon = { company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people', team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection' };
@@ -296,6 +280,22 @@ export function renderNavbar() {
             <div class="contact-row-info">
               <div class="contact-row-name">${escapeSearchHtml(c.name)}</div>
               ${c.industry ? `<div class="contact-row-meta">${escapeSearchHtml(c.industry)}</div>` : ''}
+            </div>
+          </a>
+        `).join('');
+      }
+
+      // Posts
+      if (data.posts.length) {
+        html += `<div class="search-section-label">${t('nav.timeline')}</div>`;
+        html += data.posts.map(p => `
+          <a class="contact-row search-post-result" href="${p.about ? `/contacts/${p.about.uuid}?post=${p.uuid}` : `/timeline?post=${p.uuid}`}" data-link data-post-uuid="${p.uuid}">
+            <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
+              <i class="bi bi-journal-text" style="font-size:0.8rem"></i>
+            </div>
+            <div class="contact-row-info">
+              <div class="contact-row-name">${escapeSearchHtml(p.body)}</div>
+              <div class="contact-row-meta">${p.about ? p.about.first_name + ' ' + (p.about.last_name || '') : ''}</div>
             </div>
           </a>
         `).join('');

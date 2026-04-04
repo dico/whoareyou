@@ -26,6 +26,7 @@ export async function renderCompanies() {
           <option value="">${t('groups.allTypes')}</option>
           ${TYPES.map(tp => `<option value="${tp}" ${localStorage.getItem('groups.typeFilter') === tp ? 'selected' : ''}>${t('groups.types.' + tp)}</option>`).join('')}
         </select>
+        <input type="text" class="form-control form-control-sm" id="group-search" placeholder="${t('common.search')}" style="max-width:250px">
       </div>
       <div id="companies-list">
         <div class="loading">${t('app.loading')}</div>
@@ -78,6 +79,13 @@ export async function renderCompanies() {
 
   await loadCompanies();
 
+  // Search (debounced)
+  let searchTimeout;
+  document.getElementById('group-search').addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => loadCompanies(), 300);
+  });
+
   document.getElementById('type-filter').addEventListener('change', (e) => {
     if (e.target.value) localStorage.setItem('groups.typeFilter', e.target.value);
     else localStorage.removeItem('groups.typeFilter');
@@ -115,8 +123,12 @@ async function loadCompanies() {
 
   try {
     const typeFilter = document.getElementById('type-filter')?.value;
-    const params = typeFilter ? `?type=${typeFilter}` : '';
-    const { companies } = await api.get(`/companies${params}`);
+    const searchFilter = document.getElementById('group-search')?.value.trim();
+    const params = new URLSearchParams();
+    if (typeFilter) params.set('type', typeFilter);
+    if (searchFilter) params.set('search', searchFilter);
+    const qs = params.toString() ? `?${params}` : '';
+    const { companies } = await api.get(`/companies${qs}`);
 
     if (!companies.length) {
       el.innerHTML = `
