@@ -12,7 +12,7 @@
     "settings": "Innstillinger",
     "systemAdmin": "Systemadmin",
     "logout": "Logg ut",
-    "companies": "Bedrifter",
+    "companies": "Grupper",
     "gifts": "Gaver",
     "profile": "Profil",
     "myProfile": "Min profil",
@@ -584,6 +584,39 @@
     "createNew": "Opprett \"{name}\"",
     "removeConfirm": "Fjerne denne bedrift-koblingen?"
   },
+  "groups": {
+    "title": "Grupper",
+    "newGroup": "Ny gruppe",
+    "type": "Type",
+    "types": {
+      "company": "Bedrift",
+      "school": "Skole",
+      "club": "Klubb",
+      "team": "Lag",
+      "association": "Forening",
+      "class": "Klasse",
+      "other": "Annet"
+    },
+    "description": "Beskrivelse",
+    "descriptionPlaceholder": "Beskriv denne gruppen...",
+    "parentGroup": "Del av",
+    "childGroups": "Undergrupper",
+    "members": "Medlemmer",
+    "noMembers": "Ingen medlemmer",
+    "previousMembers": "Tidligere medlemmer",
+    "addMember": "Legg til medlem",
+    "endMembership": "Avslutt medlemskap",
+    "photos": "Bilder",
+    "uploadPhoto": "Last opp bilde",
+    "timeline": "Tidslinje",
+    "allTypes": "Alle typer",
+    "filterByType": "Filtrer etter type",
+    "importFromLabel": "Konverter til gruppe",
+    "importConfirm": "Konverter merkelapp \"{name}\" til en gruppe? Dette oppretter en gruppe og legger til {count} kontakter som medlemmer.",
+    "importDeleteLabel": "Slett merkelapp etter konvertering",
+    "importType": "Gruppetype",
+    "importSuccess": "Gruppe opprettet med {count} medlemmer"
+  },
   "reminders": {
     "title": "Påminnelser",
     "placeholder": "Hva skal huskes...",
@@ -618,7 +651,9 @@
     "open": "Åpne",
     "done": "Ferdig",
     "and": "og",
-    "showLess": "Vis mindre"
+    "showLess": "Vis mindre",
+    "info": "Info",
+    "noInfo": "Ingen info lagt til enn\u00e5. Klikk rediger for \u00e5 legge til detaljer."
   },
   "time": {
     "justNow": "akkurat nå",

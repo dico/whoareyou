@@ -65,6 +65,17 @@ router.get('/', async (req, res, next) => {
         .where('labels.name', label);
     }
 
+    // Filter by company/group
+    if (req.query.company) {
+      const companyRow = await db('companies').where({ uuid: req.query.company, tenant_id: req.tenantId }).first();
+      if (companyRow) {
+        query = query
+          .whereIn('contacts.id',
+            db('contact_companies').where({ company_id: companyRow.id }).select('contact_id')
+          );
+      }
+    }
+
     // Count total
     const [{ count }] = await query.clone().count('contacts.id as count');
 
@@ -240,7 +251,7 @@ router.get('/:uuid', async (req, res, next) => {
           .where({ 'contact_companies.contact_id': contact.id, 'contact_companies.tenant_id': req.tenantId })
           .select(
             'contact_companies.id as link_id', 'contact_companies.title', 'contact_companies.start_date', 'contact_companies.end_date',
-            'companies.uuid as company_uuid', 'companies.name as company_name', 'companies.logo_path as company_logo'
+            'companies.uuid as company_uuid', 'companies.name as company_name', 'companies.logo_path as company_logo', 'companies.type as company_type'
           )
           .orderByRaw('contact_companies.end_date IS NOT NULL, contact_companies.start_date DESC'),
       },
@@ -479,7 +490,7 @@ router.get('/search/global', async (req, res, next) => {
         this.where('companies.name', 'like', like)
           .orWhere('companies.industry', 'like', like);
       })
-      .select('companies.uuid', 'companies.name', 'companies.industry')
+      .select('companies.uuid', 'companies.name', 'companies.industry', 'companies.type', 'companies.logo_path')
       .limit(5);
 
     res.json({ contacts, posts: postResults, companies });

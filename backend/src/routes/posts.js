@@ -10,7 +10,7 @@ const router = Router();
 // GET /api/posts — global timeline
 router.get('/', async (req, res, next) => {
   try {
-    const { contact, page, limit: rawLimit } = req.query;
+    const { contact, company, page, limit: rawLimit } = req.query;
     const limit = Math.min(parseInt(rawLimit) || 20, 100);
     const offset = ((parseInt(page) || 1) - 1) * limit;
 
@@ -21,6 +21,14 @@ router.get('/', async (req, res, next) => {
         this.whereIn('posts.visibility', ['shared', 'family'])
           .orWhere('posts.created_by', req.user.id);
       });
+
+    // Filter by company/group
+    if (company) {
+      const companyRow = await db('companies').where({ uuid: company, tenant_id: req.tenantId }).first();
+      if (companyRow) {
+        query = query.where('posts.company_id', companyRow.id);
+      }
+    }
 
     // Filter by tagged contact OR profile post for contact
     if (contact) {
@@ -40,7 +48,7 @@ router.get('/', async (req, res, next) => {
     const posts = await query.clone()
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
-        'posts.contact_id', 'posts.created_at', 'posts.updated_at',
+        'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
         'posts.visibility', 'posts.portal_guest_id', 'posts.created_by'
       )
       .groupBy('posts.id')
@@ -223,8 +231,18 @@ router.get('/', async (req, res, next) => {
       }
     }
 
+    // Fetch company info for group posts
+    const companyIds = [...new Set(posts.map(p => p.company_id).filter(Boolean))];
+    const companyMap = new Map();
+    if (companyIds.length) {
+      const companies = await db('companies').whereIn('id', companyIds)
+        .select('id', 'uuid', 'name', 'type', 'logo_path');
+      for (const c of companies) companyMap.set(c.id, c);
+    }
+
     const result = posts.map((p) => {
       const profileContact = p.contact_id ? profileContacts.get(p.contact_id) : null;
+      const companyInfo = p.company_id ? companyMap.get(p.company_id) : null;
       return {
         uuid: p.uuid,
         body: p.body,
@@ -237,6 +255,13 @@ router.get('/', async (req, res, next) => {
           first_name: profileContact.first_name,
           last_name: profileContact.last_name,
           avatar: profileContact.avatar || null,
+        } : null,
+        // Group post: about this company/group
+        company: companyInfo ? {
+          uuid: companyInfo.uuid,
+          name: companyInfo.name,
+          type: companyInfo.type,
+          logo_path: companyInfo.logo_path,
         } : null,
         // Tagged contacts (for activity posts)
         contacts: contactsByPost[p.id] || [],
@@ -336,27 +361,35 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/posts/gallery — all images for a contact (for photo gallery)
+// GET /api/posts/gallery — all images for a contact or company (for photo gallery)
 router.get('/gallery', async (req, res, next) => {
   try {
-    const { contact } = req.query;
-    if (!contact) throw new AppError('Contact UUID required', 400);
+    const { contact, company } = req.query;
+    if (!contact && !company) throw new AppError('Contact or company UUID required', 400);
 
-    const contactRow = await db('contacts').where({ uuid: contact, tenant_id: req.tenantId }).first();
-    if (!contactRow) throw new AppError('Contact not found', 404);
-
-    // Get all post IDs for this contact (about + tagged)
-    const postIds = await db('posts')
+    let query = db('posts')
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
       .where(function () {
         this.where('posts.visibility', 'shared').orWhere('posts.created_by', req.user.id);
-      })
-      .where(function () {
+      });
+
+    if (contact) {
+      const contactRow = await db('contacts').where({ uuid: contact, tenant_id: req.tenantId }).first();
+      if (!contactRow) throw new AppError('Contact not found', 404);
+      query = query.where(function () {
         this.where('posts.contact_id', contactRow.id)
           .orWhereIn('posts.id', db('post_contacts').where('contact_id', contactRow.id).select('post_id'));
-      })
-      .select('posts.id');
+      });
+    }
+
+    if (company) {
+      const companyRow = await db('companies').where({ uuid: company, tenant_id: req.tenantId }).first();
+      if (!companyRow) throw new AppError('Company not found', 404);
+      query = query.where('posts.company_id', companyRow.id);
+    }
+
+    const postIds = await query.select('posts.id');
 
     // Get all images from those posts
     const media = await db('post_media')
@@ -438,7 +471,7 @@ router.post('/', async (req, res, next) => {
     if (!req.body.body?.trim() && !req.body.has_media) req.body.body = '';
 
     const uuid = uuidv4();
-    const { body, post_date, contact_uuids, about_contact_uuid, visibility } = req.body;
+    const { body, post_date, contact_uuids, about_contact_uuid, company_uuid, visibility } = req.body;
 
     // Resolve "about" contact (profile post)
     let aboutContactId = null;
@@ -450,6 +483,15 @@ router.post('/', async (req, res, next) => {
       if (aboutContact) aboutContactId = aboutContact.id;
     }
 
+    // Resolve company/group
+    let companyId = null;
+    if (company_uuid) {
+      const companyRow = await db('companies')
+        .where({ uuid: company_uuid, tenant_id: req.tenantId })
+        .first();
+      if (companyRow) companyId = companyRow.id;
+    }
+
     const post = await db.transaction(async (trx) => {
       const [postId] = await trx('posts').insert({
         uuid,
@@ -458,6 +500,7 @@ router.post('/', async (req, res, next) => {
         body: body.trim(),
         post_date: post_date || new Date(),
         contact_id: aboutContactId,
+        company_id: companyId,
         visibility: ['shared', 'family', 'private'].includes(visibility) ? visibility : 'shared',
       });
 

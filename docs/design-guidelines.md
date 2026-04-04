@@ -115,7 +115,10 @@ Posts show **who posted** (author) rather than just the contact the post is abou
 - **Portal**: Author with display_name for guests ("Bestefar Roger"), first name for users ("Robert")
 - Posts without a known author fall back to showing the contact name
 
-### 22. Link preview
+### 22. No nested cards
+Never nest glass-cards inside glass-cards (box-in-box). This creates visual clutter and breaks the flat, content-focused aesthetic. Instead, place them as siblings. Example: a timeline section should have the compose form as one glass-card and the posts list as a flat `timeline` div below it — each post renders its own card via `renderPostList`.
+
+### 23. Link preview
 When a URL is typed/pasted in post compose or edit, a link preview card is fetched and shown:
 - Debounced detection (600ms) on input, immediate on paste
 - Preview card: image (if og:image), site name, title, description — clickable
@@ -156,6 +159,28 @@ const search = attachContactSearch(inputEl, {
 - For multi-select: keep input visible, clear value after selection
 
 **CSS classes:** `.contact-search-dropdown`, `.contact-search-item`, `.contact-search-empty`
+
+### 26. Detail header pattern (CSS in `base.css`)
+Reusable header for detail pages that need an icon + title/meta + actions, with a toolbar row below. Used by gift events and groups.
+
+```html
+<div class="detail-header-wrap">
+  <div class="detail-header glass-card">
+    <div class="detail-header-icon" style="background:..."><i class="bi bi-..."></i></div>
+    <div class="detail-header-info">
+      <h3 class="mb-0">Title</h3>
+      <span class="text-muted small">Meta info</span>
+    </div>
+    <div class="detail-header-actions"><!-- dropdown menu --></div>
+  </div>
+  <div class="detail-header-toolbar">
+    <div class="filter-tabs"><!-- tabs --></div>
+    <button class="btn btn-primary btn-sm"><!-- action --></button>
+  </div>
+</div>
+```
+
+**CSS classes:** `.detail-header-wrap`, `.detail-header`, `.detail-header-icon`, `.detail-header-info`, `.detail-header-actions`, `.detail-header-toolbar`
 
 **Refactoring status:** See [TODO](todo.md) for remaining files.
 

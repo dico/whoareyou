@@ -31,17 +31,18 @@ function formatLikeNames(names, count) {
 
 let currentLimit = {};
 
-export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false } = {}) {
+export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false, companyUuid = null } = {}) {
   const el = document.getElementById(containerId);
   if (!el) return;
 
-  const key = containerId + (contactUuid || '');
+  const key = containerId + (contactUuid || companyUuid || '');
   if (loadMore) currentLimit[key] = (currentLimit[key] || 20) + 20;
   else if (!keepLimit) currentLimit[key] = 20;
 
   try {
     const params = new URLSearchParams();
     if (contactUuid) params.set('contact', contactUuid);
+    if (companyUuid) params.set('company', companyUuid);
     params.set('limit', currentLimit[key]);
 
     const data = await api.get(`/posts?${params}`);
@@ -59,17 +60,22 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     el.innerHTML = data.posts.map((p) => p.type === 'life_event' ? renderLifeEventCard(p, contactUuid) : `
       <div class="timeline-post glass-card" data-post-uuid="${p.uuid}">
         <div class="post-view">
-          ${p.about ? (() => {
+          ${p.about || p.company ? (() => {
             const hasAuthor = p.posted_by?.name;
             const showAuthor = hasAuthor;
-            const avatar = showAuthor && p.posted_by.avatar ? p.posted_by.avatar : p.about.avatar;
-            const authorName = showAuthor ? p.posted_by.name : `${p.about.first_name} ${p.about.last_name || ''}`;
-            const initials = showAuthor ? (p.posted_by.name?.[0] || '?') : (p.about.first_name[0] || '') + (p.about.last_name?.[0] || '');
-            const authorUuid = showAuthor && p.posted_by.contact_uuid ? p.posted_by.contact_uuid : p.about.uuid;
-            const showTarget = !contactUuid && hasAuthor;
+            const aboutAvatar = p.about?.avatar || p.company?.logo_path;
+            const avatar = showAuthor && p.posted_by.avatar ? p.posted_by.avatar : aboutAvatar;
+            const aboutName = p.about ? `${p.about.first_name} ${p.about.last_name || ''}` : p.company?.name || '';
+            const authorName = showAuthor ? p.posted_by.name : aboutName;
+            const initials = showAuthor ? (p.posted_by.name?.[0] || '?') : p.about ? (p.about.first_name[0] || '') + (p.about.last_name?.[0] || '') : (p.company?.name?.[0] || '?');
+            const authorUuid = showAuthor && p.posted_by.contact_uuid ? p.posted_by.contact_uuid : p.about?.uuid;
+            const authorHref = authorUuid ? `/contacts/${authorUuid}` : '#';
+            const showTarget = !contactUuid && !companyUuid && hasAuthor;
+            const targetHref = p.about ? `/contacts/${p.about.uuid}` : p.company ? `/companies/${p.company.uuid}` : '#';
+            const targetName = p.about ? p.about.first_name : p.company?.name || '';
             return `
             <div class="post-about-header">
-              <a href="/contacts/${authorUuid}" data-link class="post-about-avatar">
+              <a href="${authorHref}" data-link class="post-about-avatar">
                 ${avatar
                   ? `<img src="${authUrl(avatar)}" alt="">`
                   : `<span>${initials}</span>`
@@ -77,8 +83,8 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
               </a>
               <div>
                 <strong>
-                  <a href="/contacts/${authorUuid}" data-link class="post-author-link">${escapeHtml(authorName)}</a>${showTarget
-                    ? ` <i class="bi bi-arrow-right-short"></i> <a href="/contacts/${p.about.uuid}" data-link class="post-author-link">${p.about.first_name}</a>`
+                  <a href="${authorHref}" data-link class="post-author-link">${escapeHtml(authorName)}</a>${showTarget
+                    ? ` <i class="bi bi-arrow-right-short"></i> <a href="${targetHref}" data-link class="post-author-link">${escapeHtml(targetName)}</a>`
                     : ''}
                 </strong>
                 <span class="post-date">${formatDate(p.post_date)}</span>

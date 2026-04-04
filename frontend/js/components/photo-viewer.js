@@ -4,15 +4,19 @@ import { showCropper } from './image-cropper.js';
 import { authUrl } from '../utils/auth-url.js';
 
 /**
- * Show a photo viewer/manager modal for a contact.
+ * Show a photo viewer/manager modal for a contact or company/group.
  * Features: browse photos, set primary, delete, upload, drag-and-drop, crop.
  *
- * @param {string} contactUuid
- * @param {Array} photos - contact.photos array
+ * @param {string} contactUuid - entity UUID
+ * @param {Array} photos - photos array
  * @param {number} startIndex - which photo to show first
  * @param {function} onChanged - callback when photos change
+ * @param {object} [opts] - options
+ * @param {string} [opts.apiBase] - API base path (default: `/contacts/${contactUuid}`)
  */
-export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged) {
+export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged, opts = {}) {
+  const apiBase = opts.apiBase || `/contacts/${contactUuid}`;
+  const skipCrop = !!opts.skipCrop;
   let currentIndex = startIndex;
   const id = 'photo-viewer-' + Date.now();
 
@@ -118,7 +122,7 @@ export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged) 
   document.getElementById(`${id}-set-primary`)?.addEventListener('click', async () => {
     const photo = photos[currentIndex];
     if (!photo) return;
-    await api.put(`/contacts/${contactUuid}/photos/${photo.id}/primary`);
+    await api.put(`${apiBase}/photos/${photo.id}/primary`);
     modal.hide();
     onChanged?.();
   });
@@ -128,7 +132,7 @@ export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged) 
     const photo = photos[currentIndex];
     if (!photo) return;
     if (await confirmDialog('Delete this photo?', { title: 'Delete photo', confirmText: 'Delete' })) {
-      await api.delete(`/contacts/${contactUuid}/photos/${photo.id}`);
+      await api.delete(`${apiBase}/photos/${photo.id}`);
       modal.hide();
       onChanged?.();
     }
@@ -182,13 +186,19 @@ export function showPhotoViewer(contactUuid, photos, startIndex = 0, onChanged) 
 
   async function uploadFile(source) {
     modal.hide();
-    const cropped = await showCropper(source);
-    if (!cropped) { modal.show(); return; }
+    let fileData;
+    if (skipCrop) {
+      fileData = source instanceof File ? source : new File([source], 'photo.jpg', { type: 'image/jpeg' });
+    } else {
+      const cropped = await showCropper(source);
+      if (!cropped) { modal.show(); return; }
+      fileData = new File([cropped], 'cropped.jpg', { type: 'image/jpeg' });
+    }
 
     const formData = new FormData();
-    formData.append('photo', new File([cropped], 'cropped.jpg', { type: 'image/jpeg' }));
+    formData.append('photo', fileData);
     try {
-      await api.upload(`/contacts/${contactUuid}/photos`, formData);
+      await api.upload(`${apiBase}/photos`, formData);
       onChanged?.();
     } catch (err) {
       confirmDialog(err.message, { title: 'Upload failed', confirmText: 'OK', confirmClass: 'btn-primary' });

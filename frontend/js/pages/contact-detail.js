@@ -306,10 +306,10 @@ export async function renderContactDetail(uuid) {
               </div>
             </div>
 
-            <!-- Companies -->
+            <!-- Groups -->
             <div class="sidebar-card glass-card" style="position:relative;z-index:2">
               <h4>
-                <i class="bi bi-building"></i> ${t('companies.title')}
+                <i class="bi bi-people-fill"></i> ${t('groups.title')}
                 <button type="button" class="btn btn-link btn-sm field-add-btn" id="btn-add-company" title="${t('common.add')}"><i class="bi bi-plus-lg"></i></button>
               </h4>
               <div id="contact-companies-list" class="detail-relationships">
@@ -1169,22 +1169,40 @@ export async function renderContactDetail(uuid) {
 }
 
 async function loadContactGallery(contactUuid) {
-  const el = document.getElementById('contact-gallery');
+  await loadGalleryInto('contact-gallery', `/posts/gallery?contact=${contactUuid}`, contactUuid);
+}
+
+/**
+ * Load a photo gallery into a container element.
+ * Reusable for contact galleries and group galleries.
+ * @param {string} containerId - DOM element ID to render into
+ * @param {string} apiUrl - API URL to fetch images from
+ * @param {string} entityUuid - UUID for lightbox context
+ * @param {Array} [extraPhotos] - additional photos to prepend (e.g. company_photos)
+ */
+export async function loadGalleryInto(containerId, apiUrl, entityUuid, extraPhotos = []) {
+  const el = document.getElementById(containerId);
   if (!el) return;
 
   el.innerHTML = `<div class="loading">${t('app.loading')}</div>`;
 
   try {
-    const { images } = await api.get(`/posts/gallery?contact=${contactUuid}`);
+    let postImages = [];
+    try {
+      const { images } = await api.get(apiUrl);
+      postImages = images || [];
+    } catch {}
 
-    if (!images.length) {
+    const allImages = [...extraPhotos, ...postImages];
+
+    if (!allImages.length) {
       el.innerHTML = `<div class="empty-state"><i class="bi bi-image"></i><p>${t('posts.noPhotos')}</p></div>`;
       return;
     }
 
     el.innerHTML = `
       <div class="contact-gallery-grid">
-        ${images.map((img, i) => `
+        ${allImages.map((img, i) => `
           <div class="contact-gallery-item" data-index="${i}">
             <img src="${authUrl(img.thumbnail_path || img.file_path)}" alt="" loading="lazy">
             ${img.reaction_count || img.comment_count ? `
@@ -1198,11 +1216,10 @@ async function loadContactGallery(contactUuid) {
       </div>
     `;
 
-    // Lightbox — navigate across ALL images for this contact
     el.querySelectorAll('.contact-gallery-item').forEach(item => {
       item.addEventListener('click', () => {
         const idx = parseInt(item.dataset.index);
-        showGalleryLightbox(images, idx, contactUuid);
+        showGalleryLightbox(allImages, idx, entityUuid);
       });
     });
   } catch (err) {
@@ -2374,10 +2391,12 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
 }
 
 function renderCompanyRow(c) {
+  const typeIcons = { company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people', team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection' };
+  const icon = typeIcons[c.company_type] || 'bi-people';
   return `<div class="contact-row company-row" data-link-id="${c.link_id}">
     <a href="/companies/${c.company_uuid}" data-link class="d-flex align-items-center gap-2 flex-grow-1 text-decoration-none">
       <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
-        ${c.company_logo ? `<img src="${authUrl(c.company_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-full)">` : `<i class="bi bi-building" style="font-size:0.7rem"></i>`}
+        ${c.company_logo ? `<img src="${authUrl(c.company_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-full)">` : `<i class="bi ${icon}" style="font-size:0.7rem"></i>`}
       </div>
       <div class="contact-row-info">
         <div class="contact-row-name">${escapeHtml(c.company_name)}</div>

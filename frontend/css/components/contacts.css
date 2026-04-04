@@ -112,6 +112,11 @@
   border: var(--glass-border);
 }
 
+.contact-card a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .contact-card:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);

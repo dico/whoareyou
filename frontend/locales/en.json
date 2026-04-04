@@ -12,7 +12,7 @@
     "settings": "Settings",
     "systemAdmin": "System admin",
     "logout": "Log out",
-    "companies": "Companies",
+    "companies": "Groups",
     "gifts": "Gifts",
     "profile": "Profile",
     "myProfile": "My profile",
@@ -584,6 +584,39 @@
     "createNew": "Create \"{name}\"",
     "removeConfirm": "Remove this company link?"
   },
+  "groups": {
+    "title": "Groups",
+    "newGroup": "New group",
+    "type": "Type",
+    "types": {
+      "company": "Company",
+      "school": "School",
+      "club": "Club",
+      "team": "Team",
+      "association": "Association",
+      "class": "Class",
+      "other": "Other"
+    },
+    "description": "Description",
+    "descriptionPlaceholder": "Describe this group...",
+    "parentGroup": "Part of",
+    "childGroups": "Sub-groups",
+    "members": "Members",
+    "noMembers": "No members",
+    "previousMembers": "Previous members",
+    "addMember": "Add member",
+    "endMembership": "End membership",
+    "photos": "Photos",
+    "uploadPhoto": "Upload photo",
+    "timeline": "Timeline",
+    "allTypes": "All types",
+    "filterByType": "Filter by type",
+    "importFromLabel": "Convert to group",
+    "importConfirm": "Convert label \"{name}\" to a group? This will create a group and add {count} contacts as members.",
+    "importDeleteLabel": "Delete label after conversion",
+    "importType": "Group type",
+    "importSuccess": "Group created with {count} members"
+  },
   "reminders": {
     "title": "Reminders",
     "placeholder": "What to remember...",
@@ -618,7 +651,9 @@
     "open": "Open",
     "done": "Done",
     "and": "and",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "info": "Info",
+    "noInfo": "No info added yet. Click edit to add details."
   },
   "time": {
     "justNow": "just now",

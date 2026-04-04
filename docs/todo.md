@@ -22,6 +22,45 @@
 **Status:** Partially done
 **Why:** `tenant_members.linked_contact_id` exists and utility function created, but some code paths still reference `users.linked_contact_id` as fallback. Remove column after all code paths migrated.
 
+### Data export (in-app backup)
+**Status:** Not started
+**Why:** Users need a way to export all their data for backup or migration. With growing media libraries, an offsite backup option is essential.
+
+**Phase 2 — In-app export:**
+- Settings card → Export page (`/admin/export`)
+- Two modes:
+  1. **Data only (JSON)** — instant download, all metadata (contacts, relationships, posts, companies, gifts, labels, life events, reminders, addresses, wishlists)
+  2. **Full export (with media)** — background job, ZIP to temp dir, progress polling, download when ready
+- `export_jobs` table for tracking background jobs (status, progress, file path, cleanup)
+- Auto-cleanup temp files after 1 hour
+- Backend: `routes/export.js` with endpoints: `GET /data` (instant JSON), `POST /full` (start job), `GET /:jobId/status`, `GET /:jobId/download`
+- Uses `archiver` npm package for streaming ZIP (avoids memory issues with large media)
+- New doc: `docs/export.md` listing every field per JSON file — **must be updated when schema changes**
+
+**ZIP structure:**
+```
+whoareyou-export-YYYY-MM-DD/
+├── manifest.json          (version, date, stats)
+├── contacts.json
+├── relationships.json
+├── posts.json
+├── companies.json
+├── gifts.json
+├── labels.json
+├── life-events.json
+├── reminders.json
+├── addresses.json
+├── wishlists.json
+└── media/
+    ├── contacts/{uuid}/   (profile photos)
+    └── posts/{uuid}/      (post media)
+```
+
+**Phase 3 (future) — Cloud backup:**
+- OneDrive/Google Drive connector
+- Scheduled export (daily/weekly)
+- Encrypted before upload
+
 ---
 
 ## Low Priority

@@ -51,16 +51,16 @@ async function loadEventDetail(uuid) {
     pageMembers = membersData.members || [];
 
     el.innerHTML = `
-      <div class="gift-event-header-wrap">
-        <div class="gift-event-header glass-card">
-          <div class="gift-event-header-icon gift-event-icon-${event.event_type}">
+      <div class="gift-event-header-wrap detail-header-wrap">
+        <div class="detail-header glass-card">
+          <div class="detail-header-icon gift-event-icon-${event.event_type}">
             <i class="bi bi-${EVENT_ICONS[event.event_type] || 'calendar-event'}"></i>
           </div>
-          <div class="gift-event-header-info">
+          <div class="detail-header-info">
             <h3 class="mb-0">${esc(event.name)}</h3>
             <span class="text-muted small" id="event-meta"></span>
           </div>
-          <div class="gift-event-header-actions">
+          <div class="detail-header-actions">
             <div class="dropdown">
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
@@ -71,7 +71,7 @@ async function loadEventDetail(uuid) {
             </div>
           </div>
         </div>
-        <div class="gift-event-toolbar">
+        <div class="detail-header-toolbar">
           <div class="filter-tabs" id="gift-direction-tabs">
             <button class="filter-tab active" data-direction="outgoing">${t('gifts.outgoing')}</button>
             <button class="filter-tab" data-direction="incoming">${t('gifts.incoming')}</button>

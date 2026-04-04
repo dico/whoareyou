@@ -180,6 +180,7 @@ async function loadPanel(side) {
   // Show action buttons for selected label
   actionsEl.innerHTML = `
     <button class="btn btn-link btn-sm" id="${side}-edit-label" title="${t('common.edit')}"><i class="bi bi-pencil"></i></button>
+    <button class="btn btn-link btn-sm" id="${side}-convert-group" title="${t('groups.importFromLabel')}"><i class="bi bi-people"></i></button>
     <button class="btn btn-link btn-sm text-danger" id="${side}-delete-label" title="${t('common.delete')}"><i class="bi bi-trash"></i></button>
     <button class="btn btn-link btn-sm" id="${side}-add-contact" title="${t('labels.addContact')}"><i class="bi bi-person-plus"></i></button>
   `;
@@ -221,6 +222,54 @@ async function loadPanel(side) {
     allLabels = data.labels;
     populateSelects();
     loadPanel(side);
+  });
+
+  // Convert label to group
+  document.getElementById(`${side}-convert-group`).addEventListener('click', async () => {
+    const contactCount = (side === 'left' ? leftContacts : rightContacts).length;
+    const mid = 'convert-' + Date.now();
+    const TYPES = ['class', 'club', 'team', 'school', 'association', 'company', 'other'];
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal fade" id="${mid}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">${t('groups.importFromLabel')}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <p>${t('groups.importConfirm', { name: label?.name || '', count: contactCount })}</p>
+              <div class="form-floating mb-3">
+                <select class="form-select" id="${mid}-type">
+                  ${TYPES.map(tp => `<option value="${tp}">${t('groups.types.' + tp)}</option>`).join('')}
+                </select>
+                <label>${t('groups.importType')}</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="${mid}-delete" checked>
+                <label class="form-check-label" for="${mid}-delete">${t('groups.importDeleteLabel')}</label>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="button" class="btn btn-primary btn-sm" id="${mid}-submit">${t('groups.importFromLabel')}</button>
+            </div>
+          </div>
+        </div>
+      </div>`);
+    const modalEl = document.getElementById(mid);
+    const modal = new bootstrap.Modal(modalEl);
+    document.getElementById(`${mid}-submit`).addEventListener('click', async () => {
+      const result = await api.post('/companies/import-from-label', {
+        label_id: parseInt(labelId),
+        type: document.getElementById(`${mid}-type`).value,
+        delete_label: document.getElementById(`${mid}-delete`).checked,
+      });
+      modal.hide();
+      navigate(`/companies/${result.uuid}`);
+    });
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+    modal.show();
   });
 
   // Add contact to label

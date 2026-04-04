@@ -146,58 +146,12 @@
   font-size: 0.875rem;
 }
 
-/* ── Event header card with toolbar ── */
-.gift-event-header-wrap {
-  margin-bottom: var(--space-2xl);
-}
-
-.gift-event-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  margin-bottom: 0;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.gift-event-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-sm) var(--space-lg);
-  background: var(--color-surface);
-  border: var(--glass-border);
-  border-top: 1px solid var(--color-border);
-  border-bottom-left-radius: var(--radius-md);
-  border-bottom-right-radius: var(--radius-md);
-}
-
-.gift-event-header-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 1.5rem;
-  color: white;
-}
-
+/* ── Event header (extends generic detail-header from base.css) ── */
+.gift-event-header-wrap { margin-bottom: var(--space-2xl); }
 .gift-event-icon-christmas { background: linear-gradient(135deg, #e74c3c, #c0392b); }
 .gift-event-icon-birthday { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
 .gift-event-icon-wedding { background: linear-gradient(135deg, #f39c12, #e67e22); }
 .gift-event-icon-other { background: linear-gradient(135deg, #7f8c8d, #95a5a6); }
-
-.gift-event-header-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.gift-event-header-actions {
-  flex-shrink: 0;
-}
 
 /* ── Event type badges ── */
 .gift-event-type-badge {

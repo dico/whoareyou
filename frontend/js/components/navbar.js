@@ -37,7 +37,7 @@ export function renderNavbar() {
           <span>${t('nav.map')}</span>
         </a>
         <a href="/companies" data-link class="nav-link">
-          <i class="bi bi-building"></i>
+          <i class="bi bi-people-fill"></i>
           <span>${t('nav.companies')}</span>
         </a>
         <a href="/gifts" data-link class="nav-link">
@@ -287,10 +287,11 @@ export function renderNavbar() {
       // Companies
       if (data.companies?.length) {
         html += `<div class="search-section-label">${t('nav.companies')}</div>`;
+        const typeIcon = { company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people', team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection' };
         html += data.companies.map(c => `
           <a class="contact-row" href="/companies/${c.uuid}" data-link>
             <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
-              <i class="bi bi-building" style="font-size:0.8rem"></i>
+              ${c.logo_path ? `<img src="${authUrl(c.logo_path)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : `<i class="bi ${typeIcon[c.type] || 'bi-people'}" style="font-size:0.8rem"></i>`}
             </div>
             <div class="contact-row-info">
               <div class="contact-row-name">${escapeSearchHtml(c.name)}</div>

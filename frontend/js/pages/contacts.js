@@ -11,6 +11,7 @@ let currentLabel = localStorage.getItem('contacts.label') || '';
 let currentSort = localStorage.getItem('contacts.sort') || 'first_name';
 let currentOrder = localStorage.getItem('contacts.order') || 'asc';
 let currentBirthYear = '';
+let currentCompany = '';
 
 export async function renderContacts() {
   // Check URL params for label filter
@@ -58,6 +59,9 @@ export async function renderContacts() {
         <select class="form-select form-select-sm" id="label-filter" style="max-width:200px">
           <option value="">${t('labels.title')}</option>
         </select>
+        <select class="form-select form-select-sm" id="group-filter" style="max-width:200px">
+          <option value="">${t('groups.title')}</option>
+        </select>
         <select class="form-select form-select-sm" id="birth-year-filter" style="max-width:150px">
           <option value="">${t('contacts.birthYear')}</option>
         </select>
@@ -78,6 +82,14 @@ export async function renderContacts() {
     const labelFilter = document.getElementById('label-filter');
     labelFilter.innerHTML = `<option value="">${t('labels.title')}</option>` +
       labels.map(l => `<option value="${l.name}" ${currentLabel === l.name ? 'selected' : ''}>${l.name} (${l.contact_count})</option>`).join('');
+  } catch {}
+
+  // Load groups for filter
+  try {
+    const { companies } = await api.get('/companies');
+    const groupFilter = document.getElementById('group-filter');
+    groupFilter.innerHTML = `<option value="">${t('groups.title')}</option>` +
+      companies.map(c => `<option value="${c.uuid}" ${currentCompany === c.uuid ? 'selected' : ''}>${c.name} (${c.employee_count})</option>`).join('');
   } catch {}
 
   // Load contacts
@@ -118,9 +130,14 @@ export async function renderContacts() {
   document.getElementById('label-filter').addEventListener('change', (e) => {
     currentLabel = e.target.value;
     localStorage.setItem('contacts.label', currentLabel);
-    // Update URL to reflect label filter
     const url = currentLabel ? `/contacts?label=${encodeURIComponent(currentLabel)}` : '/contacts';
     window.history.replaceState({}, '', url);
+    loadContacts();
+  });
+
+  // Group filter
+  document.getElementById('group-filter').addEventListener('change', (e) => {
+    currentCompany = e.target.value;
     loadContacts();
   });
 
@@ -151,8 +168,10 @@ export async function renderContacts() {
   // Clear all filters
   document.getElementById('btn-clear-filters').addEventListener('click', () => {
     document.getElementById('label-filter').value = '';
+    document.getElementById('group-filter').value = '';
     document.getElementById('birth-year-filter').value = '';
     currentLabel = '';
+    currentCompany = '';
     currentBirthYear = '';
     localStorage.removeItem('contacts.label');
     window.history.replaceState({}, '', '/contacts');
@@ -173,6 +192,7 @@ async function loadContacts() {
     if (currentSearch) params.set('search', currentSearch);
     if (currentFilter === 'favorites') params.set('favorite', 'true');
     if (currentLabel) params.set('label', currentLabel);
+    if (currentCompany) params.set('company', currentCompany);
     if (currentSort) params.set('sort', currentSort);
     if (currentOrder) params.set('order', currentOrder);
     if (currentBirthYear) params.set('birth_year', currentBirthYear);
