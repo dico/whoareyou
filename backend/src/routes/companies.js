@@ -83,6 +83,7 @@ router.get('/', async (req, res, next) => {
         'companies.id', 'companies.uuid', 'companies.name', 'companies.industry',
         'companies.website', 'companies.phone', 'companies.email', 'companies.logo_path',
         'companies.type', 'companies.description', 'companies.parent_id',
+        'companies.latitude', 'companies.longitude',
         db.raw('(SELECT COUNT(*) FROM contact_companies cc WHERE cc.company_id = companies.id AND cc.end_date IS NULL) as employee_count'),
         db.raw('(SELECT p.name FROM companies p WHERE p.id = companies.parent_id) as parent_name'),
         db.raw('(SELECT p.uuid FROM companies p WHERE p.id = companies.parent_id) as parent_uuid')

@@ -61,10 +61,15 @@ export async function renderMap() {
 }
 
 async function loadMarkers() {
+  const groupIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:24px;height:24px;background:#e67e22;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -14],
+  });
   try {
     const { addresses } = await api.get('/addresses/map');
-
-    if (addresses.length === 0) return;
 
     const bounds = [];
 
@@ -92,6 +97,30 @@ async function loadMarkers() {
         .bindPopup(popup);
     }
 
+    // Load groups/companies with coordinates
+    try {
+      const { companies } = await api.get('/companies');
+      const typeIcons = { company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people', team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection' };
+
+      for (const c of companies) {
+        if (!c.latitude || !c.longitude) continue;
+        bounds.push([c.latitude, c.longitude]);
+
+        const popup = `
+          <div class="map-popup">
+            <strong><i class="bi ${typeIcons[c.type] || 'bi-people'} me-1"></i>${c.name}</strong>
+            ${c.industry ? `<br><span class="text-muted">${c.industry}</span>` : ''}
+            <hr style="margin:4px 0">
+            <a href="/groups/${c.uuid}" class="map-contact-link" data-group-uuid="${c.uuid}"><i class="bi bi-box-arrow-up-right me-1"></i>${t('common.open')}</a>
+          </div>
+        `;
+
+        L.marker([c.latitude, c.longitude], { icon: groupIcon })
+          .addTo(map)
+          .bindPopup(popup);
+      }
+    } catch {}
+
     // Fit map to markers (only if no saved position)
     if (bounds.length && !localStorage.getItem('map.view')) {
       map.fitBounds(bounds, { padding: [30, 30] });
@@ -105,6 +134,8 @@ async function loadMarkers() {
           document.getElementById('app-content')?.classList.remove('map-fullwidth');
           if (link.dataset.addressId) {
             navigate(`/addresses/${link.dataset.addressId}`);
+          } else if (link.dataset.groupUuid) {
+            navigate(`/groups/${link.dataset.groupUuid}`);
           } else {
             navigate(`/contacts/${link.dataset.uuid}`);
           }
