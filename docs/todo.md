@@ -22,9 +22,36 @@
 **Status:** Partially done
 **Why:** `tenant_members.linked_contact_id` exists and utility function created, but some code paths still reference `users.linked_contact_id` as fallback. Remove column after all code paths migrated.
 
-### Data export — Phase 3 (cloud backup)
+### Data export — Phase 3 (scheduled cloud backup)
 **Status:** Not started — Phase 2 (in-app export) is done, documented in [export.md](export.md)
-**Future:** OneDrive/Google Drive connector with scheduled export (daily/weekly), encrypted before upload.
+
+**Goal:** Automated scheduled backup to cloud storage with encryption.
+
+**Recommended approach: Backblaze B2 + node-cron**
+- Simplest auth (API key, no OAuth), fully unattended, lowest cost (~$6/TB/month)
+- S3-compatible — can switch to AWS/MinIO/Wasabi later without code changes
+- Use `@aws-sdk/client-s3` (official, well-maintained) for uploads
+- Use `node-cron` for in-process scheduling (no extra containers)
+- Encrypt ZIP with Node.js `crypto` (AES-256-GCM) before upload
+
+**Alternative providers researched:**
+
+| Provider | Auth | Unattended | Cost | Notes |
+|----------|------|-----------|------|-------|
+| Backblaze B2 | API key | Yes | ~$0.005/GB | S3-compatible, recommended |
+| S3 (AWS/MinIO/Wasabi) | Access keys | Yes | $0.005-0.023/GB | Same SDK as B2 |
+| OneDrive | OAuth2 + refresh token | Yes (after initial setup) | $2-5/mo | Refresh tokens don't expire |
+| Google Drive | OAuth2 (personal) or Service Account (Shared Drive only) | Partial | Free (personal) | Service accounts can't access personal Drive since Apr 2025 |
+| WebDAV | Basic auth | Yes | Variable | Nextcloud/ownCloud, slow for large files |
+| SFTP | SSH keys | Yes | Variable | Any Linux server |
+
+**Implementation plan:**
+1. Settings UI: cloud backup config (provider, credentials, schedule, encryption key)
+2. Store config in `system_settings` (encrypted credentials)
+3. `node-cron` job: generate export ZIP → encrypt → upload → cleanup
+4. Backup history log (date, size, status)
+5. Manual "Backup now" button in Settings
+6. Retention policy (keep last N backups, delete old ones)
 
 ---
 
