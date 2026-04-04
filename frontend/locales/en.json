@@ -41,6 +41,7 @@
     "title": "Contacts",
     "new": "New",
     "newContact": "New contact",
+    "duplicateHint": "Similar contacts already exist:",
     "searchPlaceholder": "Search contacts...",
     "all": "All",
     "favorites": "Favorites",
@@ -579,7 +580,7 @@
     "brregLookup": "Lookup in Brønnøysund",
     "brregLooking": "Looking up...",
     "brregFound": "Found: {name}",
-    "searchOrCreate": "Search or create company...",
+    "searchOrCreate": "Search or create group...",
     "role": "Role / title",
     "createNew": "Create \"{name}\"",
     "removeConfirm": "Remove this company link?"

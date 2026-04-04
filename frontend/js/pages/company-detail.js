@@ -110,16 +110,15 @@ export async function renderCompanyDetail(uuid) {
                         </div>
                         <div class="contact-info">
                           <div class="contact-name">${escapeHtml(e.first_name)} ${escapeHtml(e.last_name || '')}</div>
-                          <div class="contact-meta">${[e.title, age ? `<i class="bi bi-cake2"></i> ${age}` : ''].filter(Boolean).join(' · ')}</div>
+                          <div class="contact-meta">${e.title || (age ? `<i class="bi bi-cake2"></i> ${age}` : '')}</div>
                         </div>
                       </a>
                       <div class="contact-badges">
                         <div class="dropdown">
                           <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
                           <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+                            <li><a class="dropdown-item btn-edit-membership" href="#" data-link-id="${e.link_id}" data-title="${escapeHtml(e.title || '')}" data-start="${e.start_date || ''}" data-end="${e.end_date || ''}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
                             <li><a class="dropdown-item btn-end-employment" href="#" data-link-id="${e.link_id}"><i class="bi bi-box-arrow-right me-2"></i>${endLabel}</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger btn-remove-employee" href="#" data-link-id="${e.link_id}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
                           </ul>
                         </div>
                       </div>
@@ -230,13 +229,51 @@ export async function renderCompanyDetail(uuid) {
       });
     });
 
-    // Remove employee/member
-    document.querySelectorAll('.btn-remove-employee').forEach(btn => {
+    // Edit membership (title, dates)
+    document.querySelectorAll('.btn-edit-membership').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
-        if (!await confirmDialog(t('companies.removeConfirm'))) return;
-        await api.delete(`/companies/employees/${btn.dataset.linkId}`);
-        renderCompanyDetail(uuid);
+        const linkId = btn.dataset.linkId;
+        const mid = 'edit-member-' + Date.now();
+        const titleLabel = isCompanyType ? t('companies.jobTitle') : t('companies.role');
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="${mid}" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content glass-card">
+                <div class="modal-header">
+                  <h5 class="modal-title">${t('common.edit')}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="form-floating mb-3">
+                    <input type="text" class="form-control" id="${mid}-title" value="${escapeHtml(btn.dataset.title)}">
+                    <label>${titleLabel}</label>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col"><div class="form-floating"><input type="date" class="form-control" id="${mid}-start" value="${btn.dataset.start}"><label>${t('addresses.since')}</label></div></div>
+                    <div class="col"><div class="form-floating"><input type="date" class="form-control" id="${mid}-end" value="${btn.dataset.end}"><label>${t('addresses.until')}</label></div></div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="${mid}-save">${t('common.save')}</button>
+                </div>
+              </div>
+            </div>
+          </div>`);
+        const modalEl = document.getElementById(mid);
+        const modal = new bootstrap.Modal(modalEl);
+        document.getElementById(`${mid}-save`).addEventListener('click', async () => {
+          await api.put(`/companies/employees/${linkId}`, {
+            title: document.getElementById(`${mid}-title`).value.trim() || null,
+            start_date: document.getElementById(`${mid}-start`).value || null,
+            end_date: document.getElementById(`${mid}-end`).value || null,
+          });
+          modal.hide();
+          renderCompanyDetail(uuid);
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+        modal.show();
       });
     });
 

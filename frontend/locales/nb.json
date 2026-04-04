@@ -41,6 +41,7 @@
     "title": "Kontakter",
     "new": "Ny",
     "newContact": "Ny kontakt",
+    "duplicateHint": "Lignende kontakter finnes allerede:",
     "searchPlaceholder": "Søk kontakter...",
     "all": "Alle",
     "favorites": "Favoritter",
@@ -579,7 +580,7 @@
     "brregLookup": "Slå opp i Brønnøysund",
     "brregLooking": "Slår opp...",
     "brregFound": "Fant: {name}",
-    "searchOrCreate": "Søk eller opprett bedrift...",
+    "searchOrCreate": "Søk eller opprett gruppe...",
     "role": "Rolle / stilling",
     "createNew": "Opprett \"{name}\"",
     "removeConfirm": "Fjerne denne bedrift-koblingen?"

@@ -1,6 +1,7 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
+import { authUrl } from '../utils/auth-url.js';
 
 export function addContactModalHtml() {
   return `
@@ -27,6 +28,7 @@ export function addContactModalHtml() {
                   </div>
                 </div>
               </div>
+              <div id="duplicate-hint" class="d-none mb-3"></div>
               <div class="form-floating mb-3">
                 <input type="text" class="form-control" id="new-nickname" placeholder="${t('contacts.nickname')}">
                 <label>${t('contacts.nickname')}</label>
@@ -81,6 +83,39 @@ export function initAddContactModal() {
     pill.dataset.visibility = clicked.dataset.val;
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
   });
+
+  // Duplicate hint — debounced search as user types name
+  let dupTimeout;
+  function checkDuplicates() {
+    clearTimeout(dupTimeout);
+    dupTimeout = setTimeout(async () => {
+      const first = document.getElementById('new-first-name').value.trim();
+      const last = document.getElementById('new-last-name').value.trim();
+      const hint = document.getElementById('duplicate-hint');
+      if (!first || first.length < 2) { hint.classList.add('d-none'); return; }
+
+      const q = `${first} ${last}`.trim();
+      try {
+        const { contacts } = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=5`);
+        if (!contacts.length) { hint.classList.add('d-none'); return; }
+
+        hint.classList.remove('d-none');
+        hint.innerHTML = `
+          <div class="small" style="color:var(--color-text-secondary)"><i class="bi bi-exclamation-triangle me-1" style="color:#e67e22"></i>${t('contacts.duplicateHint')}</div>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            ${contacts.map(c => `
+              <a href="/contacts/${c.uuid}" data-link class="contact-chip" style="font-size:0.75rem">
+                <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>`}</span>
+                ${c.first_name} ${c.last_name || ''}
+              </a>
+            `).join('')}
+          </div>`;
+      } catch { hint.classList.add('d-none'); }
+    }, 400);
+  }
+
+  document.getElementById('new-first-name').addEventListener('input', checkDuplicates);
+  document.getElementById('new-last-name').addEventListener('input', checkDuplicates);
 
   // Form submit
   document.getElementById('add-contact-form').addEventListener('submit', async (e) => {

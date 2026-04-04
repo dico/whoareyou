@@ -314,6 +314,13 @@ router.post('/:uuid/employees', async (req, res, next) => {
       .first();
     if (!contact) throw new AppError('Contact not found', 404);
 
+    // Prevent duplicate membership
+    const existing = await db('contact_companies')
+      .where({ contact_id: contact.id, company_id: company.id })
+      .whereNull('end_date')
+      .first();
+    if (existing) throw new AppError('Already a member', 409);
+
     await db('contact_companies').insert({
       contact_id: contact.id,
       company_id: company.id,
