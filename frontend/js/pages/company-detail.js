@@ -40,7 +40,7 @@ export async function renderCompanyDetail(uuid) {
     content.innerHTML = `
       <div class="page-container">
         <div class="detail-header-wrap">
-          <div class="detail-header glass-card">
+          <div class="detail-header glass-card" id="group-header">
             <div class="detail-avatar" id="group-logo-wrap" style="width:56px;height:56px;flex-shrink:0;position:relative;cursor:pointer">
               ${company.logo_path
                 ? `<img src="${authUrl(company.logo_path)}" alt="" style="width:56px;height:56px;border-radius:var(--radius-full);object-fit:cover">`
@@ -279,9 +279,16 @@ export async function renderCompanyDetail(uuid) {
       }
     });
     logoInput?.addEventListener('change', (e) => uploadLogo(e.target.files[0]));
-    logoWrap?.addEventListener('dragover', (e) => { e.preventDefault(); logoWrap.classList.add('drop-active'); });
-    logoWrap?.addEventListener('dragleave', () => logoWrap.classList.remove('drop-active'));
-    logoWrap?.addEventListener('drop', (e) => { e.preventDefault(); logoWrap.classList.remove('drop-active'); uploadLogo(e.dataTransfer.files[0]); });
+    // Drop zone on logo icon
+    logoWrap?.addEventListener('dragover', (e) => { e.preventDefault(); logoWrap.classList.add('avatar-drag-over'); });
+    logoWrap?.addEventListener('dragleave', (e) => { if (!logoWrap.contains(e.relatedTarget)) logoWrap.classList.remove('avatar-drag-over'); });
+    logoWrap?.addEventListener('drop', (e) => { e.preventDefault(); logoWrap.classList.remove('avatar-drag-over'); uploadLogo(e.dataTransfer.files[0]); });
+
+    // Also accept drop on the entire header (easier target)
+    const headerEl = document.getElementById('group-header');
+    headerEl?.addEventListener('dragover', (e) => { e.preventDefault(); logoWrap?.classList.add('avatar-drag-over'); });
+    headerEl?.addEventListener('dragleave', (e) => { if (!headerEl.contains(e.relatedTarget)) logoWrap?.classList.remove('avatar-drag-over'); });
+    headerEl?.addEventListener('drop', (e) => { e.preventDefault(); logoWrap?.classList.remove('avatar-drag-over'); uploadLogo(e.dataTransfer.files[0]); });
 
     // View tabs (members / info / gallery)
     let postsLoaded = false;
