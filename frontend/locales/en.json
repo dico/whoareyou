@@ -790,6 +790,7 @@
       "similar_last_name": "similar last name",
       "similar_first_name": "similar first name",
       "similar_full_name": "similar full name",
+      "fuzzy_name": "similar spelling",
       "birth_year": "same birth year",
       "birthday": "same birthday",
       "email": "same email",

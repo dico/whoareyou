@@ -719,6 +719,23 @@ router.get('/tools/duplicates', async (req, res, next) => {
     const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const normalizePhone = (s) => (s || '').replace(/[\s\-().+]/g, '');
 
+    // Levenshtein distance — number of single-character edits to transform a into b
+    function levenshtein(a, b) {
+      if (!a.length) return b.length;
+      if (!b.length) return a.length;
+      const matrix = [];
+      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+      for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+          matrix[i][j] = b[i - 1] === a[j - 1]
+            ? matrix[i - 1][j - 1]
+            : Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+        }
+      }
+      return matrix[b.length][a.length];
+    }
+
     for (let i = 0; i < contacts.length; i++) {
       for (let j = i + 1; j < contacts.length; j++) {
         const a = contacts[i], b = contacts[j];
@@ -759,6 +776,25 @@ router.get('/tools/duplicates', async (req, res, next) => {
         else if (aFull.length > 3 && bFull.length > 3 && (aFull.includes(bFull) || bFull.includes(aFull))) {
           score += 60;
           reasons.push('similar_full_name');
+        }
+
+        // Fuzzy match: same last name + similar first name (1-2 edits, e.g. "Øivind"/"Øyvind")
+        if (score === 0 && aLast === bLast && aLast && aFirst.length > 2 && bFirst.length > 2) {
+          const dist = levenshtein(aFirst, bFirst);
+          const maxLen = Math.max(aFirst.length, bFirst.length);
+          if (dist <= 2 && dist / maxLen <= 0.3) {
+            score += 60;
+            reasons.push('fuzzy_name');
+          }
+        }
+        // Fuzzy match: same first name + similar last name (1-2 edits)
+        if (score === 0 && aFirst === bFirst && aFirst && aLast.length > 2 && bLast.length > 2) {
+          const dist = levenshtein(aLast, bLast);
+          const maxLen = Math.max(aLast.length, bLast.length);
+          if (dist <= 2 && dist / maxLen <= 0.3) {
+            score += 60;
+            reasons.push('fuzzy_name');
+          }
         }
 
         if (score < 30) continue;

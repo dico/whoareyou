@@ -790,6 +790,7 @@
       "similar_last_name": "lignende etternavn",
       "similar_first_name": "lignende fornavn",
       "similar_full_name": "lignende fullt navn",
+      "fuzzy_name": "lignende stavemåte",
       "birth_year": "likt fødselsår",
       "birthday": "lik bursdag",
       "email": "lik e-post",
