@@ -387,12 +387,10 @@ router.put('/:uuid', async (req, res, next) => {
 // DELETE /api/contacts/:uuid — soft delete
 router.delete('/:uuid', async (req, res, next) => {
   try {
+    // No visibility filter on delete — tenant admin should be able to delete any contact
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
       .first();
 
     if (!contact) {
@@ -401,12 +399,21 @@ router.delete('/:uuid', async (req, res, next) => {
 
     // Prevent deleting contacts linked to user accounts
     const linkedMember = await db('tenant_members')
-      .where({ linked_contact_id: contact.id, tenant_id: req.tenantId })
+      .where({ 'tenant_members.linked_contact_id': contact.id, 'tenant_members.tenant_id': req.tenantId })
       .join('users', 'tenant_members.user_id', 'users.id')
       .select('users.first_name')
       .first();
     if (linkedMember) {
       throw new AppError(`Cannot delete — linked to user ${linkedMember.first_name}`, 400);
+    }
+
+    // Also check legacy users.linked_contact_id
+    const linkedUser = await db('users')
+      .where({ linked_contact_id: contact.id, tenant_id: req.tenantId })
+      .select('first_name')
+      .first();
+    if (linkedUser) {
+      throw new AppError(`Cannot delete — linked to user ${linkedUser.first_name}`, 400);
     }
 
     await db('contacts').where({ id: contact.id }).update({ deleted_at: db.fn.now() });
@@ -720,6 +727,7 @@ router.get('/tools/duplicates', async (req, res, next) => {
 
         const aFirst = normalize(a.first_name), bFirst = normalize(b.first_name);
         const aLast = normalize(a.last_name), bLast = normalize(b.last_name);
+        const aFull = `${aFirst} ${aLast}`.trim(), bFull = `${bFirst} ${bLast}`.trim();
 
         // Exact name match
         if (aFirst === bFirst && aLast === bLast && aFirst) {
@@ -746,6 +754,11 @@ router.get('/tools/duplicates', async (req, res, next) => {
             score += 50;
             reasons.push('similar_first_name');
           }
+        }
+        // Full name comparison (handles different first/last splits, e.g. "Geir Trang"+"Olsen" vs "Geir"+"Trang")
+        else if (aFull.length > 3 && bFull.length > 3 && (aFull.includes(bFull) || bFull.includes(aFull))) {
+          score += 60;
+          reasons.push('similar_full_name');
         }
 
         if (score < 30) continue;

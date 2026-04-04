@@ -789,6 +789,7 @@
       "last_name": "likt etternavn",
       "similar_last_name": "lignende etternavn",
       "similar_first_name": "lignende fornavn",
+      "similar_full_name": "lignende fullt navn",
       "birth_year": "likt fødselsår",
       "birthday": "lik bursdag",
       "email": "lik e-post",

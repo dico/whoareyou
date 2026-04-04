@@ -382,7 +382,7 @@ export async function renderContactDetail(uuid) {
     }
 
     // Event handlers
-    document.getElementById('btn-back').addEventListener('click', () => navigate('/contacts'));
+    document.getElementById('btn-back').addEventListener('click', () => window.history.back());
 
     document.getElementById('btn-toggle-fav').addEventListener('click', async (e) => {
       e.preventDefault();
