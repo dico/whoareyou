@@ -1,7 +1,18 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
-import { authUrl } from '../utils/auth-url.js';
+
+async function downloadWithAuth(url, filename) {
+  const token = localStorage.getItem('token');
+  const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+  if (!response.ok) throw new Error('Download failed');
+  const blob = await response.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 export async function renderExportData() {
   const content = document.getElementById('app-content');
@@ -44,9 +55,19 @@ export async function renderExportData() {
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/settings'));
 
-  // Data-only export (instant download)
-  document.getElementById('btn-export-data').addEventListener('click', () => {
-    window.location.href = authUrl('/api/export/data');
+  // Data-only export (instant download via fetch with auth)
+  document.getElementById('btn-export-data').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-export-data');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${t('export.preparing')}`;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      await downloadWithAuth('/api/export/data', `whoareyou-export-${today}.zip`);
+    } catch (err) {
+      alert(err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-download me-1"></i>${t('export.download')}`;
   });
 
   // Full export with progress
@@ -59,11 +80,12 @@ export async function renderExportData() {
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${t('export.preparing')}`;
     progressEl.classList.remove('d-none');
+    progressBar.className = 'progress-bar';
+    progressBar.style.width = '0%';
 
     try {
       const { jobId } = await api.post('/export/full');
 
-      // Poll for progress
       const poll = setInterval(async () => {
         try {
           const { status, progress } = await api.get(`/export/status/${jobId}`);
@@ -76,7 +98,16 @@ export async function renderExportData() {
             progressBar.classList.add('bg-success');
             btn.disabled = false;
             btn.innerHTML = `<i class="bi bi-download me-1"></i>${t('export.download')}`;
-            btn.onclick = () => { window.location.href = authUrl(`/api/export/download/${jobId}`); };
+            btn.onclick = async () => {
+              btn.disabled = true;
+              try {
+                const today = new Date().toISOString().split('T')[0];
+                await downloadWithAuth(`/api/export/download/${jobId}`, `whoareyou-full-export-${today}.zip`);
+              } catch (err) {
+                alert(err.message);
+              }
+              btn.disabled = false;
+            };
           } else if (status === 'failed') {
             clearInterval(poll);
             progressText.textContent = t('export.failed');
