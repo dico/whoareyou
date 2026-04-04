@@ -124,6 +124,9 @@ List, mark-read, generate (birthdays, anniversaries).
 ### Gifts (`/api/gifts`)
 Products (CRUD, URL scraping, images), events (CRUD, auto-fill), orders (CRUD, status lifecycle), wishlists (CRUD, items).
 
+### Export (`/api/export`)
+Data export with two modes: instant JSON ZIP (`GET /data`) and full backup with media (`POST /full`, `GET /status/:jobId`, `GET /download/:jobId`). See [export.md](export.md) for field documentation.
+
 ### System Admin (`/api/system`)
 System settings, SMTP config, tenant management, IP security.
 

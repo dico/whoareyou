@@ -753,6 +753,20 @@
     "noIssues": "Ingen problemer funnet. Alle relasjoner ser konsistente ut.",
     "found": "{count} problemer funnet"
   },
+  "export": {
+    "title": "Eksporter data",
+    "desc": "Last ned en sikkerhetskopi av alle dine data.",
+    "dataOnly": "Kun data (JSON)",
+    "dataOnlyDesc": "Kontakter, relasjoner, innlegg og all metadata. Ingen mediefiler.",
+    "fullBackup": "Full sikkerhetskopi",
+    "fullBackupDesc": "Alt inkludert bilder, videoer og dokumenter.",
+    "preparing": "Forbereder eksport...",
+    "progress": "{percent}% ferdig",
+    "complete": "Eksport klar!",
+    "failed": "Eksport feilet. Pr\u00f8v igjen.",
+    "download": "Last ned",
+    "startExport": "Start eksport"
+  },
   "duplicates": {
     "title": "Duplikate kontakter",
     "desc": "Finn kontakter som kan være duplikater og slå de sammen.",

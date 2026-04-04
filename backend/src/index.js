@@ -21,6 +21,7 @@ import uploadRoutes from './routes/uploads.js';
 import systemRoutes from './routes/system.js';
 import giftRoutes from './routes/gifts.js';
 import importRoutes from './routes/import.js';
+import exportRoutes from './routes/export.js';
 import portalRoutes from './routes/portal.js';
 import portalAdminRoutes from './routes/portal-admin.js';
 
@@ -123,6 +124,7 @@ app.use('/api/system', (req, res, next) => {
 app.use('/api/portal', portalLimiter, portalRoutes); // Portal has own auth + stricter rate limit
 app.use('/api/portal-admin', authenticate, tenantScope, portalAdminRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
+app.use('/api/export', authenticate, tenantScope, exportRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
 
 // Protected file serving — auth check + tenant validation

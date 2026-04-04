@@ -34,7 +34,7 @@ Client → Nginx → Express
 5. **tenantScope** (`middleware/tenant.js`) — sets `req.tenantId` from JWT
 6. **portalAuthenticate** (`middleware/portal-auth.js`) — separate chain for portal guests
 
-### Route Modules (16 files)
+### Route Modules (17 files)
 | File | Prefix | Description |
 |------|--------|-------------|
 | `auth.js` | `/api/auth` | Login, register, 2FA, passkeys, sessions, members |
@@ -50,6 +50,7 @@ Client → Nginx → Express
 | `gifts.js` | `/api/gifts` | Products, events, orders, wishlists |
 | `uploads.js` | `/api` | Photo/media upload + processing |
 | `import.js` | `/api/import` | MomentGarden ZIP import + sync |
+| `export.js` | `/api/export` | Data + media export (JSON ZIP, full backup) |
 | `system.js` | `/api/system` | System admin, SMTP, IP security, tenants |
 | `portal.js` | `/api/portal` | Portal guest timeline, comments, reactions |
 | `portal-admin.js` | `/api/portal-admin` | Portal guest/link management |

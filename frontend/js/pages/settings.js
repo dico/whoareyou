@@ -38,6 +38,11 @@ export async function renderSettings() {
           <div class="settings-card-label">${t('consistency.title')}</div>
           <div class="settings-card-desc">${t('consistency.cardDesc')}</div>
         </a>
+        <a href="/admin/export-data" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(0,199,190,0.1);color:#00C7BE"><i class="bi bi-download"></i></div>
+          <div class="settings-card-label">${t('export.title')}</div>
+          <div class="settings-card-desc">${t('export.desc')}</div>
+        </a>
         <a href="/admin/addresses" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(52,199,89,0.1);color:#34C759"><i class="bi bi-geo-alt"></i></div>
           <div class="settings-card-label">${t('addresses.mergeDuplicates')}</div>

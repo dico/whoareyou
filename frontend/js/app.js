@@ -13,6 +13,7 @@ import { renderSystemAdmin } from './pages/admin-system.js';
 import { renderAddressDetail } from './pages/address-detail.js';
 import { renderDuplicates } from './pages/admin-duplicates.js';
 import { renderConsistencyReport } from './pages/admin-consistency.js';
+import { renderExportData } from './pages/admin-export.js';
 import { renderAddressMerge } from './pages/admin-addresses.js';
 import { renderCompanies } from './pages/companies.js';
 import { renderCompanyDetail } from './pages/company-detail.js';
@@ -46,6 +47,7 @@ const routes = {
   '/admin/system': () => renderSystemAdmin(),
   '/admin/duplicates': () => renderDuplicates(),
   '/admin/consistency': () => renderConsistencyReport(),
+  '/admin/export-data': () => renderExportData(),
   '/admin/addresses': () => renderAddressMerge(),
   '/admin/labels': () => renderLabelAdmin(),
   '/admin/relationships': () => renderRelationshipSuggestions(),

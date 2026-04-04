@@ -753,6 +753,20 @@
     "noIssues": "No issues found. All relationships look consistent.",
     "found": "{count} issues found"
   },
+  "export": {
+    "title": "Export data",
+    "desc": "Download a backup of all your data.",
+    "dataOnly": "Data only (JSON)",
+    "dataOnlyDesc": "Contacts, relationships, posts, and all metadata. No media files.",
+    "fullBackup": "Full backup",
+    "fullBackupDesc": "Everything including photos, videos, and documents.",
+    "preparing": "Preparing export...",
+    "progress": "{percent}% complete",
+    "complete": "Export ready!",
+    "failed": "Export failed. Please try again.",
+    "download": "Download",
+    "startExport": "Start export"
+  },
   "duplicates": {
     "title": "Duplicate contacts",
     "desc": "Find contacts that may be duplicates and merge them.",

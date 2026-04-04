@@ -20,7 +20,7 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 
-## Pages (26 files)
+## Pages (27 files)
 
 Each page exports a `render*()` function called by the router in `app.js`.
 
@@ -59,6 +59,7 @@ Each page exports a `render*()` function called by the router in `app.js`.
 | Relationships | `/admin/relationships` | `renderRelationshipSuggestions()` |
 | Duplicates | `/admin/duplicates` | `renderDuplicates()` |
 | Consistency | `/admin/consistency` | `renderConsistencyReport()` |
+| Export Data | `/admin/export-data` | `renderExportData()` — JSON and full backup download |
 | Security | `/admin/security` | `renderSecurityAdmin()` |
 
 ### Portal Pages

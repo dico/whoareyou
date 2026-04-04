@@ -15,6 +15,7 @@
 | [Integrations](integrations.md) | MomentGarden import, ipgeolocation.io, SMTP |
 | [Family Portal](portal.md) | Portal architecture, guest auth, share links |
 | [Relationships](relationships.md) | Storage convention, display logic, suggestions, family tree, consistency |
+| [Export](export.md) | Data export formats, JSON field reference, security |
 | [TODO](todo.md) | Development backlog — refactoring, known issues, planned improvements |
 
 ## Quick Start for Contributors
@@ -54,7 +55,7 @@ whoareyou/
 │       ├── index.js              # Express app entry point
 │       ├── config/               # App configuration
 │       ├── middleware/            # Auth, tenant scope, portal auth
-│       ├── routes/               # 16 route modules
+│       ├── routes/               # 17 route modules
 │       ├── services/             # Email, image, geocoding, geolocation
 │       ├── utils/                # Errors, validation, sessions, IP, settings
 │       └── migrations/           # 66 Knex migrations
@@ -69,7 +70,7 @@ whoareyou/
 │   │   ├── app.js                # Router + state + init
 │   │   ├── api/client.js         # API client (fetch wrapper)
 │   │   ├── components/           # Reusable UI components (12 files)
-│   │   ├── pages/                # Page renderers (26 files)
+│   │   ├── pages/                # Page renderers (27 files)
 │   │   └── utils/                # i18n, auth-url, drop-zone, visibility
 │   ├── locales/                  # en.json, nb.json
 │   └── img/                      # Logo, icons, flags
