@@ -46,7 +46,7 @@ export async function renderCompanyDetail(uuid) {
             }
             <div class="detail-header-info">
               <h3 class="mb-0">${escapeHtml(company.name)}</h3>
-              <span class="text-muted small">${t('groups.types.' + (company.type || 'other'))}${company.parent ? ` · ${t('groups.parentGroup')}: <a href="/companies/${company.parent.uuid}" data-link class="text-muted">${escapeHtml(company.parent.name)}</a>` : ''}${company.description ? ` · ${escapeHtml(company.description)}` : ''}</span>
+              <span class="text-muted small">${t('groups.types.' + (company.type || 'other'))}${company.parent ? ` · ${t('groups.parentGroup')}: <a href="/groups/${company.parent.uuid}" data-link class="text-muted">${escapeHtml(company.parent.name)}</a>` : ''}${company.description ? ` · ${escapeHtml(company.description)}` : ''}</span>
             </div>
             <div class="detail-header-actions">
               <div class="dropdown">
@@ -77,7 +77,7 @@ export async function renderCompanyDetail(uuid) {
               <h4><i class="bi bi-diagram-3"></i> ${t('groups.childGroups')}</h4>
               <div class="address-residents">
                 ${company.children.map(c => `
-                  <a href="/companies/${c.uuid}" data-link class="contact-row">
+                  <a href="/groups/${c.uuid}" data-link class="contact-row">
                     <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
                       ${c.logo_path ? `<img src="${authUrl(c.logo_path)}" alt="">` : `<i class="bi ${TYPE_ICONS[c.type] || 'bi-people'}" style="font-size:0.8rem;color:#fff"></i>`}
                     </div>
@@ -184,7 +184,7 @@ export async function renderCompanyDetail(uuid) {
                         company.org_number ? `<div class="info-field"><span class="info-label">${t('companies.orgNumber')}</span><span>${escapeHtml(company.org_number)}</span></div>` : '',
                         company.industry ? `<div class="info-field"><span class="info-label">${t('companies.industry')}</span><span>${escapeHtml(company.industry)}</span></div>` : '',
                         company.address ? `<div class="info-field"><span class="info-label">${t('addresses.address')}</span><span>${escapeHtml(company.address)}</span></div>` : '',
-                        company.website ? `<div class="info-field"><span class="info-label">${t('companies.website')}</span><a href="${company.website.startsWith('http') ? company.website : 'https://' + company.website}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></div>` : '',
+                        company.website ? `<div class="info-field"><span class="info-label">${t('companies.website')}</span><a href="${safeUrl(company.website)}" target="_blank" rel="noopener">${escapeHtml(company.website)}</a></div>` : '',
                         company.phone ? `<div class="info-field"><span class="info-label">${t('companies.phone')}</span><a href="tel:${company.phone}">${escapeHtml(company.phone)}</a></div>` : '',
                         company.email ? `<div class="info-field"><span class="info-label">${t('companies.email')}</span><a href="mailto:${company.email}">${escapeHtml(company.email)}</a></div>` : '',
                         company.notes ? `<div class="info-field"><span class="info-label">${t('contacts.notes')}</span><span class="text-muted">${escapeHtml(company.notes)}</span></div>` : '',
@@ -246,7 +246,7 @@ export async function renderCompanyDetail(uuid) {
       e.preventDefault();
       if (await confirmDialog(t('companies.deleteConfirm', { name: company.name }), { title: t('common.delete'), confirmText: t('common.delete') })) {
         await api.delete(`/companies/${uuid}`);
-        navigate('/companies');
+        navigate('/groups');
       }
     });
 
@@ -580,6 +580,12 @@ function showEditCompanyDialog(uuid, company, onDone) {
 
 function calcAge(birthYear) {
   return `${new Date().getFullYear() - birthYear} ${t('contacts.years')}`;
+}
+
+function safeUrl(url) {
+  if (!url) return '';
+  try { const u = new URL(url.startsWith('http') ? url : 'https://' + url); return ['http:', 'https:'].includes(u.protocol) ? u.href : ''; }
+  catch { return ''; }
 }
 
 function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }

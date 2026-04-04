@@ -35,6 +35,7 @@ People being tracked. Not login accounts.
 ### posts
 Universal timeline entries (replaces Monica's notes/activities/diary).
 - `contact_id` — "about" contact (profile post)
+- `company_id` — "about" group (group timeline post)
 - `body` — post text
 - `post_date` — when the event happened
 - `visibility` — shared/private
@@ -72,7 +73,8 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 | `post_contacts` | Tagged contacts in posts |
 | `post_comments` | Comments on posts (user or portal guest) |
 | `post_reactions` | Emoji reactions (default ❤️) |
-| `companies` | Company directory |
+| `companies` | Companies, schools, clubs, teams (groups). Fields: type, description, parent_id |
+| `company_photos` | Group photos (same pattern as contact_photos) |
 | `contact_companies` | Employment links with title and dates |
 | `life_events` | 10 event types with optional annual reminders |
 | `life_event_contacts` | Linked contacts per life event |
@@ -114,7 +116,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 64 migrations
+- Currently 66 migrations
 
 ### Creating a New Migration
 ```bash

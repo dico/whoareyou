@@ -341,6 +341,13 @@ async function loadPortalTimeline(contactUuid) {
     let portalPostMedia = [];
     const composePreview = el.querySelector('.portal-compose-preview');
 
+    // Auto-resize textarea
+    const composeTextarea = composeForm.querySelector('textarea');
+    composeTextarea.addEventListener('input', () => {
+      composeTextarea.style.height = 'auto';
+      composeTextarea.style.height = Math.min(composeTextarea.scrollHeight, 200) + 'px';
+    });
+
     composeForm.querySelector('.portal-compose-media').addEventListener('change', (e) => {
       portalPostMedia.push(...e.target.files);
       composePreview.innerHTML = portalPostMedia.map((f, i) => `
@@ -382,6 +389,7 @@ async function loadPortalTimeline(contactUuid) {
         }
 
         textarea.value = '';
+        textarea.style.height = 'auto';
         portalPostMedia = [];
         composePreview.classList.add('d-none');
         composePreview.innerHTML = '';

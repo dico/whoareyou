@@ -2394,7 +2394,7 @@ function renderCompanyRow(c) {
   const typeIcons = { company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people', team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection' };
   const icon = typeIcons[c.company_type] || 'bi-people';
   return `<div class="contact-row company-row" data-link-id="${c.link_id}">
-    <a href="/companies/${c.company_uuid}" data-link class="d-flex align-items-center gap-2 flex-grow-1 text-decoration-none">
+    <a href="/groups/${c.company_uuid}" data-link class="d-flex align-items-center gap-2 flex-grow-1 text-decoration-none">
       <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
         ${c.company_logo ? `<img src="${authUrl(c.company_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-full)">` : `<i class="bi ${icon}" style="font-size:0.7rem"></i>`}
       </div>

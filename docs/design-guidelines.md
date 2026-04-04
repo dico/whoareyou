@@ -62,6 +62,13 @@ All lists showing contacts use `contactRowHtml()` from `components/contact-row.j
 ### 7. Contact chips
 For inline contact references (tags, selections), use `.contact-chip` with `.contact-chip-avatar` + name + optional `.contact-chip-remove`. Same pattern for country tags with flags.
 
+**Always show profile photo** in the avatar slot when available. Backend must include `avatar` (thumbnail_path) in every response that feeds contact chips. Fallback to initials only when no photo exists:
+```html
+<span class="contact-chip-avatar">
+  ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${initials}</span>`}
+</span>
+```
+
 ### 8. Visibility pill
 Use `.visibility-pill` toggle for shared/private selection everywhere. Never use a plain button.
 

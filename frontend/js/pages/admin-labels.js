@@ -153,7 +153,7 @@ export async function renderLabelAdmin() {
 }
 
 function populateSelects() {
-  const opts = allLabels.map(l => `<option value="${l.id}">${l.name} (${l.contact_count})</option>`).join('');
+  const opts = allLabels.map(l => `<option value="${l.id}">${escapeHtml(l.name)} (${l.contact_count})</option>`).join('');
   document.getElementById('left-label-select').innerHTML = `<option value="">${t('labels.choose')}</option>` + opts;
   document.getElementById('right-label-select').innerHTML = `<option value="">${t('labels.choose')}</option>` + opts;
 }
@@ -238,7 +238,7 @@ async function loadPanel(side) {
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-              <p>${t('groups.importConfirm', { name: label?.name || '', count: contactCount })}</p>
+              <p>${t('groups.importConfirm', { name: escapeHtml(label?.name || ''), count: contactCount })}</p>
               <div class="form-floating mb-3">
                 <select class="form-select" id="${mid}-type">
                   ${TYPES.map(tp => `<option value="${tp}">${t('groups.types.' + tp)}</option>`).join('')}
@@ -266,7 +266,7 @@ async function loadPanel(side) {
         delete_label: document.getElementById(`${mid}-delete`).checked,
       });
       modal.hide();
-      navigate(`/companies/${result.uuid}`);
+      navigate(`/groups/${result.uuid}`);
     });
     modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
     modal.show();
@@ -383,3 +383,5 @@ async function transfer(mode, direction) {
     confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
   }
 }
+
+function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }

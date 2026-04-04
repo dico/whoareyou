@@ -97,7 +97,7 @@ export async function renderCompanies() {
         website: (() => { let w = document.getElementById('new-company-website').value.trim(); if (w && !w.match(/^https?:\/\//)) w = 'https://' + w; return w || undefined; })(),
       });
       bootstrap.Modal.getInstance(document.getElementById('add-company-modal')).hide();
-      navigate(`/companies/${company.uuid}`);
+      navigate(`/groups/${company.uuid}`);
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.classList.remove('d-none');
@@ -127,7 +127,7 @@ async function loadCompanies() {
     el.innerHTML = `<div class="contacts-list">${companies.map(c => {
       const icon = TYPE_ICONS[c.type] || 'bi-people';
       return `
-      <a href="/companies/${c.uuid}" data-link class="contact-card">
+      <a href="/groups/${c.uuid}" data-link class="contact-card">
         <div class="contact-avatar" style="background:var(--color-text-secondary)">
           ${c.logo_path
             ? `<img src="${authUrl(c.logo_path)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-full)">`

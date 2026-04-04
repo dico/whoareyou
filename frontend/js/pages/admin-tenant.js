@@ -574,7 +574,7 @@ async function loadPortalGuests() {
       // Build "can see" chips with avatars
       const canSeeChips = g.contacts.map(c => `
         <a href="/contacts/${c.uuid}" data-link class="contact-chip" style="font-size:0.75rem">
-          <span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>
+          <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '')}</span>`}</span>
           ${c.first_name}
         </a>
       `).join(' ');

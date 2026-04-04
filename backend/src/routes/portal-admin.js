@@ -40,7 +40,8 @@ router.get('/guests', async (req, res, next) => {
       g.contacts = await db('portal_guest_contacts')
         .where({ portal_guest_id: guestRow.id })
         .join('contacts', 'portal_guest_contacts.contact_id', 'contacts.id')
-        .select('contacts.uuid', 'contacts.first_name', 'contacts.last_name');
+        .select('contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+          db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`));
       const [{ count }] = await db('portal_sessions')
         .where({ portal_guest_id: guestRow.id, is_active: true })
         .where('expires_at', '>', db.fn.now())

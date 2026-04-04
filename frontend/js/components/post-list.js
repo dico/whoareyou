@@ -71,7 +71,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             const authorUuid = showAuthor && p.posted_by.contact_uuid ? p.posted_by.contact_uuid : p.about?.uuid;
             const authorHref = authorUuid ? `/contacts/${authorUuid}` : '#';
             const showTarget = !contactUuid && !companyUuid && hasAuthor;
-            const targetHref = p.about ? `/contacts/${p.about.uuid}` : p.company ? `/companies/${p.company.uuid}` : '#';
+            const targetHref = p.about ? `/contacts/${p.about.uuid}` : p.company ? `/groups/${p.company.uuid}` : '#';
             const targetName = p.about ? p.about.first_name : p.company?.name || '';
             return `
             <div class="post-about-header">

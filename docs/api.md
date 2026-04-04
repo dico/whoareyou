@@ -66,7 +66,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/` | Timeline (filter by contact, paginate) |
+| GET | `/` | Timeline (filter by contact or company, paginate) |
 | GET | `/gallery` | Photo gallery for a contact |
 | POST | `/` | Create post |
 | PUT | `/:uuid` | Update post |
@@ -109,8 +109,8 @@ CRUD, geocoding, map data, merge duplicates, move in/out history.
 ### Labels (`/api/labels`)
 CRUD, batch assign/remove contacts, category (group/interest).
 
-### Companies (`/api/companies`)
-CRUD, employee management with titles and dates. Brreg lookup (`GET /brreg/:orgNumber`).
+### Companies / Groups (`/api/companies`)
+CRUD with type (company/school/club/team/association/class/other), description, parent groups. Employee/member management with titles and dates. Brreg lookup (`GET /brreg/:orgNumber`). Photo CRUD (`GET/POST /:uuid/photos`, `PUT/DELETE /photos/:id`). Label import (`POST /import-from-label`). Frontend URL: `/groups`.
 
 ### Life Events (`/api/life-events`)
 CRUD, 10 types, annual reminder opt-in, linked contacts.

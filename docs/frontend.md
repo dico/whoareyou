@@ -29,11 +29,11 @@ Each page exports a `render*()` function called by the router in `app.js`.
 |------|-------|----------|
 | Timeline | `/`, `/timeline` | `renderTimeline(contactUuid?)` |
 | Contacts | `/contacts` | `renderContacts()` |
-| Contact Detail | `/contacts/:uuid` | `renderContactDetail(uuid)` |
+| Contact Detail | `/contacts/:uuid` | `renderContactDetail(uuid)`. Also exports `loadGalleryInto()` for reusable photo gallery. |
 | Map | `/map` | `renderMap()` |
 | Address Detail | `/contacts/:uuid/addresses/:id` | `renderAddressDetail(uuid, id)` |
-| Companies | `/companies` | `renderCompanies()` |
-| Company Detail | `/companies/:uuid` | `renderCompanyDetail(uuid)` |
+| Groups | `/groups` | `renderCompanies()` — companies, schools, clubs, teams |
+| Group Detail | `/groups/:uuid` | `renderCompanyDetail(uuid)` — members, info/timeline, photos |
 
 ### Gift Pages
 | Page | Route | Function |
