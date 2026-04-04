@@ -24,7 +24,7 @@ export async function renderCompanies() {
       <div class="d-flex gap-2 mb-3">
         <select class="form-select form-select-sm" id="type-filter" style="width:auto">
           <option value="">${t('groups.allTypes')}</option>
-          ${TYPES.map(tp => `<option value="${tp}">${t('groups.types.' + tp)}</option>`).join('')}
+          ${TYPES.map(tp => `<option value="${tp}" ${localStorage.getItem('groups.typeFilter') === tp ? 'selected' : ''}>${t('groups.types.' + tp)}</option>`).join('')}
         </select>
       </div>
       <div id="companies-list">
@@ -78,7 +78,11 @@ export async function renderCompanies() {
 
   await loadCompanies();
 
-  document.getElementById('type-filter').addEventListener('change', () => loadCompanies());
+  document.getElementById('type-filter').addEventListener('change', (e) => {
+    if (e.target.value) localStorage.setItem('groups.typeFilter', e.target.value);
+    else localStorage.removeItem('groups.typeFilter');
+    loadCompanies();
+  });
 
   document.getElementById('btn-add-company').addEventListener('click', () => {
     new bootstrap.Modal(document.getElementById('add-company-modal')).show();

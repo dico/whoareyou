@@ -6,6 +6,7 @@ import { attachContactSearch } from '../components/contact-search.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
 import { renderPostList } from '../components/post-list.js';
+import { showPhotoViewer } from '../components/photo-viewer.js';
 import { loadGalleryInto } from './contact-detail.js';
 import { enableDropZone } from '../utils/drop-zone.js';
 
@@ -40,10 +41,14 @@ export async function renderCompanyDetail(uuid) {
       <div class="page-container">
         <div class="detail-header-wrap">
           <div class="detail-header glass-card">
-            ${company.logo_path
-              ? `<img src="${authUrl(company.logo_path)}" alt="" style="width:56px;height:56px;border-radius:var(--radius-full);object-fit:cover;flex-shrink:0">`
-              : `<div class="detail-header-icon" style="background:${TYPE_COLORS[company.type] || TYPE_COLORS.other}"><i class="bi ${typeIcon}"></i></div>`
-            }
+            <div class="detail-avatar" id="group-logo-wrap" style="width:56px;height:56px;flex-shrink:0;position:relative;cursor:pointer">
+              ${company.logo_path
+                ? `<img src="${authUrl(company.logo_path)}" alt="" style="width:56px;height:56px;border-radius:var(--radius-full);object-fit:cover">`
+                : `<div class="detail-header-icon" style="background:${TYPE_COLORS[company.type] || TYPE_COLORS.other}"><i class="bi ${typeIcon}"></i></div>`
+              }
+              <div class="avatar-overlay"><i class="bi bi-${company.logo_path ? 'images' : 'camera-fill'}"></i></div>
+              <input type="file" id="group-logo-input" accept="image/*" hidden>
+            </div>
             <div class="detail-header-info">
               <h3 class="mb-0">${escapeHtml(company.name)}</h3>
               <span class="text-muted small">${t('groups.types.' + (company.type || 'other'))}${company.parent ? ` · ${t('groups.parentGroup')}: <a href="/groups/${company.parent.uuid}" data-link class="text-muted">${escapeHtml(company.parent.name)}</a>` : ''}${company.description ? ` · ${escapeHtml(company.description)}` : ''}</span>
@@ -249,6 +254,34 @@ export async function renderCompanyDetail(uuid) {
         navigate('/groups');
       }
     });
+
+    // Logo upload (click + drag & drop)
+    const logoWrap = document.getElementById('group-logo-wrap');
+    const logoInput = document.getElementById('group-logo-input');
+    const uploadLogo = async (file) => {
+      if (!file || !file.type.startsWith('image/')) return;
+      const formData = new FormData();
+      formData.append('logo', file);
+      await api.upload(`/companies/${uuid}/logo`, formData);
+      renderCompanyDetail(uuid);
+    };
+    logoWrap?.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (company.logo_path) {
+        // Show logo in photo viewer (with upload capability)
+        const logoAsPhoto = [{ id: 'logo', file_path: company.logo_path, thumbnail_path: company.logo_path, is_primary: true }];
+        showPhotoViewer(uuid, logoAsPhoto, 0, () => renderCompanyDetail(uuid), {
+          apiBase: `/companies/${uuid}`,
+          skipCrop: true,
+        });
+      } else {
+        logoInput?.click();
+      }
+    });
+    logoInput?.addEventListener('change', (e) => uploadLogo(e.target.files[0]));
+    logoWrap?.addEventListener('dragover', (e) => { e.preventDefault(); logoWrap.classList.add('drop-active'); });
+    logoWrap?.addEventListener('dragleave', () => logoWrap.classList.remove('drop-active'));
+    logoWrap?.addEventListener('drop', (e) => { e.preventDefault(); logoWrap.classList.remove('drop-active'); uploadLogo(e.dataTransfer.files[0]); });
 
     // View tabs (members / info / gallery)
     let postsLoaded = false;

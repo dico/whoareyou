@@ -274,8 +274,8 @@ router.post('/:uuid/logo', logoUpload.single('logo'), async (req, res, next) => 
       req.file.path, `companies/${company.uuid}`, `logo_${Date.now()}`
     );
 
-    await db('companies').where({ id: company.id }).update({ logo_path: processed.thumbnailPath });
-    res.json({ logo_path: processed.thumbnailPath });
+    await db('companies').where({ id: company.id }).update({ logo_path: processed.filePath });
+    res.json({ logo_path: processed.filePath });
   } catch (err) {
     next(err);
   }
