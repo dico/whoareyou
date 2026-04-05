@@ -13,18 +13,39 @@ Two export modes available from Settings → Export Data (`/admin/export-data`):
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/export/encryption` | Get encryption status |
+| PUT | `/api/export/encryption` | Set/clear encryption password (admin only) |
 | GET | `/api/export/data` | Instant JSON-only ZIP download |
 | POST | `/api/export/full` | Start full export job (returns jobId) |
-| GET | `/api/export/status/:jobId` | Poll job progress |
+| GET | `/api/export/status/:jobId` | Poll job progress (includes encrypted flag) |
 | GET | `/api/export/download/:jobId` | Download completed full export |
+| GET | `/api/export/log` | Export history (all tenant members) |
 
 ## Security
 
 - All endpoints require authentication + tenant scope
+- Export rate limited: 10 requests per hour per user
 - Jobs are tied to userId + tenantId — other users get 404
 - Temp files use random UUIDs (not guessable)
 - Files deleted after download (download-once)
 - Rate limited: one active job per user
+
+## Encryption
+
+- Optional AES-256-GCM encryption with PBKDF2 key derivation (310,000 iterations)
+- Password set once in Settings → Export Data (admin only)
+- Encrypted files use `.zip.enc` extension
+- Format: salt (16 bytes) + IV (12 bytes) + auth tag (16 bytes) + encrypted data
+- Admin can skip encryption per download for local use
+- Non-admin users always get encrypted exports if password is configured
+
+## Export Log
+
+All export activity is logged in `export_log` table:
+- Logged at request start (status: started), updated through lifecycle
+- Status values: started → ready → downloaded (or failed)
+- Records: user, IP address, country (via ipgeolocation), type, encryption status, file size
+- Visible to all tenant members (audit trail)
 - Auto-cleanup of temp files older than 1 hour
 
 ## ZIP Structure

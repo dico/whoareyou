@@ -1,13 +1,71 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { config } from '../config/index.js';
+import { getSetting, setSetting } from '../utils/settings.js';
 import AdmZip from 'adm-zip';
 import fs from 'fs';
 import path from 'path';
+import { getCountryForIp } from '../services/geolocation.js';
+
+function getClientIp(req) {
+  return (req.headers['x-forwarded-for']?.split(',')[0] || req.ip || '').replace(/^::ffff:/, '').trim();
+}
+
+async function createExportLog(req, exportType) {
+  try {
+    const ip = getClientIp(req);
+    let countryCode = null;
+    try {
+      const cc = await getCountryForIp(ip);
+      if (cc && cc.length === 2) countryCode = cc;
+    } catch {}
+    const [logId] = await db('export_log').insert({
+      tenant_id: req.tenantId,
+      user_id: req.user.id,
+      export_type: exportType,
+      status: 'started',
+      encrypted: 0,
+      ip_address: ip || null,
+      country_code: countryCode || null,
+    });
+    return logId;
+  } catch (err) {
+    console.error('Export log create failed:', err.message);
+    return null;
+  }
+}
+
+async function updateExportLog(logId, updates) {
+  if (!logId) return;
+  try {
+    await db('export_log').where({ id: logId }).update(updates);
+  } catch (err) {
+    console.error('Export log update failed:', err.message);
+  }
+}
 
 const router = Router();
+
+// AES-256-GCM encryption for export files
+function encryptBuffer(buffer, password) {
+  const salt = crypto.randomBytes(16);
+  const key = crypto.pbkdf2Sync(password, salt, 310000, 32, 'sha256');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  // Format: salt (16) + iv (12) + authTag (16) + encrypted data
+  return Buffer.concat([salt, iv, authTag, encrypted]);
+}
+
+function encryptFile(inputPath, outputPath, password) {
+  const data = fs.readFileSync(inputPath);
+  const encrypted = encryptBuffer(data, password);
+  fs.writeFileSync(outputPath, encrypted);
+}
 
 // In-memory job tracker (short-lived, cleaned up automatically)
 const exportJobs = new Map();
@@ -273,25 +331,66 @@ async function queryAllData(tenantId) {
   };
 }
 
-// Collect all media file paths from the data
+// Collect all media file paths from the data (exclude thumbnails to reduce size)
 function collectMediaPaths(data) {
   const paths = new Set();
   for (const c of data.contacts) {
-    for (const p of c.photos) { paths.add(p.file_path); paths.add(p.thumbnail_path); }
+    for (const p of c.photos) { paths.add(p.file_path); }
   }
   for (const p of data.posts) {
-    for (const m of p.media) { paths.add(m.file_path); paths.add(m.thumbnail_path); }
+    for (const m of p.media) { paths.add(m.file_path); }
   }
   for (const c of data.companies) {
     if (c.logo_path) paths.add(c.logo_path);
-    for (const p of c.photos) { paths.add(p.file_path); paths.add(p.thumbnail_path); }
+    for (const p of c.photos) { paths.add(p.file_path); }
   }
   return [...paths].filter(Boolean);
 }
 
+// ── GET /api/export/encryption — get encryption status ──
+
+router.get('/encryption', async (req, res, next) => {
+  try {
+    const pass = await getSetting('export_encryption_password', '');
+    res.json({ configured: !!pass });
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/export/encryption — set encryption password ──
+
+router.put('/encryption', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { password } = req.body;
+    if (password === undefined) return res.status(400).json({ error: 'password is required' });
+    await setSetting('export_encryption_password', password || '');
+    res.json({ configured: !!password, message: password ? 'Encryption password set' : 'Encryption disabled' });
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/export/log — export history ──
+
+router.get('/log', async (req, res, next) => {
+  try {
+    const logs = await db('export_log')
+      .where({ 'export_log.tenant_id': req.tenantId })
+      .join('users', 'export_log.user_id', 'users.id')
+      .select(
+        'export_log.export_type', 'export_log.status', 'export_log.encrypted', 'export_log.ip_address',
+        'export_log.country_code', 'export_log.filename', 'export_log.file_size',
+        'export_log.created_at',
+        'users.first_name as user_first', 'users.last_name as user_last'
+      )
+      .orderBy('export_log.created_at', 'desc')
+      .limit(50);
+    res.json({ logs });
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/export/data — instant JSON-only ZIP download ──
 
 router.get('/data', async (req, res, next) => {
+  const logId = await createExportLog(req, 'data');
   try {
     const data = await queryAllData(req.tenantId);
     const today = new Date().toISOString().split('T')[0];
@@ -327,14 +426,27 @@ router.get('/data', async (req, res, next) => {
     zip.addFile('reminders.json', Buffer.from(JSON.stringify(data.reminders, null, 2)));
     zip.addFile('gifts.json', Buffer.from(JSON.stringify(data.gifts, null, 2)));
 
-    const buffer = zip.toBuffer();
+    let buffer = zip.toBuffer();
+    const skipEncryption = req.query.skip_encryption === 'true' && req.user.role === 'admin';
+    const encPassword = skipEncryption ? '' : await getSetting('export_encryption_password', '');
+    const encrypted = !!encPassword;
+
+    if (encrypted) {
+      buffer = encryptBuffer(buffer, encPassword);
+    }
+
+    const ext = encrypted ? 'zip.enc' : 'zip';
     res.set({
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="whoareyou-export-${today}.zip"`,
+      'Content-Type': encrypted ? 'application/octet-stream' : 'application/zip',
+      'Content-Disposition': `attachment; filename="whoareyou-export-${today}.${ext}"`,
       'Content-Length': buffer.length,
     });
     res.send(buffer);
-  } catch (err) { next(err); }
+    updateExportLog(logId, { status: 'downloaded', encrypted: encrypted ? 1 : 0, filename: `whoareyou-export-${today}.${ext}`, file_size: buffer.length });
+  } catch (err) {
+    updateExportLog(logId, { status: 'failed' });
+    next(err);
+  }
 });
 
 // ── POST /api/export/full — start full export with media ──
@@ -351,7 +463,9 @@ router.post('/full', async (req, res, next) => {
     cleanupOldExports();
 
     const jobId = uuidv4();
-    const job = { userId: req.user.id, tenantId: req.tenantId, status: 'running', progress: 0, filePath: null, createdAt: Date.now() };
+    const skipEncryption = !!req.body?.skip_encryption && req.user.role === 'admin';
+    const logId = await createExportLog(req, 'full');
+    const job = { userId: req.user.id, tenantId: req.tenantId, status: 'running', progress: 0, filePath: null, createdAt: Date.now(), skipEncryption, logId };
     exportJobs.set(jobId, job);
 
     res.json({ jobId, status: 'running', progress: 0 });
@@ -360,6 +474,7 @@ router.post('/full', async (req, res, next) => {
     runFullExport(jobId, job, req.tenantId).catch(err => {
       job.status = 'failed';
       job.error = err.message;
+      updateExportLog(job.logId, { status: 'failed' });
     });
   } catch (err) { next(err); }
 });
@@ -422,11 +537,28 @@ async function runFullExport(jobId, job, tenantId) {
     job.progress = 50 + Math.floor((processed / mediaPaths.length) * 45);
   }
 
-  const filePath = path.join(tempDir, `export-${jobId}.zip`);
-  zip.writeZip(filePath);
-  job.filePath = filePath;
+  const zipPath = path.join(tempDir, `export-${jobId}.zip`);
+  zip.writeZip(zipPath);
+
+  // Encrypt if password is set and not skipped
+  const encPassword = job.skipEncryption ? '' : await getSetting('export_encryption_password', '');
+  if (encPassword) {
+    const encPath = zipPath + '.enc';
+    encryptFile(zipPath, encPath, encPassword);
+    fs.unlinkSync(zipPath);
+    job.filePath = encPath;
+    job.encrypted = true;
+  } else {
+    job.filePath = zipPath;
+    job.encrypted = false;
+  }
+
   job.status = 'complete';
   job.progress = 100;
+
+  // Update log with ready status and file size
+  const fileSize = fs.existsSync(job.filePath) ? fs.statSync(job.filePath).size : 0;
+  updateExportLog(job.logId, { status: 'ready', encrypted: job.encrypted ? 1 : 0, file_size: fileSize });
 }
 
 // ── GET /api/export/status/:jobId — poll job status ──
@@ -436,7 +568,7 @@ router.get('/status/:jobId', (req, res) => {
   if (!job || job.userId !== req.user.id || job.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'Job not found' });
   }
-  res.json({ status: job.status, progress: job.progress });
+  res.json({ status: job.status, progress: job.progress, encrypted: job.encrypted || false });
 });
 
 // ── GET /api/export/download/:jobId — download completed ZIP ──
@@ -451,7 +583,11 @@ router.get('/download/:jobId', (req, res) => {
   }
 
   const today = new Date().toISOString().split('T')[0];
-  res.download(job.filePath, `whoareyou-full-export-${today}.zip`, (err) => {
+  const ext = job.encrypted ? 'zip.enc' : 'zip';
+  const filename = `whoareyou-full-export-${today}.${ext}`;
+  const fileSize = fs.existsSync(job.filePath) ? fs.statSync(job.filePath).size : 0;
+  res.download(job.filePath, filename, (err) => {
+    if (!err) updateExportLog(job.logId, { status: 'downloaded', filename });
     // Clean up after download (or on error)
     try { fs.unlinkSync(job.filePath); } catch {}
     exportJobs.delete(req.params.jobId);

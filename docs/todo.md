@@ -22,6 +22,10 @@
 **Status:** Partially done
 **Why:** `tenant_members.linked_contact_id` exists and utility function created, but some code paths still reference `users.linked_contact_id` as fallback. Remove column after all code paths migrated.
 
+### Data export — Phase 2.5 (export encryption)
+**Status:** Done — documented in [export.md](export.md)
+AES-256-GCM encryption, admin-only password management, export audit log with IP/country/status tracking, skip-encryption option for admins, rate limited (10/hour).
+
 ### Data export — Phase 3 (scheduled cloud backup)
 **Status:** Not started — Phase 2 (in-app export) is done, documented in [export.md](export.md)
 

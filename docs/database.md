@@ -89,6 +89,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `dismissed_suggestions` | Dismissed relationship suggestions (per tenant) |
 | `dismissed_duplicates` | Dismissed duplicate contact pairs (per tenant) |
 | `audit_log` | Sensitive operation logging |
+| `export_log` | Export audit trail (user, IP, country, type, status, encryption) |
 | `ip_geo_cache` | IP → country cache (30-day TTL) |
 
 ## Gift Tables
@@ -117,7 +118,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 67 migrations
+- Currently 69 migrations
 
 ### Creating a New Migration
 ```bash
