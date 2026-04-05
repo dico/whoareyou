@@ -561,7 +561,7 @@ router.get('/orders', async (req, res, next) => {
         'gift_orders.visibility', 'gift_orders.created_at',
         'gift_events.uuid as event_uuid', 'gift_events.name as event_name',
         'gift_products.uuid as product_uuid', 'gift_products.name as product_name',
-        'gift_products.image_url as product_image_url'
+        'gift_products.url as product_url', 'gift_products.image_url as product_image_url'
       )
       .orderBy('gift_orders.created_at', 'desc')
       .limit(limit);

@@ -152,7 +152,17 @@ function attachPlanningHandlers() {
                 <div class="modal-body">
                   <div class="mb-3">
                     <label class="form-label">${t('gifts.gift')}</label>
-                    <div id="${mid}-product-wrap"></div>
+                    ${g.product_image_url || g.product_url ? `
+                    <div class="d-flex align-items-center gap-2 mb-2 p-2 border rounded" id="${mid}-product-card">
+                      ${g.product_image_url ? `<img src="${g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : esc(g.product_image_url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:var(--radius-sm)">` : ''}
+                      <div style="flex:1;min-width:0">
+                        <div class="small fw-medium">${esc(g.title)}</div>
+                        ${g.product_url ? `<a href="${esc(g.product_url)}" target="_blank" rel="noopener" class="text-muted small text-truncate d-block">${esc(g.product_url)}</a>` : ''}
+                      </div>
+                      <button type="button" class="btn btn-link btn-sm p-0" id="${mid}-change-product" title="${t('relationships.change')}"><i class="bi bi-pencil"></i></button>
+                    </div>
+                    ` : ''}
+                    <div id="${mid}-product-wrap" ${g.product_image_url || g.product_url ? 'class="d-none"' : ''}></div>
                   </div>
                   <div class="row g-2 mb-3">
                     <div class="col">
@@ -187,6 +197,15 @@ function attachPlanningHandlers() {
       `);
       const modalEl = document.getElementById(mid);
       const modal = new bootstrap.Modal(modalEl);
+
+      // Show product picker when clicking "change"
+      const changeBtn = document.getElementById(`${mid}-change-product`);
+      if (changeBtn) {
+        changeBtn.addEventListener('click', () => {
+          document.getElementById(`${mid}-product-card`)?.classList.add('d-none');
+          document.getElementById(`${mid}-product-wrap`)?.classList.remove('d-none');
+        });
+      }
 
       // Product picker
       const productWrap = document.getElementById(`${mid}-product-wrap`);
