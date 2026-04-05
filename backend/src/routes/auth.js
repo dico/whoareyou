@@ -969,6 +969,92 @@ router.put('/tenant/security', authenticate, async (req, res, next) => {
   }
 });
 
+// GET /api/auth/tenant-sessions — all active sessions in current tenant (admin only)
+router.get('/tenant-sessions', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+
+    const tenantId = req.user.tenantId;
+
+    // Get all user IDs in this tenant
+    const memberIds = await db('tenant_members')
+      .where({ tenant_id: tenantId })
+      .select('user_id');
+    const userIds = memberIds.map(m => m.user_id);
+
+    // Also include tenant owner
+    const ownerUsers = await db('users').where({ tenant_id: tenantId }).select('id');
+    for (const u of ownerUsers) { if (!userIds.includes(u.id)) userIds.push(u.id); }
+
+    const sessions = await db('sessions')
+      .whereIn('sessions.user_id', userIds)
+      .where({ 'sessions.is_active': true })
+      .where('sessions.expires_at', '>', db.fn.now())
+      .join('users', 'sessions.user_id', 'users.id')
+      .leftJoin('tenant_members as tm', function () {
+        this.on('users.id', 'tm.user_id').andOn('tm.tenant_id', '=', db.raw('?', [tenantId]));
+      })
+      .leftJoin('contacts as lc', 'tm.linked_contact_id', 'lc.id')
+      .select(
+        'sessions.uuid', 'sessions.device_label', 'sessions.ip_address',
+        'sessions.last_activity_at', 'sessions.created_at',
+        'users.id as user_id', 'users.first_name', 'users.last_name', 'users.email',
+        'lc.uuid as contact_uuid', 'lc.first_name as contact_first', 'lc.last_name as contact_last',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = lc.id AND cp.is_primary = true LIMIT 1) as avatar`)
+      )
+      .orderBy('sessions.last_activity_at', 'desc');
+
+    // Add country codes
+    const { getCountryForIp } = await import('../services/geolocation.js');
+    const currentSid = req.user.sessionId;
+    const result = await Promise.all(sessions.map(async (s) => {
+      let country_code = null;
+      if (s.ip_address) {
+        try {
+          const cc = await getCountryForIp(s.ip_address);
+          if (cc && cc.length === 2) country_code = cc;
+        } catch {}
+      }
+      return {
+        uuid: s.uuid,
+        device_label: s.device_label,
+        ip_address: s.ip_address,
+        last_activity_at: s.last_activity_at,
+        created_at: s.created_at,
+        is_current: s.uuid === currentSid,
+        country_code,
+        user: {
+          first_name: s.contact_first || s.first_name,
+          last_name: s.contact_last || s.last_name,
+          email: s.email,
+          avatar: s.avatar,
+          contact_uuid: s.contact_uuid,
+        },
+      };
+    }));
+
+    res.json({ sessions: result });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/auth/tenant-sessions/:uuid — revoke any session in tenant (admin only)
+router.delete('/tenant-sessions/:uuid', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+
+    // Verify session belongs to a tenant member
+    const session = await db('sessions').where({ uuid: req.params.uuid, is_active: true }).first();
+    if (!session) throw new AppError('Session not found', 404);
+
+    if (req.params.uuid === req.user.sessionId) {
+      throw new AppError('Cannot revoke your current session', 400);
+    }
+
+    await db('sessions').where({ uuid: req.params.uuid }).update({ is_active: false });
+    res.json({ message: 'Session revoked' });
+  } catch (err) { next(err); }
+});
+
 // ── Tenant member management ──
 
 // GET /api/auth/members — list members in current tenant

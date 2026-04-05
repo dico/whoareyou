@@ -30,6 +30,7 @@ export async function renderTenantAdmin() {
       <div class="filter-tabs mb-3" id="tenant-tabs">
         <button class="filter-tab active" data-tab="members"><i class="bi bi-people me-1"></i>${t('admin.manageMembers')}</button>
         <button class="filter-tab" data-tab="portal"><i class="bi bi-share me-1"></i>${t('portal.title')}</button>
+        <button class="filter-tab" data-tab="sessions"><i class="bi bi-laptop me-1"></i>${t('admin.sessions')}</button>
         <button class="filter-tab" data-tab="security"><i class="bi bi-shield-lock me-1"></i>${t('settings.security')}</button>
       </div>
 
@@ -40,6 +41,19 @@ export async function renderTenantAdmin() {
           <div id="members-list" class="mt-3">
             <div class="loading">${t('admin.loadingMembers')}</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Sessions tab -->
+      <div id="tab-sessions" class="d-none">
+        <div class="settings-section glass-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">${t('admin.sessions')}</h4>
+            <button class="btn btn-outline-danger btn-sm" id="btn-revoke-all-sessions">
+              <i class="bi bi-x-circle me-1"></i>${t('admin.revokeAll')}
+            </button>
+          </div>
+          <div id="tenant-sessions-list"><div class="loading">${t('app.loading')}</div></div>
         </div>
       </div>
 
@@ -182,14 +196,22 @@ export async function renderTenantAdmin() {
     if (!tab) return;
     document.querySelectorAll('#tenant-tabs .filter-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    ['members', 'portal', 'security'].forEach(id => {
+    ['members', 'sessions', 'portal', 'security'].forEach(id => {
       document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
     });
     inviteBtn.classList.toggle('d-none', tab.dataset.tab !== 'members');
+    if (tab.dataset.tab === 'sessions') loadTenantSessions();
     if (tab.dataset.tab === 'security') loadTrustedIps();
     if (tab.dataset.tab === 'portal') loadPortal();
   });
   inviteBtn.classList.remove('d-none');
+
+  // Revoke all sessions
+  document.getElementById('btn-revoke-all-sessions')?.addEventListener('click', async () => {
+    if (!await confirmDialog(t('admin.revokeAllConfirm'))) return;
+    await api.delete('/auth/sessions');
+    loadTenantSessions();
+  });
 
   // Invite button
   document.getElementById('btn-invite').addEventListener('click', () => {
@@ -515,6 +537,80 @@ async function loadMembers() {
 // ═══════════════════════════════════════
 // Portal management
 // ═══════════════════════════════════════
+
+async function loadTenantSessions() {
+  const el = document.getElementById('tenant-sessions-list');
+  if (!el) return;
+
+  try {
+    const { sessions } = await api.get('/auth/tenant-sessions');
+
+    if (!sessions.length) {
+      el.innerHTML = `<p class="text-muted small">${t('admin.noSessions')}</p>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <table class="table table-sm small mb-0">
+        <thead><tr>
+          <th></th>
+          <th>${t('admin.user')}</th>
+          <th>${t('admin.device')}</th>
+          <th>IP</th>
+          <th></th>
+          <th>${t('admin.lastActive')}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${sessions.map(s => `
+            <tr${s.is_current ? ' class="table-active"' : ''}>
+              <td>${s.user.avatar ? `<img src="${authUrl(s.user.avatar)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover">` : `<span class="contact-row-avatar" style="width:24px;height:24px;font-size:0.6rem"><span>${(s.user.first_name?.[0] || '') + (s.user.last_name?.[0] || '')}</span></span>`}</td>
+              <td>${s.user.contact_uuid ? `<a href="/contacts/${s.user.contact_uuid}" data-link>${s.user.first_name} ${s.user.last_name || ''}</a>` : `${s.user.first_name} ${s.user.last_name || ''}`}</td>
+              <td>${s.device_label || ''}</td>
+              <td>${s.ip_address || ''}</td>
+              <td>${s.country_code && /^[A-Z]{2}$/i.test(s.country_code) ? `<img src="/img/flags/${s.country_code.toLowerCase()}.svg" alt="${s.country_code}" style="width:16px;height:12px">` : ''}</td>
+              <td>${timeAgo(s.last_activity_at)}</td>
+              <td>${s.is_current
+                ? `<i class="bi bi-circle-fill text-success" style="font-size:0.5rem" title="${t('admin.currentSession')}"></i>`
+                : `<div class="dropdown">
+                    <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+                      <li><a class="dropdown-item text-danger btn-revoke-session" href="#" data-uuid="${s.uuid}"><i class="bi bi-x-circle me-2"></i>${t('admin.revoke')}</a></li>
+                    </ul>
+                  </div>`
+              }</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    el.querySelectorAll('#tenant-sessions-list .btn-revoke-session').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await api.delete(`/auth/tenant-sessions/${btn.dataset.uuid}`);
+        const tr = btn.closest('tr');
+        tr.style.transition = 'opacity 0.3s';
+        tr.style.opacity = '0';
+        setTimeout(() => { tr?.remove(); }, 300);
+      });
+    });
+  } catch (err) {
+    el.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+  }
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return t('time.justNow');
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
 
 async function loadPortal() {
   const toggle = document.getElementById('portal-tenant-toggle');
