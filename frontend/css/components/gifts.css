@@ -182,8 +182,8 @@
 
 .gift-event-card {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-xs);
   text-decoration: none;
@@ -217,7 +217,8 @@
 .gift-group-header {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  flex-wrap: wrap;
+  gap: var(--space-md);
   margin-bottom: var(--space-md);
   padding-bottom: var(--space-sm);
   border-bottom: 1px solid var(--color-border);
@@ -312,6 +313,11 @@ details[open] > .gift-ideas-label::before {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   transition: var(--transition-fast);
+  position: relative;
+}
+
+.gift-card:has(.dropdown-menu.show) {
+  z-index: 2;
 }
 
 .gift-card:hover {

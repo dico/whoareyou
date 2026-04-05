@@ -7,6 +7,8 @@ import { t } from '../utils/i18n.js';
 import { createProductPicker } from '../components/product-picker.js';
 import { giftSubNav } from './gifts.js';
 
+let allGifts = [];
+
 const STATUS_COLORS = {
   idea: 'secondary', reserved: 'info', purchased: 'warning',
   wrapped: 'purple', given: 'success', cancelled: 'danger',
@@ -43,6 +45,7 @@ async function loadPlanningList() {
       api.get('/gifts/orders?status=reserved&limit=200'),
     ]);
     const allIdeas = [...(ideasData.orders || []), ...(reservedData.orders || [])];
+    allGifts = allIdeas;
 
     if (!allIdeas.length) {
       el.innerHTML = `<div class="empty-state"><i class="bi bi-lightbulb"></i><p>${t('gifts.noIdeas')}</p></div>`;
@@ -98,12 +101,10 @@ function renderIdeaCard(g) {
         ${g.price ? `<span class="gift-card-price">${Math.round(g.price)} kr</span>` : ''}
         <span class="badge bg-${statusColor}">${t('gifts.statuses.' + g.status)}</span>
       </div>
-      <div class="dropdown" style="z-index:2">
+      <div class="dropdown">
         <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-        <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="z-index:1050">
+        <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
           <li><a class="dropdown-item idea-edit" href="#" data-uuid="${g.uuid}" data-title="${esc(g.title)}" data-price="${g.price || ''}" data-notes="${esc(g.notes || '')}" data-status="${g.status}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
-          <li><a class="dropdown-item idea-assign-event" href="#" data-uuid="${g.uuid}"><i class="bi bi-calendar-event me-2"></i>${g.event_uuid ? t('gifts.reassignEvent') : t('gifts.assignToEvent')}</a></li>
-          ${g.event_uuid ? `<li><a class="dropdown-item idea-unassign-event" href="#" data-uuid="${g.uuid}"><i class="bi bi-x-circle me-2"></i>${t('gifts.removeFromEvent')}</a></li>` : ''}
           <li><hr class="dropdown-divider"></li>
           <li><a class="dropdown-item text-danger idea-delete" href="#" data-uuid="${g.uuid}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
         </ul>
@@ -117,10 +118,28 @@ function attachPlanningHandlers() {
   if (!el) return;
 
   // Edit gift
+  // Store gifts data for edit modal
+  const giftsData = new Map();
+  allGifts.forEach(g => giftsData.set(g.uuid, g));
+
   el.querySelectorAll('.idea-edit').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       const mid = 'edit-gift-' + Date.now();
+      const g = giftsData.get(btn.dataset.uuid) || {};
+      const giverChips = (g.givers || []).map(c => `
+        <span class="contact-chip" data-uuid="${c.uuid}" style="font-size:0.75rem">
+          ${c.avatar ? `<span class="contact-chip-avatar"><img src="${authUrl(c.avatar)}" alt=""></span>` : `<span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>`}
+          ${c.first_name}
+          <button type="button" class="contact-chip-remove edit-remove-participant" data-uuid="${c.uuid}" data-role="giver"><i class="bi bi-x"></i></button>
+        </span>`).join('');
+      const recipientChips = (g.recipients || []).map(c => `
+        <span class="contact-chip" data-uuid="${c.uuid}" style="font-size:0.75rem">
+          ${c.avatar ? `<span class="contact-chip-avatar"><img src="${authUrl(c.avatar)}" alt=""></span>` : `<span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>`}
+          ${c.first_name}
+          <button type="button" class="contact-chip-remove edit-remove-participant" data-uuid="${c.uuid}" data-role="recipient"><i class="bi bi-x"></i></button>
+        </span>`).join('');
+
       document.body.insertAdjacentHTML('beforeend', `
         <div class="modal fade" id="${mid}" tabindex="-1">
           <div class="modal-dialog modal-dialog-centered">
@@ -133,7 +152,7 @@ function attachPlanningHandlers() {
                 <div class="modal-body">
                   <div class="mb-3">
                     <label class="form-label">${t('gifts.gift')}</label>
-                    <input type="text" class="form-control form-control-sm" id="${mid}-title" value="${btn.dataset.title}" required>
+                    <div id="${mid}-product-wrap"></div>
                   </div>
                   <div class="row g-2 mb-3">
                     <div class="col">
@@ -148,8 +167,13 @@ function attachPlanningHandlers() {
                     </div>
                   </div>
                   <div class="mb-3">
+                    <label class="form-label small">${t('gifts.to')}</label>
+                    <div class="d-flex flex-wrap gap-1 mb-1" id="${mid}-recipients">${recipientChips}</div>
+                    <input type="text" class="form-control form-control-sm" id="${mid}-recipient-search" placeholder="${t('common.search')}">
+                  </div>
+                  <div class="mb-3">
                     <label class="form-label">${t('gifts.notes')}</label>
-                    <input type="text" class="form-control form-control-sm" id="${mid}-notes" value="${btn.dataset.notes}">
+                    <input type="text" class="form-control form-control-sm" id="${mid}-notes" value="${esc(btn.dataset.notes)}">
                   </div>
                 </div>
                 <div class="modal-footer">
@@ -163,13 +187,49 @@ function attachPlanningHandlers() {
       `);
       const modalEl = document.getElementById(mid);
       const modal = new bootstrap.Modal(modalEl);
+
+      // Product picker
+      const productWrap = document.getElementById(`${mid}-product-wrap`);
+      const picker = createProductPicker(productWrap, (product) => {
+        if (product.default_price) document.getElementById(`${mid}-price`).value = product.default_price;
+      });
+      // Pre-fill with existing title
+      const pickerInput = productWrap.querySelector('.product-picker-input');
+      if (pickerInput) pickerInput.value = btn.dataset.title || '';
+
+      // Contact search for givers and recipients
+      const setupParticipantSearch = (inputId, containerId, role) => {
+        attachContactSearch(document.getElementById(inputId), {
+          limit: 6, floating: true,
+          onSelect: (c) => {
+            const container = document.getElementById(containerId);
+            if (container.querySelector(`[data-uuid="${c.uuid}"]`)) return;
+            const chip = document.createElement('span');
+            chip.className = 'contact-chip';
+            chip.dataset.uuid = c.uuid;
+            chip.style.fontSize = '0.75rem';
+            chip.innerHTML = `${c.avatar ? `<span class="contact-chip-avatar"><img src="${authUrl(c.avatar)}" alt=""></span>` : `<span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>`} ${c.first_name} <button type="button" class="contact-chip-remove"><i class="bi bi-x"></i></button>`;
+            chip.querySelector('.contact-chip-remove').addEventListener('click', () => chip.remove());
+            container.appendChild(chip);
+          },
+        });
+      };
+      setupParticipantSearch(`${mid}-recipient-search`, `${mid}-recipients`, 'recipient');
+
+      // Remove existing participant chips
+      modalEl.querySelectorAll('.edit-remove-participant').forEach(btn => {
+        btn.addEventListener('click', () => btn.closest('.contact-chip').remove());
+      });
+
       document.getElementById(`${mid}-form`).addEventListener('submit', async (ev) => {
         ev.preventDefault();
+        const recipientUuids = [...document.getElementById(`${mid}-recipients`).querySelectorAll('.contact-chip')].map(c => c.dataset.uuid);
         await api.put(`/gifts/orders/${btn.dataset.uuid}`, {
-          title: document.getElementById(`${mid}-title`).value.trim(),
+          title: (productWrap.querySelector('.product-picker-input')?.value || '').trim(),
           price: parseFloat(document.getElementById(`${mid}-price`).value) || null,
           status: document.getElementById(`${mid}-status`).value,
           notes: document.getElementById(`${mid}-notes`).value.trim() || null,
+          recipient_uuids: recipientUuids,
         });
         modal.hide();
         await loadPlanningList();
@@ -180,22 +240,6 @@ function attachPlanningHandlers() {
   });
 
   // Assign to event
-  el.querySelectorAll('.idea-assign-event').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await showAssignEventModal(btn.dataset.uuid);
-    });
-  });
-
-  // Remove from event
-  el.querySelectorAll('.idea-unassign-event').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await api.put(`/gifts/orders/${btn.dataset.uuid}`, { event_uuid: null });
-      await loadPlanningList();
-    });
-  });
-
   // Delete
   el.querySelectorAll('.idea-delete').forEach(btn => {
     btn.addEventListener('click', async (e) => {

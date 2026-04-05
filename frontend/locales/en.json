@@ -899,6 +899,7 @@
     "eventName": "Event name",
     "eventNamePlaceholder": "e.g. Christmas 2026",
     "eventType": "Type",
+    "chooseType": "Choose type...",
     "eventDate": "Date",
     "honoree": "For (honoree)",
     "from": "From",

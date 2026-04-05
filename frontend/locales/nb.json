@@ -899,6 +899,7 @@
     "eventName": "Navn på hendelse",
     "eventNamePlaceholder": "f.eks. Julen 2026",
     "eventType": "Type",
+    "chooseType": "Velg type...",
     "eventDate": "Dato",
     "honoree": "For (jubilant)",
     "from": "Fra",

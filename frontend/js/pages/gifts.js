@@ -161,7 +161,10 @@ async function loadEventsList() {
           <h5 class="gift-year-label">${year}</h5>
           ${evts.map(e => `
             <a href="/gifts/events/${e.uuid}" data-link class="gift-event-card glass-card">
-              <div class="gift-event-card-main">
+              <div class="detail-header-icon gift-event-icon-${e.event_type || 'other'}" style="width:36px;height:36px;font-size:1rem;flex-shrink:0">
+                <i class="bi bi-${EVENT_ICONS[e.event_type] || 'calendar-event'}"></i>
+              </div>
+              <div class="gift-event-card-main" style="flex:1;min-width:0">
                 <strong>${escapeHtml(e.name)}</strong>
               </div>
               <div class="gift-event-card-meta text-muted small">

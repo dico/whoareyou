@@ -37,9 +37,15 @@
 ## Low Priority
 
 ### Gift module UX improvements
-**Status:** 4 of 5 done
+**Status:** In progress
 **Remaining:**
-3. **Wedding: two honorees** — second honoree field (requires migration for `honoree_contact_id_2`)
+3. **Wedding: two honorees** — second honoree field (requires migration)
+6. **Planning page redesign:**
+   - Remove "From" field — family app, always from the household
+   - Remove "Change event" / "Remove from event" from planning dropdown — planning is pre-purchase, not event-linked. Transfer to event when marked as purchased/given.
+   - Edit modal: show product as card (image + info) instead of raw input, with "Change" button to search
+   - Planning dropdown should use `glass-dropdown` class (currently transparent)
+   - Visibility: hide gifts from recipients who are logged-in users (use `linked_contact_id` to check if recipient is current user)
 
 ### Standardize company search component
 **Status:** Not started
