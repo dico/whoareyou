@@ -141,10 +141,13 @@
 }
 
 .post-tags {
-  flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
+}
+
+.post-tags:not(:empty) {
+  padding: var(--space-xs) 0;
 }
 
 /* Timeline */

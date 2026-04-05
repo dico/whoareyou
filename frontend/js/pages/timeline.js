@@ -2,6 +2,7 @@ import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { renderPostList } from '../components/post-list.js';
 import { attachMention } from '../components/mention.js';
+import { attachContactSearch } from '../components/contact-search.js';
 import { toggleVisibilityBtn } from '../utils/visibility.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
@@ -35,6 +36,7 @@ export async function renderTimeline(contactUuid = null) {
           <form id="new-post-form" class="glass-card post-compose">
             <textarea id="post-body" class="form-control" placeholder="${t('posts.placeholder')}" rows="3"></textarea>
             <div id="post-media-preview" class="post-media-preview d-none"></div>
+            <div id="post-tags" class="post-tags"></div>
             <div class="post-compose-bar">
               <div class="visibility-pill" id="post-visibility-btn" data-visibility="shared">
                 <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-globe2"></i> ${t('visibility.shared')}</span>
@@ -42,7 +44,6 @@ export async function renderTimeline(contactUuid = null) {
                 <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
               </div>
               <div class="post-compose-actions">
-                <div class="post-tags" id="post-tags"></div>
                 <label class="post-media-btn" id="btn-add-media" title="${t('posts.addMedia')}">
                   <i class="bi bi-image"></i>
                   <input type="file" id="post-media-input" multiple accept="image/*,video/*" hidden>
@@ -101,8 +102,7 @@ export async function renderTimeline(contactUuid = null) {
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
-            <input type="text" class="form-control mb-3" id="tag-search" placeholder="${t('common.search')}">
-            <div id="tag-results" class="tag-results"></div>
+            <input type="text" class="form-control" id="tag-search" placeholder="${t('common.search')}" autofocus>
           </div>
         </div>
       </div>
@@ -240,49 +240,26 @@ export async function renderTimeline(contactUuid = null) {
   });
 
   // Tag contact
+  const tagModal = document.getElementById('tag-modal');
+  const tagSearchInput = document.getElementById('tag-search');
+
   document.getElementById('btn-tag-contact').addEventListener('click', () => {
-    const modal = new bootstrap.Modal(document.getElementById('tag-modal'));
-    modal.show();
-    loadTagSearch('');
+    new bootstrap.Modal(tagModal).show();
   });
 
-  // Tag search
-  let tagTimeout;
-  document.getElementById('tag-search').addEventListener('input', (e) => {
-    clearTimeout(tagTimeout);
-    tagTimeout = setTimeout(() => loadTagSearch(e.target.value), 200);
+  tagModal.addEventListener('shown.bs.modal', () => { tagSearchInput.value = ''; tagSearchInput.focus(); });
+
+  attachContactSearch(tagSearchInput, {
+    limit: 8,
+    floating: false,
+    onSelect: (c) => {
+      if (!taggedContacts.find(t => t.uuid === c.uuid)) {
+        taggedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name, avatar: c.avatar || null });
+        renderTags();
+      }
+      bootstrap.Modal.getInstance(tagModal).hide();
+    },
   });
-
-  async function loadTagSearch(search) {
-    const results = document.getElementById('tag-results');
-    try {
-      const params = new URLSearchParams();
-      if (search) params.set('search', search);
-      params.set('limit', '10');
-      const data = await api.get(`/contacts?${params}`);
-      const filtered = data.contacts.filter((c) => !taggedContacts.find((t) => t.uuid === c.uuid));
-
-      results.innerHTML = filtered.map((c) => `
-          <button type="button" class="tag-result" data-uuid="${c.uuid}">
-            ${c.first_name} ${c.last_name || ''}
-          </button>
-        `).join('') || `<p class="text-muted small">${t('common.noResults')}</p>`;
-
-      results.querySelectorAll('.tag-result').forEach((btn, i) => {
-        btn.addEventListener('click', () => {
-          const c = filtered[i];
-          taggedContacts.push({
-            uuid: c.uuid,
-            first_name: c.first_name,
-            last_name: c.last_name,
-            avatar: c.avatar || null,
-          });
-          renderTags();
-          bootstrap.Modal.getInstance(document.getElementById('tag-modal')).hide();
-        });
-      });
-    } catch {}
-  }
 
   function renderTags() {
     const el = document.getElementById('post-tags');

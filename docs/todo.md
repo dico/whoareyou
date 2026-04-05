@@ -5,7 +5,7 @@
 ## High Priority
 
 ### Standardize contact search component
-**Status:** In progress — 8/12 refactored
+**Status:** In progress — 9/12 refactored (timeline tag search added)
 **Why:** 12 inline contact search implementations across 9 files with inconsistent UX. Reusable component created (`components/contact-search.js`).
 
 **Remaining (complex — custom selection flows):**
