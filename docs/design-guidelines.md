@@ -218,7 +218,16 @@ All date inputs use flatpickr (CDN) for locale-aware formatting. **No manual ini
 - Lazy-loaded: flatpickr JS/CSS only fetched on first date input
 - Just use `<input type="date">` — it works everywhere (pages, modals, dynamic forms)
 
-### 29. Portal post creation
+### 29. Performance: avoid MutationObserver with subtree
+**Never** use `MutationObserver` with `{ childList: true, subtree: true }` on `document.body` for scanning/initializing elements. It fires on EVERY DOM change in the entire app — with large renders (e.g. 20 posts × many child elements), this causes thousands of synchronous callbacks that freeze the browser or trigger Chrome's "Out of Memory" crash.
+
+**Instead:**
+- Debounce the observer callback (minimum 200ms)
+- Or better: call initialization manually after page/modal render
+- Only observe specific containers, never the entire body
+- This lesson was learned when flatpickr's auto-init observer crashed Chrome at ~1900 posts in production
+
+### 30. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 
 ## i18n
