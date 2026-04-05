@@ -141,7 +141,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             let html = '';
             if (images.length) {
               html += `<div class="post-media post-media-grid-${Math.min(images.length, 4)}" data-post-uuid="${p.uuid}">
-                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""></div>`).join('')}
+                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt="" loading="lazy"></div>`).join('')}
               </div>`;
             }
             if (videos.length) {
@@ -196,75 +196,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             </form>
           </div>
         </div>
-        <div class="post-edit d-none">
-          <form class="edit-post-form" data-post-uuid="${p.uuid}">
-            ${p.about ? `
-              <div class="edit-about" data-has-about="true">
-                <span class="edit-about-contact" data-uuid="${p.about.uuid}">
-                  <i class="bi bi-person-fill"></i>
-                  <span class="edit-about-name">${p.about.first_name} ${p.about.last_name || ''}</span>
-                </span>
-                <button type="button" class="edit-action btn-change-about" title="${t('relationships.change')}"><i class="bi bi-pencil"></i></button>
-                <button type="button" class="edit-action btn-remove-about" title="Remove"><i class="bi bi-x-lg"></i></button>
-              </div>
-            ` : `
-              <div class="edit-about d-none" data-has-about="false">
-                <span class="edit-about-contact" data-uuid="">
-                  <i class="bi bi-person-fill"></i>
-                  <span class="edit-about-name"></span>
-                </span>
-              </div>
-            `}
-            <textarea class="form-control edit-post-body" rows="3">${escapeHtml(p.body)}</textarea>
-            <div class="edit-link-preview d-none"></div>
-            ${p.media.length ? `
-            <div class="edit-media-list post-media-preview">
-              ${p.media.map(m => {
-                if (m.file_type?.startsWith('image')) {
-                  return `<div class="media-preview-item" data-media-id="${m.id}">
-                    <img src="${authUrl(m.thumbnail_path || m.file_path)}" alt="">
-                    <button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>
-                  </div>`;
-                }
-                if (m.file_type?.startsWith('video')) {
-                  return `<div class="media-preview-item" data-media-id="${m.id}">
-                    <video src="${authUrl(m.file_path)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video>
-                    <div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div>
-                    <button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>
-                  </div>`;
-                }
-                const icon = m.file_type?.includes('pdf') ? 'bi-file-earmark-pdf' : 'bi-file-earmark';
-                return `<div class="media-preview-item media-preview-doc" data-media-id="${m.id}">
-                  <i class="${icon}"></i>
-                  <span class="media-preview-doc-name">${m.original_name || 'file'}</span>
-                  <button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>
-                </div>`;
-              }).join('')}
-            </div>
-            ` : ''}
-            <div class="edit-media-preview post-media-preview d-none"></div>
-            <div class="edit-bar">
-              <div class="edit-tags-list">
-                ${p.contacts.map((c) => `
-                  <span class="edit-tag" data-uuid="${c.uuid}">
-                    ${c.first_name} ${c.last_name || ''}
-                    <button type="button" class="btn-remove-tag" data-uuid="${c.uuid}"><i class="bi bi-x"></i></button>
-                  </span>
-                `).join('')}
-                <button type="button" class="edit-action btn-add-tag-edit" title="${t('posts.tagContact')}"><i class="bi bi-person-plus"></i></button>
-                <label class="edit-action" title="${t('posts.addMedia')}" style="cursor:pointer">
-                  <i class="bi bi-image"></i>
-                  <input type="file" class="edit-media-input" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
-                </label>
-              </div>
-              <div class="edit-actions">
-                <input type="date" class="form-control form-control-sm edit-post-date" value="${p.post_date ? new Date(p.post_date).toISOString().split('T')[0] : ''}">
-                <button type="button" class="edit-action btn-cancel-edit">${t('common.cancel')}</button>
-                <button type="submit" class="edit-action edit-action-primary">${t('common.save')}</button>
-              </div>
-            </div>
-          </form>
-        </div>
+        <div class="post-edit d-none"></div>
       </div>
     `).join('');
 
@@ -284,13 +216,203 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     // Store post data for editing
     const postsMap = new Map(data.posts.map((p) => [p.uuid, p]));
 
-    // Edit handlers
+    // Build edit form HTML on demand
+    function buildEditForm(p) {
+      return `
+        <form class="edit-post-form" data-post-uuid="${p.uuid}">
+          ${p.about ? `
+            <div class="edit-about" data-has-about="true">
+              <span class="edit-about-contact" data-uuid="${p.about.uuid}">
+                <i class="bi bi-person-fill"></i>
+                <span class="edit-about-name">${p.about.first_name} ${p.about.last_name || ''}</span>
+              </span>
+              <button type="button" class="edit-action btn-change-about" title="${t('relationships.change')}"><i class="bi bi-pencil"></i></button>
+              <button type="button" class="edit-action btn-remove-about" title="Remove"><i class="bi bi-x-lg"></i></button>
+            </div>
+          ` : `
+            <div class="edit-about d-none" data-has-about="false">
+              <span class="edit-about-contact" data-uuid="">
+                <i class="bi bi-person-fill"></i>
+                <span class="edit-about-name"></span>
+              </span>
+            </div>
+          `}
+          <textarea class="form-control edit-post-body" rows="3">${escapeHtml(p.body)}</textarea>
+          <div class="edit-link-preview d-none"></div>
+          ${p.media.length ? `
+          <div class="edit-media-list post-media-preview">
+            ${p.media.map(m => {
+              if (m.file_type?.startsWith('image')) {
+                return `<div class="media-preview-item" data-media-id="${m.id}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button></div>`;
+              }
+              if (m.file_type?.startsWith('video')) {
+                return `<div class="media-preview-item" data-media-id="${m.id}"><video src="${authUrl(m.file_path)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video><div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button></div>`;
+              }
+              const icon = m.file_type?.includes('pdf') ? 'bi-file-earmark-pdf' : 'bi-file-earmark';
+              return `<div class="media-preview-item media-preview-doc" data-media-id="${m.id}"><i class="${icon}"></i><span class="media-preview-doc-name">${m.original_name || 'file'}</span><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button></div>`;
+            }).join('')}
+          </div>
+          ` : ''}
+          <div class="edit-media-preview post-media-preview d-none"></div>
+          <div class="edit-bar">
+            <div class="edit-tags-list">
+              ${p.contacts.map(c => `
+                <span class="edit-tag" data-uuid="${c.uuid}">
+                  ${escapeHtml(c.first_name)} ${escapeHtml(c.last_name || '')}
+                  <button type="button" class="btn-remove-tag" data-uuid="${c.uuid}"><i class="bi bi-x"></i></button>
+                </span>
+              `).join('')}
+              <button type="button" class="edit-action btn-add-tag-edit" title="${t('posts.tagContact')}"><i class="bi bi-person-plus"></i></button>
+              <label class="edit-action" title="${t('posts.addMedia')}" style="cursor:pointer">
+                <i class="bi bi-image"></i>
+                <input type="file" class="edit-media-input" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
+              </label>
+            </div>
+            <div class="edit-actions">
+              <input type="date" class="form-control form-control-sm edit-post-date" value="${p.post_date ? new Date(p.post_date).toISOString().split('T')[0] : ''}">
+              <button type="button" class="edit-action btn-cancel-edit">${t('common.cancel')}</button>
+              <button type="submit" class="edit-action edit-action-primary">${t('common.save')}</button>
+            </div>
+          </div>
+        </form>`;
+    }
+
+    function initEditForm(postEl, uuid) {
+      // Change about contact
+      postEl.querySelectorAll('.btn-change-about').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const contact = await contactSearchDialog({ title: t('relationships.change') });
+          if (!contact) return;
+          const aboutEl = btn.closest('.edit-about').querySelector('.edit-about-contact');
+          aboutEl.dataset.uuid = contact.uuid;
+          aboutEl.querySelector('.edit-about-name').textContent = `${contact.first_name} ${contact.last_name || ''}`;
+        });
+      });
+      // Remove about
+      postEl.querySelectorAll('.btn-remove-about').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const aboutSection = btn.closest('.edit-about');
+          aboutSection.querySelector('.edit-about-contact').dataset.uuid = '';
+          aboutSection.classList.add('d-none');
+        });
+      });
+      // Remove tag
+      postEl.querySelectorAll('.btn-remove-tag').forEach(btn => {
+        btn.addEventListener('click', () => btn.closest('.edit-tag').remove());
+      });
+      // Add tag
+      postEl.querySelectorAll('.btn-add-tag-edit').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          try {
+            const contact = await contactSearchDialog({ title: t('posts.tagContact') });
+            if (!contact) return;
+            const tagsList = btn.closest('.edit-tags-list');
+            const existingUuids = [...tagsList.querySelectorAll('.edit-tag')].map(el => el.dataset.uuid);
+            if (existingUuids.includes(contact.uuid)) return;
+            const tag = document.createElement('span');
+            tag.className = 'edit-tag';
+            tag.dataset.uuid = contact.uuid;
+            tag.innerHTML = `${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
+            tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
+            tagsList.insertBefore(tag, btn);
+          } catch {}
+        });
+      });
+      // Remove media
+      postEl.querySelectorAll('.btn-remove-media').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.delete(`/posts/${uuid}/media/${btn.dataset.mediaId}`);
+            const item = btn.closest('.media-preview-item');
+            if (item) { item.style.transition = 'opacity 0.2s'; item.style.opacity = '0'; setTimeout(() => item.remove(), 200); }
+          } catch {}
+        });
+      });
+      // Add media
+      postEl.querySelectorAll('.edit-media-input').forEach(input => {
+        input.addEventListener('change', async (e) => {
+          if (!e.target.files?.length) return;
+          const formData = new FormData();
+          for (const file of e.target.files) formData.append('media', file);
+          input.value = '';
+          try {
+            const { media } = await api.upload(`/posts/${uuid}/media`, formData);
+            const previewEl = postEl.querySelector('.edit-media-preview');
+            if (previewEl && media?.length) {
+              previewEl.classList.remove('d-none');
+              for (const m of media) {
+                const div = document.createElement('div');
+                div.className = 'media-preview-item';
+                if (m.file_type?.startsWith('image')) {
+                  div.innerHTML = `<img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""><button type="button" class="media-preview-remove" data-media-id="${m.id}"><i class="bi bi-x"></i></button>`;
+                } else {
+                  div.className += ' media-preview-doc';
+                  div.innerHTML = `<i class="bi bi-file-earmark"></i><span class="media-preview-doc-name">${m.original_name || 'file'}</span><button type="button" class="media-preview-remove" data-media-id="${m.id}"><i class="bi bi-x"></i></button>`;
+                }
+                div.querySelector('.media-preview-remove').addEventListener('click', async () => {
+                  await api.delete(`/posts/${uuid}/media/${m.id}`);
+                  div.style.transition = 'opacity 0.2s'; div.style.opacity = '0'; setTimeout(() => div.remove(), 200);
+                });
+                previewEl.appendChild(div);
+              }
+            }
+          } catch {}
+        });
+      });
+      // Cancel
+      postEl.querySelectorAll('.btn-cancel-edit').forEach(btn => {
+        btn.onclick = () => {
+          postEl.querySelector('.post-view')?.classList.remove('d-none');
+          postEl.querySelector('.post-edit')?.classList.add('d-none');
+          postEl.querySelector('.post-edit').innerHTML = '';
+        };
+      });
+      // Save
+      postEl.querySelectorAll('.edit-post-form').forEach(form => {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const body = form.querySelector('.edit-post-body').value.trim();
+          const contactUuids = [...form.querySelectorAll('.edit-tag')].map(t => t.dataset.uuid);
+          const aboutEl = form.querySelector('.edit-about-contact');
+          const aboutUuid = aboutEl ? (aboutEl.dataset.uuid || null) : undefined;
+          const submitBtn = form.querySelector('[type="submit"]');
+          const btnText = submitBtn.innerHTML;
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+          try {
+            const postDate = form.querySelector('.edit-post-date')?.value || undefined;
+            const linkPreview = editLinkPreviewMap.get(uuid) ?? undefined;
+            const payload = { body, contact_uuids: contactUuids, post_date: postDate, link_preview: linkPreview };
+            if (aboutEl) payload.about_contact_uuid = aboutUuid;
+            await api.put(`/posts/${uuid}`, payload);
+            if (onChanged) onChanged();
+          } catch (err) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = btnText;
+          }
+        });
+      });
+    }
+
+    // Edit handlers — build form on demand
     el.querySelectorAll('.btn-edit-post').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        const postEl = el.querySelector(`[data-post-uuid="${btn.dataset.uuid}"]`);
+        const uuid = btn.dataset.uuid;
+        const p = postsMap.get(uuid);
+        if (!p) return;
+        const postEl = el.querySelector(`[data-post-uuid="${uuid}"]`);
+        const editEl = postEl.querySelector('.post-edit');
+
+        // Build edit form if not already built
+        if (!editEl.querySelector('form')) {
+          editEl.innerHTML = buildEditForm(p);
+          initEditForm(postEl, uuid);
+        }
+
         postEl.querySelector('.post-view').classList.add('d-none');
-        postEl.querySelector('.post-edit').classList.remove('d-none');
+        editEl.classList.remove('d-none');
 
         // Attach @-mention to edit textarea (once)
         const textarea = postEl.querySelector('.edit-post-body');
@@ -378,161 +500,6 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         }
 
         textarea.focus();
-      });
-    });
-
-    // Cancel edit (delegated — handles dynamically rendered buttons)
-    // Cancel edit
-    el.querySelectorAll('.btn-cancel-edit').forEach(btn => {
-      btn.onclick = () => {
-        const postEl = btn.closest('.timeline-post');
-        if (postEl) {
-          postEl.querySelector('.post-view')?.classList.remove('d-none');
-          postEl.querySelector('.post-edit')?.classList.add('d-none');
-        }
-      };
-    });
-
-    // Change "about" contact
-    el.querySelectorAll('.btn-change-about').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const contact = await contactSearchDialog({ title: t('relationships.change') });
-        if (!contact) return;
-        const aboutEl = btn.closest('.edit-about').querySelector('.edit-about-contact');
-        aboutEl.dataset.uuid = contact.uuid;
-        aboutEl.querySelector('.edit-about-name').textContent = `${contact.first_name} ${contact.last_name || ''}`;
-      });
-    });
-
-    // Remove "about" — convert to activity post
-    el.querySelectorAll('.btn-remove-about').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const aboutSection = btn.closest('.edit-about');
-        aboutSection.querySelector('.edit-about-contact').dataset.uuid = '';
-        aboutSection.classList.add('d-none');
-      });
-    });
-
-    // Remove tag in edit mode
-    el.querySelectorAll('.btn-remove-tag').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        btn.closest('.edit-tag').remove();
-      });
-    });
-
-    // Add tag in edit mode
-    el.querySelectorAll('.btn-add-tag-edit').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          const contact = await contactSearchDialog({ title: t('posts.tagContact') });
-          if (!contact) return;
-
-          const tagsList = btn.closest('.edit-tags-list');
-          const existingUuids = [...tagsList.querySelectorAll('.edit-tag')].map((el) => el.dataset.uuid);
-          if (existingUuids.includes(contact.uuid)) return;
-
-          const tag = document.createElement('span');
-          tag.className = 'edit-tag';
-          tag.dataset.uuid = contact.uuid;
-          tag.innerHTML = `${contact.first_name} ${contact.last_name || ''} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
-          tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
-          tagsList.insertBefore(tag, btn);
-        } catch (err) {
-          console.error('Add tag error:', err);
-        }
-      });
-    });
-
-    // Remove existing media in edit mode
-    el.querySelectorAll('.btn-remove-media').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const postEl = btn.closest('[data-post-uuid]');
-        const uuid = postEl?.dataset.postUuid;
-        const mediaId = btn.dataset.mediaId;
-        if (!uuid || !mediaId) return;
-        try {
-          await api.delete(`/posts/${uuid}/media/${mediaId}`);
-          const item = btn.closest('.media-preview-item');
-          if (item) { item.style.transition = 'opacity 0.2s'; item.style.opacity = '0'; setTimeout(() => item.remove(), 200); }
-        } catch (err) {
-          console.error('Remove media error:', err);
-        }
-      });
-    });
-
-    // Add new media in edit mode
-    el.querySelectorAll('.edit-media-input').forEach(input => {
-      input.addEventListener('change', async (e) => {
-        const form = input.closest('.edit-post-form');
-        const postEl = form?.closest('[data-post-uuid]');
-        const uuid = postEl?.dataset.postUuid;
-        if (!uuid || !e.target.files?.length) return;
-
-        const formData = new FormData();
-        for (const file of e.target.files) formData.append('media', file);
-        input.value = '';
-
-        try {
-          const { media } = await api.upload(`/posts/${uuid}/media`, formData);
-          // Show newly added media in preview
-          const previewEl = form.querySelector('.edit-media-preview');
-          if (previewEl && media?.length) {
-            previewEl.classList.remove('d-none');
-            for (const m of media) {
-              const div = document.createElement('div');
-              div.className = 'media-preview-item';
-              div.dataset.mediaId = m.id;
-              if (m.file_type?.startsWith('image')) {
-                div.innerHTML = `<img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>`;
-              } else {
-                const icon = m.file_type?.includes('pdf') ? 'bi-file-earmark-pdf' : 'bi-file-earmark';
-                div.className += ' media-preview-doc';
-                div.innerHTML = `<i class="${icon}"></i><span class="media-preview-doc-name">${m.original_name || 'file'}</span><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>`;
-              }
-              div.querySelector('.btn-remove-media').addEventListener('click', async () => {
-                await api.delete(`/posts/${uuid}/media/${m.id}`);
-                div.style.transition = 'opacity 0.2s'; div.style.opacity = '0'; setTimeout(() => div.remove(), 200);
-              });
-              previewEl.appendChild(div);
-            }
-          }
-        } catch (err) {
-          console.error('Upload media error:', err);
-        }
-      });
-    });
-
-    // Save edit
-    el.querySelectorAll('.edit-post-form').forEach((form) => {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const postEl = form.closest('[data-post-uuid]');
-        const uuid = postEl.dataset.postUuid;
-        const body = form.querySelector('.edit-post-body').value.trim();
-        const contactUuids = [...form.querySelectorAll('.edit-tag')].map((t) => t.dataset.uuid);
-
-        // Get "about" contact (may have been changed or removed)
-        const aboutEl = form.querySelector('.edit-about-contact');
-        const aboutUuid = aboutEl ? (aboutEl.dataset.uuid || null) : undefined;
-
-        // Allow empty body if post has media (documents, images)
-
-        try {
-          const postDate = form.querySelector('.edit-post-date')?.value || undefined;
-          const linkPreview = editLinkPreviewMap.get(uuid) ?? undefined;
-          const payload = { body, contact_uuids: contactUuids, post_date: postDate, link_preview: linkPreview };
-          // Only send about_contact_uuid if we have the edit-about section
-          if (aboutEl) {
-            payload.about_contact_uuid = aboutUuid;
-          }
-          await api.put(`/posts/${uuid}`, payload);
-          // Reload feed but preserve current pagination limit
-          renderPostList(containerId, contactUuid, onChanged, { keepLimit: true });
-        } catch (err) {
-          confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
-        }
       });
     });
 

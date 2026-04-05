@@ -509,6 +509,19 @@ router.get('/search/global', async (req, res, next) => {
   }
 });
 
+// GET /api/contacts/birth-years — distinct birth years for filter dropdown
+router.get('/birth-years/list', async (req, res, next) => {
+  try {
+    const rows = await db('contacts')
+      .where({ tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .whereNotNull('birth_year')
+      .distinct('birth_year')
+      .orderBy('birth_year', 'desc');
+    res.json({ years: rows.map(r => r.birth_year) });
+  } catch (err) { next(err); }
+});
+
 // GET /api/contacts/upcoming-birthdays — next 30 days of birthdays
 router.get('/upcoming-birthdays/list', async (req, res, next) => {
   try {

@@ -152,8 +152,7 @@ export async function renderContacts() {
 
   // Populate birth year filter
   try {
-    const { contacts: allC } = await api.get('/contacts?limit=2000&sort=first_name:asc');
-    const years = [...new Set(allC.filter(c => c.birth_year).map(c => c.birth_year))].sort((a, b) => b - a);
+    const { years } = await api.get('/contacts/birth-years/list');
     const yearFilter = document.getElementById('birth-year-filter');
     yearFilter.innerHTML = `<option value="">${t('contacts.birthYear')}</option>` +
       years.map(y => `<option value="${y}">${y}</option>`).join('');

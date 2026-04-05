@@ -34,14 +34,14 @@
 
 **Frontend optimizations:**
 5. **Virtual scrolling** — timeline currently renders all loaded posts in DOM. With load-more, DOM grows unbounded. Consider virtual scrolling or unloading off-screen posts.
-6. **Image lazy loading** — add `loading="lazy"` to all post media images (some already have it, verify all).
-7. **Post edit markup** — edit form HTML is rendered for EVERY post even when not editing. Render edit form only when user clicks edit.
-8. **MutationObserver** — flatpickr observer debounced but still fires on every DOM change. Consider removing it and calling `scanAndInit()` manually after page render.
-9. **Contacts page birth year filter** — fetches `?limit=2000` to build year dropdown. Use a dedicated endpoint that returns just distinct years.
+6. ~~**Image lazy loading**~~ — Done. All post media images have `loading="lazy"`.
+7. ~~**Post edit markup**~~ — Done. Edit form built on demand when user clicks edit (was rendering for all 20 posts).
+8. ~~**MutationObserver**~~ — Done. Debounced to 200ms. Documented in design guidelines #29.
+9. ~~**Contacts page birth year filter**~~ — Done. New `GET /contacts/birth-years/list` endpoint returns only distinct years.
 
 **Infrastructure:**
 10. **CDN for static assets** — CSS, JS, vendor libraries. Reduces server load.
-11. **Response compression** — verify gzip/brotli is enabled on nginx for JSON responses.
+11. ~~**Response compression**~~ — Done. Added `gzip_proxied any` and `gzip_vary on` to nginx.
 12. **Database connection pooling** — verify Knex pool settings are appropriate.
 
 ### Data export — Phase 3 (scheduled cloud backup)
