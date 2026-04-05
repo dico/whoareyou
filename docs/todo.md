@@ -22,9 +22,27 @@
 **Status:** Partially done
 **Why:** `tenant_members.linked_contact_id` exists and utility function created, but some code paths still reference `users.linked_contact_id` as fallback. Remove column after all code paths migrated.
 
-### Data export — Phase 2.5 (export encryption)
-**Status:** Done — documented in [export.md](export.md)
-AES-256-GCM encryption, admin-only password management, export audit log with IP/country/status tracking, skip-encryption option for admins, rate limited (10/hour).
+### Performance: scale for 5000+ posts
+**Status:** Not started — Chrome OOM crash observed at ~1900 posts in prod
+**Why:** App must handle years of daily posts, photos, and comments without degradation.
+
+**Backend optimizations:**
+1. **Post API response size** — reactions currently include full name + avatar per person per post. With many reactions × many posts, response grows fast. Optimize: only send reaction count + reacted flag on list, fetch full reaction details on demand (when user clicks).
+2. **N+1 avatar queries** — posts endpoint runs subqueries for profile photos. Use a single batch query instead.
+3. **Pagination cursor** — current offset-based pagination gets slower as offset grows. Switch to cursor-based (WHERE id < lastId) for timeline.
+4. **Database indexes** — verify indexes on posts(tenant_id, deleted_at, post_date), post_media(post_id), post_reactions(post_id), post_comments(post_id).
+
+**Frontend optimizations:**
+5. **Virtual scrolling** — timeline currently renders all loaded posts in DOM. With load-more, DOM grows unbounded. Consider virtual scrolling or unloading off-screen posts.
+6. **Image lazy loading** — add `loading="lazy"` to all post media images (some already have it, verify all).
+7. **Post edit markup** — edit form HTML is rendered for EVERY post even when not editing. Render edit form only when user clicks edit.
+8. **MutationObserver** — flatpickr observer debounced but still fires on every DOM change. Consider removing it and calling `scanAndInit()` manually after page render.
+9. **Contacts page birth year filter** — fetches `?limit=2000` to build year dropdown. Use a dedicated endpoint that returns just distinct years.
+
+**Infrastructure:**
+10. **CDN for static assets** — CSS, JS, vendor libraries. Reduces server load.
+11. **Response compression** — verify gzip/brotli is enabled on nginx for JSON responses.
+12. **Database connection pooling** — verify Knex pool settings are appropriate.
 
 ### Data export — Phase 3 (scheduled cloud backup)
 **Status:** Not started — Phase 2 (in-app export) is done, documented in [export.md](export.md)
