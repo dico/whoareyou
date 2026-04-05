@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="50%" style="stop-color:#a855f7"/>
+      <stop offset="100%" style="stop-color:#ec4899"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full square background (maskable safe zone is 80% center) -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- Center person (front, larger) — scaled down to fit safe zone -->
+  <circle cx="256" cy="210" r="38" fill="white"/>
+  <path d="M 190 315 C 190 275 215 258 256 258 C 297 258 322 275 322 315 L 322 332 C 322 342 315 348 305 348 L 207 348 C 197 348 190 342 190 332 Z" fill="white"/>
+
+  <!-- Left person (behind) -->
+  <circle cx="172" cy="202" r="28" fill="rgba(255,255,255,0.6)"/>
+  <path d="M 122 290 C 122 262 140 250 172 250 C 204 250 222 262 222 290 L 222 302 C 222 309 217 314 210 314 L 134 314 C 127 314 122 309 122 302 Z" fill="rgba(255,255,255,0.6)"/>
+
+  <!-- Right person (behind) -->
+  <circle cx="340" cy="202" r="28" fill="rgba(255,255,255,0.6)"/>
+  <path d="M 290 290 C 290 262 308 250 340 250 C 372 250 390 262 390 290 L 390 302 C 390 309 385 314 378 314 L 302 314 C 295 314 290 309 290 302 Z" fill="rgba(255,255,255,0.6)"/>
+</svg>
