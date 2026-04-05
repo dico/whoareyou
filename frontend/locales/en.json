@@ -541,6 +541,7 @@
     "add": "Add life event",
     "noEvents": "No life events yet",
     "eventType": "Event type",
+    "chooseType": "Choose type...",
     "date": "Date",
     "description": "Description (optional)",
     "types": {

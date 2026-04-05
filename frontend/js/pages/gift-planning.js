@@ -98,10 +98,10 @@ function renderIdeaCard(g) {
         ${g.price ? `<span class="gift-card-price">${Math.round(g.price)} kr</span>` : ''}
         <span class="badge bg-${statusColor}">${t('gifts.statuses.' + g.status)}</span>
       </div>
-      <div class="dropdown">
+      <div class="dropdown" style="z-index:2">
         <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-        <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-          <li><a class="dropdown-item idea-edit" href="#" data-uuid="${g.uuid}" data-title="${esc(g.title)}" data-price="${g.price || ''}" data-notes="${esc(g.notes || '')}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+        <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="z-index:1050">
+          <li><a class="dropdown-item idea-edit" href="#" data-uuid="${g.uuid}" data-title="${esc(g.title)}" data-price="${g.price || ''}" data-notes="${esc(g.notes || '')}" data-status="${g.status}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
           <li><a class="dropdown-item idea-assign-event" href="#" data-uuid="${g.uuid}"><i class="bi bi-calendar-event me-2"></i>${g.event_uuid ? t('gifts.reassignEvent') : t('gifts.assignToEvent')}</a></li>
           ${g.event_uuid ? `<li><a class="dropdown-item idea-unassign-event" href="#" data-uuid="${g.uuid}"><i class="bi bi-x-circle me-2"></i>${t('gifts.removeFromEvent')}</a></li>` : ''}
           <li><hr class="dropdown-divider"></li>
@@ -135,9 +135,17 @@ function attachPlanningHandlers() {
                     <label class="form-label">${t('gifts.gift')}</label>
                     <input type="text" class="form-control form-control-sm" id="${mid}-title" value="${btn.dataset.title}" required>
                   </div>
-                  <div class="mb-3">
-                    <label class="form-label">${t('gifts.price')}</label>
-                    <input type="number" class="form-control form-control-sm" id="${mid}-price" value="${btn.dataset.price}" step="1">
+                  <div class="row g-2 mb-3">
+                    <div class="col">
+                      <label class="form-label">${t('gifts.price')}</label>
+                      <input type="number" class="form-control form-control-sm" id="${mid}-price" value="${btn.dataset.price}" step="1">
+                    </div>
+                    <div class="col">
+                      <label class="form-label">${t('gifts.status')}</label>
+                      <select class="form-select form-select-sm" id="${mid}-status">
+                        ${['idea','reserved','purchased','wrapped','given','cancelled'].map(s => `<option value="${s}" ${btn.dataset.status === s ? 'selected' : ''}>${t('gifts.statuses.' + s)}</option>`).join('')}
+                      </select>
+                    </div>
                   </div>
                   <div class="mb-3">
                     <label class="form-label">${t('gifts.notes')}</label>
@@ -160,6 +168,7 @@ function attachPlanningHandlers() {
         await api.put(`/gifts/orders/${btn.dataset.uuid}`, {
           title: document.getElementById(`${mid}-title`).value.trim(),
           price: parseFloat(document.getElementById(`${mid}-price`).value) || null,
+          status: document.getElementById(`${mid}-status`).value,
           notes: document.getElementById(`${mid}-notes`).value.trim() || null,
         });
         modal.hide();

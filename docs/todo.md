@@ -37,13 +37,9 @@
 ## Low Priority
 
 ### Gift module UX improvements
-**Status:** Not started
-**Issues:**
-1. **New event defaults to Christmas** — select should show "Choose type..." as default
-2. **Birthday/wedding events** — default to "Receiving" tab
-3. **Wedding: two honorees** — second honoree field
-4. **Planning page dropdown z-index** — clips behind next card
-5. **Planning page edit modal** — missing product picker, contact chips, status selector
+**Status:** 4 of 5 done
+**Remaining:**
+3. **Wedding: two honorees** — second honoree field (requires migration for `honoree_contact_id_2`)
 
 ### Standardize company search component
 **Status:** Not started

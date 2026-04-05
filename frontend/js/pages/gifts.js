@@ -213,6 +213,7 @@ async function showEventModal(existing = null, onSaved = null) {
                 <div class="col-6">
                   <label class="form-label">${t('gifts.eventType')}</label>
                   <select class="form-select" id="${modalId}-type">
+                    ${!existing ? `<option value="" selected>${t('gifts.chooseType')}</option>` : ''}
                     ${EVENT_TYPES.map(tp => `<option value="${tp}" ${existing?.event_type === tp ? 'selected' : ''}>${t('gifts.types.' + tp)}</option>`).join('')}
                   </select>
                 </div>
@@ -284,10 +285,7 @@ async function showEventModal(existing = null, onSaved = null) {
     }
   });
 
-  // Trigger defaults for initial type if creating new
-  if (!isEdit) {
-    typeSelect.dispatchEvent(new Event('change'));
-  }
+  // No auto-trigger — user must select type explicitly
 
   // Inline honoree search (no modal-in-modal)
   let honoreeDebounce = null;

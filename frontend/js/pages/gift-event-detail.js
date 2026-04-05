@@ -104,7 +104,8 @@ async function loadEventDetail(uuid) {
     });
 
     // Direction tabs — remember selection
-    const savedDir = localStorage.getItem('giftDirection') || 'outgoing';
+    const defaultDir = ['birthday', 'wedding'].includes(event.event_type) ? 'incoming' : 'outgoing';
+    const savedDir = localStorage.getItem('giftDirection') || defaultDir;
     if (savedDir !== 'outgoing') {
       document.querySelectorAll('#gift-direction-tabs .filter-tab').forEach(b => b.classList.remove('active'));
       document.querySelector(`#gift-direction-tabs [data-direction="${savedDir}"]`)?.classList.add('active');

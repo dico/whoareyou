@@ -541,6 +541,7 @@
     "add": "Legg til livshendelse",
     "noEvents": "Ingen livshendelser ennå",
     "eventType": "Hendelsestype",
+    "chooseType": "Velg type...",
     "date": "Dato",
     "description": "Beskrivelse (valgfri)",
     "types": {
