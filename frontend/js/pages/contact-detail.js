@@ -2686,11 +2686,11 @@ async function showEditRelationshipDialog(wrapper, onDone) {
             </div>
             <div class="row g-2 mb-3">
               <div class="col">
-                <label class="form-label small">${t('relationships.since')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                <label class="form-label small">${t('common.since')} <span class="text-muted">(${t('common.optional')})</span></label>
                 <input type="date" class="form-control form-control-sm" id="${id}-start" value="${startDate || ''}">
               </div>
               <div class="col">
-                <label class="form-label small">${t('relationships.until')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                <label class="form-label small">${t('common.until')} <span class="text-muted">(${t('common.optional')})</span></label>
                 <input type="date" class="form-control form-control-sm" id="${id}-end" value="${endDate || ''}">
               </div>
             </div>
@@ -2828,17 +2828,17 @@ async function showAddRelationshipDialog(contactUuid, existingRelationships, onD
               </div>
               <div class="row g-2 mb-3">
                 <div class="col">
-                  <label class="form-label small">${t('relationships.since')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                  <label class="form-label small">${t('common.since')} <span class="text-muted">(${t('common.optional')})</span></label>
                   <input type="date" class="form-control form-control-sm" id="${id}-start">
                 </div>
                 <div class="col">
-                  <label class="form-label small">${t('relationships.until')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                  <label class="form-label small">${t('common.until')} <span class="text-muted">(${t('common.optional')})</span></label>
                   <input type="date" class="form-control form-control-sm" id="${id}-end">
                 </div>
               </div>
             </div>
             <div id="${id}-other-parent" class="d-none mb-3">
-              <label class="form-label small">${t('relationships.otherParent')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+              <label class="form-label small">${t('relationships.otherParent')} <span class="text-muted">(${t('common.optional')})</span></label>
               <select class="form-select form-select-sm" id="${id}-other-parent-select">
                 <option value="">${t('relationships.noOtherParent')}</option>
                 ${(existingRelationships || [])

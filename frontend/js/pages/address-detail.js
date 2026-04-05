@@ -33,7 +33,7 @@ export async function renderAddressDetail(addressId) {
               ${currentResidents.length ? `
                 <div class="address-residents">
                   ${currentResidents.map(r => contactRowHtml(r, {
-                    meta: r.moved_in_at ? `${t('addresses.since')} ${formatDate(r.moved_in_at)}` : (r.label || ''),
+                    meta: r.moved_in_at ? `${t('common.since')} ${formatDate(r.moved_in_at)}` : (r.label || ''),
                   })).join('')}
                 </div>
               ` : `<p class="text-muted small">${t('addresses.noCurrentResidents')}</p>`}

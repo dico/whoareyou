@@ -20,9 +20,9 @@ async function loadFlatpickr() {
     link.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
     document.head.appendChild(link);
 
-    // Constrain width of flatpickr date inputs (override Bootstrap flex/width)
+    // Constrain width of flatpickr date inputs in edit bars (not in modals)
     const style = document.createElement('style');
-    style.textContent = `input.fp-date { width: 120px !important; flex: 0 0 auto !important; }`;
+    style.textContent = `.edit-actions input.fp-date { width: 120px !important; flex: 0 0 auto !important; }`;
     document.head.appendChild(style);
 
     await new Promise((resolve) => {

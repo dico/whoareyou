@@ -110,7 +110,6 @@
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
-  overflow: hidden;
 }
 
 .contact-card a {

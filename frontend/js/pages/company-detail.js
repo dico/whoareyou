@@ -249,9 +249,15 @@ export async function renderCompanyDetail(uuid) {
                     <input type="text" class="form-control" id="${mid}-title" value="${escapeHtml(btn.dataset.title)}">
                     <label>${titleLabel}</label>
                   </div>
-                  <div class="row g-2">
-                    <div class="col"><div class="form-floating"><input type="date" class="form-control" id="${mid}-start" value="${btn.dataset.start}"><label>${t('addresses.since')}</label></div></div>
-                    <div class="col"><div class="form-floating"><input type="date" class="form-control" id="${mid}-end" value="${btn.dataset.end}"><label>${t('addresses.until')}</label></div></div>
+                  <div class="d-flex gap-2">
+                    <div class="flex-fill">
+                      <label class="form-label small text-muted">${t('common.since')}</label>
+                      <input type="date" class="form-control form-control-sm" id="${mid}-start" value="${btn.dataset.start}">
+                    </div>
+                    <div class="flex-fill">
+                      <label class="form-label small text-muted">${t('common.until')}</label>
+                      <input type="date" class="form-control form-control-sm" id="${mid}-end" value="${btn.dataset.end}">
+                    </div>
                   </div>
                 </div>
                 <div class="modal-footer">
@@ -503,7 +509,7 @@ async function showAddEmployeeDialog(companyUuid, isCompanyType, onDone) {
               </div>
               <div class="form-floating">
                 <input type="date" class="form-control" id="${id}-start">
-                <label>${t('relationships.since')} <span class="text-muted">(${t('relationships.optional')})</span></label>
+                <label>${t('common.since')} <span class="text-muted">(${t('common.optional')})</span></label>
               </div>
             </div>
           </div>

@@ -263,6 +263,7 @@
     "previousResidents": "Tidligere beboere",
     "noCurrentResidents": "Ingen nåværende beboere",
     "since": "Siden",
+    "until": "Til",
     "moveBackIn": "Angre utflytting",
     "mergeDuplicates": "Slå sammen duplikate adresser",
     "noDuplicates": "Ingen duplikate adresser funnet",
@@ -664,6 +665,9 @@
     "done": "Ferdig",
     "and": "og",
     "showLess": "Vis mindre",
+    "since": "Siden",
+    "until": "Til",
+    "optional": "valgfritt",
     "info": "Info",
     "noInfo": "Ingen info lagt til enn\u00e5. Klikk rediger for \u00e5 legge til detaljer."
   },

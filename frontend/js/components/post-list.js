@@ -631,7 +631,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     });
 
     // Show likes modal (delegated to handle dynamically created buttons)
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', async (e) => {
       const likesBtn = e.target.closest('.btn-show-likes');
       if (!likesBtn) return;
       e.preventDefault();

@@ -263,6 +263,7 @@
     "previousResidents": "Previous residents",
     "noCurrentResidents": "No current residents",
     "since": "Since",
+    "until": "Until",
     "moveBackIn": "Undo move-out",
     "mergeDuplicates": "Merge duplicate addresses",
     "noDuplicates": "No duplicate addresses found",
@@ -664,6 +665,9 @@
     "done": "Done",
     "and": "and",
     "showLess": "Show less",
+    "since": "Since",
+    "until": "Until",
+    "optional": "optional",
     "info": "Info",
     "noInfo": "No info added yet. Click edit to add details."
   },
