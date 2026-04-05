@@ -5,9 +5,7 @@
 ## High Priority
 
 ### Standardize contact search component
-**Status:** In progress — 9/12 refactored (timeline tag search added)
-**Why:** 12 inline contact search implementations across 9 files with inconsistent UX. Reusable component created (`components/contact-search.js`).
-
+**Status:** In progress — 9/12 refactored
 **Remaining (complex — custom selection flows):**
 - [ ] `components/dialogs.js` — contactSearchDialog (full modal, used as standalone)
 - [ ] `contact-detail.js` — relationship add (multi-step modal: search + type picker + create-and-link)
@@ -23,57 +21,16 @@
 **Why:** `tenant_members.linked_contact_id` exists and utility function created, but some code paths still reference `users.linked_contact_id` as fallback. Remove column after all code paths migrated.
 
 ### Performance: scale for 5000+ posts
-**Status:** Not started — Chrome OOM crash observed at ~1900 posts in prod
-**Why:** App must handle years of daily posts, photos, and comments without degradation.
-
-**Backend optimizations:**
-1. ~~**Post API response size**~~ — Done. Reactions now send only count + reacted + max 3 first names. Full people list (with avatars) loaded on demand via `GET /posts/:uuid/reactions`.
-2. ~~**N+1 avatar queries**~~ — Done. Removed avatar queries from reaction processing in post list and toggle. Avatars only fetched in on-demand reaction popup.
-3. **Pagination cursor** — current offset-based pagination gets slower as offset grows. Switch to cursor-based (WHERE id < lastId) for timeline.
-4. **Database indexes** — verify indexes on posts(tenant_id, deleted_at, post_date), post_media(post_id), post_reactions(post_id), post_comments(post_id).
-
-**Frontend optimizations:**
-5. **Virtual scrolling** — timeline currently renders all loaded posts in DOM. With load-more, DOM grows unbounded. Consider virtual scrolling or unloading off-screen posts.
-6. ~~**Image lazy loading**~~ — Done. All post media images have `loading="lazy"`.
-7. ~~**Post edit markup**~~ — Done. Edit form built on demand when user clicks edit (was rendering for all 20 posts).
-8. ~~**MutationObserver**~~ — Done. Debounced to 200ms. Documented in design guidelines #29.
-9. ~~**Contacts page birth year filter**~~ — Done. New `GET /contacts/birth-years/list` endpoint returns only distinct years.
-
-**Infrastructure:**
-10. **CDN for static assets** — CSS, JS, vendor libraries. Reduces server load.
-11. ~~**Response compression**~~ — Done. Added `gzip_proxied any` and `gzip_vary on` to nginx.
-12. **Database connection pooling** — verify Knex pool settings are appropriate.
+**Status:** In progress — 7 of 12 items done
+**Remaining:**
+3. **Pagination cursor** — switch from offset to cursor-based (WHERE id < lastId) for timeline
+5. **Virtual scrolling** — unload off-screen posts to reduce DOM size
+10. **CDN for static assets** — CSS, JS, vendor libraries
+12. **Database connection pooling** — verify Knex pool settings
 
 ### Data export — Phase 3 (scheduled cloud backup)
 **Status:** Not started — Phase 2 (in-app export) is done, documented in [export.md](export.md)
-
-**Goal:** Automated scheduled backup to cloud storage with encryption.
-
-**Recommended approach: Backblaze B2 + node-cron**
-- Simplest auth (API key, no OAuth), fully unattended, lowest cost (~$6/TB/month)
-- S3-compatible — can switch to AWS/MinIO/Wasabi later without code changes
-- Use `@aws-sdk/client-s3` (official, well-maintained) for uploads
-- Use `node-cron` for in-process scheduling (no extra containers)
-- Encrypt ZIP with Node.js `crypto` (AES-256-GCM) before upload
-
-**Alternative providers researched:**
-
-| Provider | Auth | Unattended | Cost | Notes |
-|----------|------|-----------|------|-------|
-| Backblaze B2 | API key | Yes | ~$0.005/GB | S3-compatible, recommended |
-| S3 (AWS/MinIO/Wasabi) | Access keys | Yes | $0.005-0.023/GB | Same SDK as B2 |
-| OneDrive | OAuth2 + refresh token | Yes (after initial setup) | $2-5/mo | Refresh tokens don't expire |
-| Google Drive | OAuth2 (personal) or Service Account (Shared Drive only) | Partial | Free (personal) | Service accounts can't access personal Drive since Apr 2025 |
-| WebDAV | Basic auth | Yes | Variable | Nextcloud/ownCloud, slow for large files |
-| SFTP | SSH keys | Yes | Variable | Any Linux server |
-
-**Implementation plan:**
-1. Settings UI: cloud backup config (provider, credentials, schedule, encryption key)
-2. Store config in `system_settings` (encrypted credentials)
-3. `node-cron` job: generate export ZIP → encrypt → upload → cleanup
-4. Backup history log (date, size, status)
-5. Manual "Backup now" button in Settings
-6. Retention policy (keep last N backups, delete old ones)
+**Plan:** Backblaze B2 + node-cron, S3-compatible, AES-256 encryption. See [export.md](export.md).
 
 ---
 
@@ -82,19 +39,15 @@
 ### Gift module UX improvements
 **Status:** Not started
 **Issues:**
-1. **New event defaults to Christmas** — select should show "Choose type..." as default, title should only auto-fill on type change
-2. **Birthday/wedding events** — hide or de-emphasize "Giving" tab, default to "Receiving"
-3. **Wedding: two honorees** — need second honoree field, display "Erik & Marte's wedding"
-4. **Planning page dropdown z-index** — three-dots dropdown clips behind next card
+1. **New event defaults to Christmas** — select should show "Choose type..." as default
+2. **Birthday/wedding events** — default to "Receiving" tab
+3. **Wedding: two honorees** — second honoree field
+4. **Planning page dropdown z-index** — clips behind next card
 5. **Planning page edit modal** — missing product picker, contact chips, status selector
 
 ### Standardize company search component
 **Status:** Not started
 **Why:** Company search in `contact-detail.js` has its own implementation. Should follow the same pattern as contact search.
-
-### Portal: edit/delete own posts
-**Status:** Done
-Portal guests can now edit body and delete their own posts via ellipsis dropdown. Backend validates `portal_guest_id` ownership.
 
 ### Performance: relationship suggestions at scale
 **Status:** Monitoring — currently 38ms for 450 contacts / 308 suggestions

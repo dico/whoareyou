@@ -412,7 +412,7 @@ async function loadPortalTimeline(contactUuid) {
 
         // Replace body with textarea
         const editHtml = `
-          <div class="portal-post-edit">
+          <div class="portal-post-edit" style="padding:var(--space-sm) var(--space-md)">
             <textarea class="form-control mb-2" rows="3">${esc(currentText)}</textarea>
             <div class="d-flex gap-2 justify-content-end">
               <button type="button" class="btn btn-outline-secondary btn-sm portal-edit-cancel">${t('common.cancel')}</button>
