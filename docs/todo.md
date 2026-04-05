@@ -93,8 +93,8 @@
 **Why:** Company search in `contact-detail.js` has its own implementation. Should follow the same pattern as contact search.
 
 ### Portal: edit/delete own posts
-**Status:** Not started
-**Why:** Portal guests can create posts but cannot edit or delete them after creation.
+**Status:** Done
+Portal guests can now edit body and delete their own posts via ellipsis dropdown. Backend validates `portal_guest_id` ownership.
 
 ### Performance: relationship suggestions at scale
 **Status:** Monitoring — currently 38ms for 450 contacts / 308 suggestions

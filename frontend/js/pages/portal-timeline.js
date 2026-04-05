@@ -38,6 +38,7 @@ const portalApi = {
   },
   get: (path) => portalApi.request('GET', path),
   post: (path, body) => portalApi.request('POST', path, body),
+  put: (path, body) => portalApi.request('PUT', path, body),
   delete: (path) => portalApi.request('DELETE', path),
   async upload(path, formData) {
     const token = localStorage.getItem('portalToken') || sessionStorage.getItem('portalToken');
@@ -400,6 +401,57 @@ async function loadPortalTimeline(contactUuid) {
       submitBtn.disabled = false;
     });
 
+    // Edit own post
+    el.querySelectorAll('.portal-edit-post').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const postEl = btn.closest('.portal-post');
+        const uuid = btn.dataset.uuid;
+        const bodyEl = postEl.querySelector('.portal-post-body');
+        const currentText = bodyEl?.textContent || '';
+
+        // Replace body with textarea
+        const editHtml = `
+          <div class="portal-post-edit">
+            <textarea class="form-control mb-2" rows="3">${esc(currentText)}</textarea>
+            <div class="d-flex gap-2 justify-content-end">
+              <button type="button" class="btn btn-outline-secondary btn-sm portal-edit-cancel">${t('common.cancel')}</button>
+              <button type="button" class="btn btn-primary btn-sm portal-edit-save">${t('common.save')}</button>
+            </div>
+          </div>`;
+        if (bodyEl) bodyEl.outerHTML = editHtml;
+        else postEl.querySelector('.portal-post-header').insertAdjacentHTML('afterend', editHtml);
+
+        const editDiv = postEl.querySelector('.portal-post-edit');
+        const textarea = editDiv.querySelector('textarea');
+        textarea.focus();
+
+        editDiv.querySelector('.portal-edit-cancel').addEventListener('click', () => {
+          editDiv.outerHTML = currentText ? `<p class="portal-post-body">${esc(currentText)}</p>` : '';
+        });
+
+        editDiv.querySelector('.portal-edit-save').addEventListener('click', async () => {
+          const newBody = textarea.value.trim();
+          await portalApi.put(`/posts/${uuid}`, { body: newBody });
+          editDiv.outerHTML = newBody ? `<p class="portal-post-body">${esc(newBody)}</p>` : '';
+        });
+      });
+    });
+
+    // Delete own post
+    el.querySelectorAll('.portal-delete-post').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const ok = await portalConfirm(t('posts.deletePostConfirm'));
+        if (!ok) return;
+        await portalApi.delete(`/posts/${btn.dataset.uuid}`);
+        const postEl = btn.closest('.portal-post');
+        postEl.style.transition = 'opacity 0.3s';
+        postEl.style.opacity = '0';
+        setTimeout(() => postEl.remove(), 300);
+      });
+    });
+
     // Reactions
     el.querySelectorAll('.portal-react-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -534,10 +586,20 @@ function renderPortalPost(p) {
           <div class="portal-post-avatar">
             ${authorAvatar ? `<img src="${portalAuthUrl(authorAvatar)}" alt="">` : `<span>${initial}</span>`}
           </div>
-          <div>
+          <div style="flex:1">
             <strong>${esc(authorName)}</strong>
             <span class="portal-post-date">${formatDate(p.post_date)}</span>
           </div>
+          ${p.is_own ? `
+          <div class="dropdown">
+            <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item portal-edit-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item text-danger portal-delete-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
+            </ul>
+          </div>
+          ` : ''}
         </div>`;
       })()}
       ${p.body ? `<p class="portal-post-body">${esc(p.body)}</p>` : ''}

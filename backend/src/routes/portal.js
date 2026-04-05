@@ -329,6 +329,7 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
           reaction_names: p.reaction_names || [],
           comment_count: p.comment_count,
           author: author || null,
+          is_own: p.portal_guest_id === req.portal.guestId,
         };
       }),
       hasMore: posts.length === limit,
@@ -365,6 +366,39 @@ router.post('/posts', portalAuthenticate, async (req, res, next) => {
     });
 
     res.status(201).json({ post: { uuid, id: postId } });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/portal/posts/:uuid — edit own post
+router.put('/posts/:uuid', portalAuthenticate, async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, portal_guest_id: req.portal.guestId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found or not yours', 404);
+
+    const updates = {};
+    if (req.body.body !== undefined) updates.body = req.body.body.trim();
+    if (req.body.post_date !== undefined) updates.post_date = new Date(req.body.post_date);
+    if (Object.keys(updates).length) {
+      await db('posts').where({ id: post.id }).update(updates);
+    }
+    res.json({ message: 'Post updated' });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/portal/posts/:uuid — delete own post
+router.delete('/posts/:uuid', portalAuthenticate, async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, portal_guest_id: req.portal.guestId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found or not yours', 404);
+
+    await db('posts').where({ id: post.id }).update({ deleted_at: db.fn.now() });
+    res.json({ message: 'Post deleted' });
   } catch (err) { next(err); }
 });
 
