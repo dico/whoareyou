@@ -124,7 +124,11 @@ app.use('/api/system', (req, res, next) => {
 app.use('/api/portal', portalLimiter, portalRoutes); // Portal has own auth + stricter rate limit
 app.use('/api/portal-admin', authenticate, tenantScope, portalAdminRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
-const exportLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyGenerator: (req) => `export-${req.user?.id || req.ip}` });
+const exportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 10,
+  keyGenerator: (req) => `export-${req.user?.id || req.ip}`,
+  skip: (req) => !req.path.startsWith('/data') && !req.path.startsWith('/full') && !req.path.startsWith('/download'),
+});
 app.use('/api/export', exportLimiter, authenticate, tenantScope, exportRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
 
