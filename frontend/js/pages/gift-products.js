@@ -12,6 +12,9 @@ export async function renderGiftProducts() {
       ${giftSubNav('products')}
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h3>${t('gifts.productLibrary')}</h3>
+        <button class="btn btn-primary btn-sm" id="btn-new-product">
+          <i class="bi bi-plus-lg me-1"></i>${t('gifts.newProduct')}
+        </button>
       </div>
       <div class="mb-3">
         <input type="text" class="form-control form-control-sm" id="product-search" placeholder="${t('gifts.productSearch')}">
@@ -39,6 +42,16 @@ export async function renderGiftProducts() {
   obs.observe(content, { childList: true });
 
   await loadProducts('');
+
+  document.getElementById('btn-new-product')?.addEventListener('click', async () => {
+    // Create empty product then open edit modal
+    try {
+      const { product } = await api.post('/gifts/products', { name: t('gifts.newProduct') });
+      await showProductEditModal(product.uuid);
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+    }
+  });
 }
 
 async function loadProducts(search) {

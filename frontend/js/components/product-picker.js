@@ -46,7 +46,7 @@ export function createProductPicker(container, onSelect) {
     dropdown.classList.add('d-none');
 
     if (item.isCreate) {
-      // Create product inline
+      // Create product then open edit modal for full details
       try {
         const result = await api.post('/gifts/products', {
           name: item.createName,
@@ -62,6 +62,11 @@ export function createProductPicker(container, onSelect) {
           url: result.product.url,
           image_url: result.product.image_url,
         };
+        // Open edit modal for full product details (image, links, description)
+        try {
+          const { showProductEditModal } = await import('../pages/gift-products.js');
+          if (showProductEditModal) showProductEditModal(result.product.uuid);
+        } catch {}
       } catch {
         selectedProduct = { product_id: null, uuid: null, title: item.createName, price: null, url: null, image_url: null };
       }
