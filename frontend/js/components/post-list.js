@@ -428,7 +428,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         const aboutEl = form.querySelector('.edit-about-contact');
         const aboutUuid = aboutEl ? (aboutEl.dataset.uuid || null) : undefined;
 
-        if (!body) return;
+        // Allow empty body if post has media (documents, images)
 
         try {
           const postDate = form.querySelector('.edit-post-date')?.value || undefined;
@@ -479,9 +479,15 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         e.preventDefault();
         if (await confirmDialog(t('posts.deletePostConfirm'), { title: t('posts.deletePost'), confirmText: t('common.delete') })) {
           await api.delete(`/posts/${btn.dataset.uuid}`);
-          // Remove from DOM instead of reloading entire feed
+          // Fade out then remove from DOM
           const postEl = el.querySelector(`[data-post-uuid="${btn.dataset.uuid}"]`);
-          if (postEl) postEl.remove();
+          if (postEl) {
+            postEl.style.transition = 'opacity 0.3s, transform 0.3s';
+            postEl.style.opacity = '0';
+            postEl.style.transform = 'scale(0.95)';
+            await new Promise(r => setTimeout(r, 300));
+            postEl.remove();
+          }
           postsMap.delete(btn.dataset.uuid);
           // Show empty state if no posts left
           if (el.querySelectorAll('.timeline-post').length === 0) {

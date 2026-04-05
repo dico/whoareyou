@@ -436,6 +436,11 @@ export async function renderCompanyDetail(uuid) {
       const body = document.getElementById('group-post-body').value.trim();
       if (!body && !groupPostMedia.length) return;
 
+      const submitBtn = e.target.querySelector('[type="submit"]');
+      const btnText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
       const visibility = document.getElementById('group-post-visibility')?.dataset.visibility || 'shared';
       const { post } = await api.post('/posts', { body: body || '', company_uuid: uuid, visibility, has_media: groupPostMedia.length > 0 });
 
@@ -448,6 +453,8 @@ export async function renderCompanyDetail(uuid) {
       document.getElementById('group-post-body').value = '';
       groupPostMedia = [];
       renderGroupMediaPreview();
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = btnText;
       loadGroupPosts();
     });
 

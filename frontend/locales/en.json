@@ -113,6 +113,8 @@
     "tagContact": "Tag contact",
     "addMedia": "Add images",
     "addDocument": "Attach document",
+    "noText": "(no text)",
+    "media": "files",
     "loadMore": "Load more",
     "gallery": "Photos",
     "noPhotos": "No photos yet",
@@ -753,6 +755,18 @@
     "cardDesc": "Check for impossible or suspicious relationships.",
     "noIssues": "No issues found. All relationships look consistent.",
     "found": "{count} issues found"
+  },
+  "trash": {
+    "title": "Trash",
+    "desc": "Restore or permanently delete contacts and posts.",
+    "noContacts": "No deleted contacts.",
+    "noPosts": "No deleted posts.",
+    "restore": "Restore",
+    "permanentDelete": "Delete permanently",
+    "permanentConfirm": "This cannot be undone. All associated data and files will be permanently deleted.",
+    "deletedOn": "Deleted",
+    "emptyAll": "Empty trash",
+    "emptyAllConfirm": "Permanently delete all items in trash? This cannot be undone."
   },
   "export": {
     "title": "Export data",

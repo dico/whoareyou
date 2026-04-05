@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
+import { config } from '../config/index.js';
 
 const router = Router();
 
@@ -690,6 +693,87 @@ router.delete('/:uuid/fields/:fieldId', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/contacts/tools/trash — list soft-deleted contacts
+router.get('/tools/trash', async (req, res, next) => {
+  try {
+    const contacts = await db('contacts')
+      .where({ tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .select('uuid', 'first_name', 'last_name', 'deleted_at',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`))
+      .orderBy('deleted_at', 'desc');
+    res.json({ contacts });
+  } catch (err) { next(err); }
+});
+
+// POST /api/contacts/tools/restore/:uuid — restore soft-deleted contact
+router.post('/tools/restore/:uuid', async (req, res, next) => {
+  try {
+    const contact = await db('contacts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .first();
+    if (!contact) throw new AppError('Contact not found', 404);
+    await db('contacts').where({ id: contact.id }).update({ deleted_at: null });
+    res.json({ message: 'Contact restored' });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/contacts/tools/permanent/:uuid — permanently delete contact and files
+router.delete('/tools/permanent/:uuid', async (req, res, next) => {
+  try {
+    const contact = await db('contacts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .first();
+    if (!contact) throw new AppError('Contact not found', 404);
+
+    // Delete related data
+    await db('contact_photos').where({ contact_id: contact.id }).del();
+    await db('contact_fields').where({ contact_id: contact.id }).del();
+    await db('contact_labels').where({ contact_id: contact.id }).del();
+    await db('contact_companies').where({ contact_id: contact.id }).del();
+    await db('contact_addresses').where({ contact_id: contact.id }).del();
+    await db('relationships').where({ contact_id: contact.id }).orWhere({ related_contact_id: contact.id }).del();
+    await db('post_contacts').where({ contact_id: contact.id }).del();
+    await db('contacts').where({ id: contact.id }).del();
+
+    // Delete files from disk
+    const uploadsDir = config.uploads?.dir || '/app/uploads';
+    const contactDir = path.join(uploadsDir, 'contacts', contact.uuid);
+    if (fs.existsSync(contactDir)) fs.rmSync(contactDir, { recursive: true });
+
+    res.json({ message: 'Contact permanently deleted' });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/contacts/tools/empty-trash — permanently delete all trashed contacts
+router.delete('/tools/empty-trash', async (req, res, next) => {
+  try {
+    const trashed = await db('contacts')
+      .where({ tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .select('id', 'uuid');
+
+    const uploadsDir = config.uploads?.dir || '/app/uploads';
+    for (const c of trashed) {
+      await db('contact_photos').where({ contact_id: c.id }).del();
+      await db('contact_fields').where({ contact_id: c.id }).del();
+      await db('contact_labels').where({ contact_id: c.id }).del();
+      await db('contact_companies').where({ contact_id: c.id }).del();
+      await db('contact_addresses').where({ contact_id: c.id }).del();
+      await db('relationships').where({ contact_id: c.id }).orWhere({ related_contact_id: c.id }).del();
+      await db('post_contacts').where({ contact_id: c.id }).del();
+      await db('contacts').where({ id: c.id }).del();
+
+      const contactDir = path.join(uploadsDir, 'contacts', c.uuid);
+      if (fs.existsSync(contactDir)) fs.rmSync(contactDir, { recursive: true });
+    }
+
+    res.json({ message: `${trashed.length} contacts permanently deleted` });
+  } catch (err) { next(err); }
 });
 
 // GET /api/contacts/tools/duplicates — find potential duplicate contacts

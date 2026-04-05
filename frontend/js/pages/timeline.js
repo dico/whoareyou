@@ -287,6 +287,10 @@ export async function renderTimeline(contactUuid = null) {
   // Submit post
   document.getElementById('new-post-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = e.target.querySelector('[type="submit"]');
+    const btnText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
     const errorEl = document.getElementById('post-error');
     errorEl.classList.add('d-none');
 
@@ -316,6 +320,8 @@ export async function renderTimeline(contactUuid = null) {
       errorEl.textContent = err.message;
       errorEl.classList.remove('d-none');
     }
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = btnText;
   });
 }
 

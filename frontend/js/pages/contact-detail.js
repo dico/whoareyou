@@ -1135,6 +1135,11 @@ export async function renderContactDetail(uuid) {
       const body = document.getElementById('quick-post-body').value.trim();
       if (!body && !quickPostMedia.length) return;
 
+      const submitBtn = e.target.querySelector('[type="submit"]');
+      const btnText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
       const extraUuids = quickPostExtra.map((c) => c.uuid);
       const { post } = await api.post('/posts', {
         body,
@@ -1160,6 +1165,8 @@ export async function renderContactDetail(uuid) {
       linkPreviewFetchedUrl = null;
       linkPreviewDismissed = false;
       renderQuickLinkPreview();
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = btnText;
       reloadPosts();
     });
 

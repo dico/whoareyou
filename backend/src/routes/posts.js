@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
+import { config } from '../config/index.js';
 import { getLinkedContactId } from '../utils/tenant.js';
 
 const router = Router();
@@ -359,6 +362,61 @@ router.get('/', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/posts/trash — list soft-deleted posts
+router.get('/trash', async (req, res, next) => {
+  try {
+    const posts = await db('posts')
+      .where({ tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .select('uuid', 'body', 'post_date', 'deleted_at',
+        db.raw('(SELECT COUNT(*) FROM post_media WHERE post_media.post_id = posts.id) as media_count'))
+      .orderBy('deleted_at', 'desc');
+    res.json({ posts });
+  } catch (err) { next(err); }
+});
+
+// POST /api/posts/restore/:uuid — restore soft-deleted post
+router.post('/restore/:uuid', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+    await db('posts').where({ id: post.id }).update({ deleted_at: null });
+    res.json({ message: 'Post restored' });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/posts/permanent/:uuid — permanently delete post and files
+router.delete('/permanent/:uuid', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNotNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    // Delete media files from disk
+    const media = await db('post_media').where({ post_id: post.id }).select('file_path', 'thumbnail_path');
+    const uploadsDir = config.uploads?.dir || '/app/uploads';
+    for (const m of media) {
+      for (const p of [m.file_path, m.thumbnail_path]) {
+        if (p) { try { fs.unlinkSync(path.join(uploadsDir, p.replace(/^\/uploads\//, ''))); } catch {} }
+      }
+    }
+
+    await db('post_media').where({ post_id: post.id }).del();
+    await db('post_contacts').where({ post_id: post.id }).del();
+    await db('post_comments').where({ post_id: post.id }).del();
+    await db('post_reactions').where({ post_id: post.id }).del();
+    await db('post_link_previews').where({ post_id: post.id }).del();
+    await db('posts').where({ id: post.id }).del();
+
+    res.json({ message: 'Post permanently deleted' });
+  } catch (err) { next(err); }
 });
 
 // GET /api/posts/gallery — all images for a contact or company (for photo gallery)

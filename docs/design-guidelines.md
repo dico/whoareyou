@@ -191,7 +191,25 @@ Reusable header for detail pages that need an icon + title/meta + actions, with 
 
 **Refactoring status:** See [TODO](todo.md) for remaining files.
 
-### 26. Portal post creation
+### 26. Submit loading state
+When submitting actions that may take time (post with media upload, export, etc.), the submit button must:
+- Disable immediately on click (prevent double-submit)
+- Show a spinner (`<span class="spinner-border spinner-border-sm">`) replacing button text
+- Re-enable after completion (success or error)
+- Restore original button text
+
+### 27. Fade-out on delete
+When removing items from a list (posts, trash items), use a fade-out animation before removing from DOM:
+```javascript
+el.style.transition = 'opacity 0.3s, transform 0.3s';
+el.style.opacity = '0';
+el.style.transform = 'scale(0.95)';
+await new Promise(r => setTimeout(r, 300));
+el.remove();
+```
+This provides visual confirmation that the item was removed, especially when identical items are adjacent.
+
+### 28. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 
 ## i18n

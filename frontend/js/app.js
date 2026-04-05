@@ -14,6 +14,7 @@ import { renderAddressDetail } from './pages/address-detail.js';
 import { renderDuplicates } from './pages/admin-duplicates.js';
 import { renderConsistencyReport } from './pages/admin-consistency.js';
 import { renderExportData } from './pages/admin-export.js';
+import { renderTrash } from './pages/admin-trash.js';
 import { renderAddressMerge } from './pages/admin-addresses.js';
 import { renderCompanies } from './pages/companies.js';
 import { renderCompanyDetail } from './pages/company-detail.js';
@@ -48,6 +49,7 @@ const routes = {
   '/admin/duplicates': () => renderDuplicates(),
   '/admin/consistency': () => renderConsistencyReport(),
   '/admin/export-data': () => renderExportData(),
+  '/admin/trash': () => renderTrash(),
   '/admin/addresses': () => renderAddressMerge(),
   '/admin/labels': () => renderLabelAdmin(),
   '/admin/relationships': () => renderRelationshipSuggestions(),

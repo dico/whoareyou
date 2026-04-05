@@ -113,6 +113,8 @@
     "tagContact": "Tagg kontakt",
     "addMedia": "Legg til bilder",
     "addDocument": "Legg ved dokument",
+    "noText": "(uten tekst)",
+    "media": "filer",
     "loadMore": "Last inn flere",
     "gallery": "Bilder",
     "noPhotos": "Ingen bilder ennå",
@@ -753,6 +755,18 @@
     "cardDesc": "Sjekk for umulige eller mistenkelige relasjoner.",
     "noIssues": "Ingen problemer funnet. Alle relasjoner ser konsistente ut.",
     "found": "{count} problemer funnet"
+  },
+  "trash": {
+    "title": "Papirkurv",
+    "desc": "Gjenopprett eller slett kontakter og innlegg permanent.",
+    "noContacts": "Ingen slettede kontakter.",
+    "noPosts": "Ingen slettede innlegg.",
+    "restore": "Gjenopprett",
+    "permanentDelete": "Slett permanent",
+    "permanentConfirm": "Dette kan ikke angres. All tilknyttet data og filer slettes permanent.",
+    "deletedOn": "Slettet",
+    "emptyAll": "T\u00f8m papirkurv",
+    "emptyAllConfirm": "Slette alt i papirkurven permanent? Dette kan ikke angres."
   },
   "export": {
     "title": "Eksporter data",

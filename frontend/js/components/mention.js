@@ -1,4 +1,5 @@
 import { api } from '../api/client.js';
+import { authUrl } from '../utils/auth-url.js';
 
 /**
  * Attach @-mention support to a textarea.
@@ -109,7 +110,7 @@ export function attachMention(textarea, onTag) {
 
     dropdown.innerHTML = contacts.map((c, i) => `
       <div class="mention-item ${i === 0 ? 'active' : ''}" data-index="${i}">
-        <span class="mention-avatar">${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>
+        <span class="mention-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>
         <span>${c.first_name} ${c.last_name || ''}</span>
       </div>
     `).join('');
