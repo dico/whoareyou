@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
-import { processImage } from '../services/image.js';
+import { processImage, extractImageMetadata } from '../services/image.js';
 import { config } from '../config/index.js';
 
 const router = Router();
@@ -145,7 +145,7 @@ router.delete('/contacts/:uuid/photos/:photoId', async (req, res, next) => {
 });
 
 // POST /api/posts/:uuid/media — upload media (images + documents) to a post
-router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, res, next) => {
+router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, res, next) => {
   try {
     if (!req.files?.length) throw new AppError('No files uploaded', 400);
 
@@ -160,6 +160,8 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, re
       .max('sort_order as maxSort');
 
     const results = [];
+    const imageDates = [];
+
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       const timestamp = Date.now();
@@ -168,7 +170,15 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, re
 
       let filePath, thumbnailPath, fileType;
 
+      let takenAt = null, mediaLat = null, mediaLng = null;
+
       if (isImage) {
+        // Extract EXIF metadata before processing (which strips it)
+        const meta = await extractImageMetadata(file.path);
+        if (meta.date) { imageDates.push(meta.date); takenAt = meta.date; }
+        if (meta.latitude) mediaLat = meta.latitude;
+        if (meta.longitude) mediaLng = meta.longitude;
+
         const processed = await processImage(
           file.path, `posts/${post.uuid}`, `media_${timestamp}_${i}`
         );
@@ -197,6 +207,9 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, re
         file_size: file.size,
         original_name: file.originalname || null,
         sort_order: (maxSort || 0) + i + 1,
+        taken_at: takenAt,
+        latitude: mediaLat,
+        longitude: mediaLng,
       });
 
       results.push({
@@ -205,10 +218,64 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 10), async (req, re
       });
     }
 
-    res.status(201).json({ media: results });
+    // Suggest post_date from image EXIF dates
+    // Strategy: use the most common date if > 50% agree, otherwise median
+    let suggestedDate = null;
+    if (imageDates.length) {
+      const dateCounts = {};
+      for (const d of imageDates) { dateCounts[d] = (dateCounts[d] || 0) + 1; }
+      const sorted = Object.entries(dateCounts).sort((a, b) => b[1] - a[1]);
+      const topDate = sorted[0][0];
+      const topCount = sorted[0][1];
+
+      if (topCount > imageDates.length / 2) {
+        // Majority agree on one date
+        suggestedDate = topDate;
+      } else {
+        // Use median date
+        const sortedDates = [...imageDates].sort();
+        suggestedDate = sortedDates[Math.floor(sortedDates.length / 2)];
+      }
+
+      // Only suggest if different from today
+      const today = new Date().toISOString().split('T')[0];
+      if (suggestedDate === today) suggestedDate = null;
+    }
+
+    res.status(201).json({ media: results, suggestedDate });
   } catch (err) {
     next(err);
   }
+});
+
+// DELETE /api/posts/:uuid/media/:mediaId — remove a media item from a post
+router.delete('/posts/:uuid/media/:mediaId', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const media = await db('post_media')
+      .where({ id: req.params.mediaId, post_id: post.id })
+      .first();
+    if (!media) throw new AppError('Media not found', 404);
+
+    // Delete files from disk (with path traversal protection)
+    const uploadsDir = path.resolve(config.uploads.dir);
+    for (const p of [media.file_path, media.thumbnail_path]) {
+      if (p) {
+        const absPath = path.resolve(uploadsDir, p.replace(/^\/uploads\//, ''));
+        if (absPath.startsWith(uploadsDir)) {
+          try { await fs.unlink(absPath); } catch {}
+        }
+      }
+    }
+
+    await db('post_media').where({ id: media.id }).del();
+    res.json({ message: 'Media deleted' });
+  } catch (err) { next(err); }
 });
 
 export default router;

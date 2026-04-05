@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/index.js';
+import exifReader from 'exif-reader';
 
 const { dir: uploadsDir, image: imageConfig } = config.uploads;
 
@@ -50,4 +51,46 @@ export async function processImage(inputPath, subDir, filename, { keepOriginal =
     filePath: `/uploads/${subDir}/${mainFile}`,
     thumbnailPath: `/uploads/${subDir}/${thumbFile}`,
   };
+}
+
+/**
+ * Extract date and GPS from image EXIF metadata.
+ * Uses exif-reader for full EXIF parsing including GPS coordinates.
+ * @param {string} inputPath - Path to image file
+ * @returns {{ date: string|null, latitude: number|null, longitude: number|null }}
+ */
+export async function extractImageMetadata(inputPath) {
+  try {
+    const meta = await sharp(inputPath).metadata();
+    if (!meta.exif) return { date: null, latitude: null, longitude: null };
+
+    const exif = exifReader(meta.exif);
+
+    // Date: prefer DateTimeOriginal, fall back to DateTime
+    let date = null;
+    const dateObj = exif.Photo?.DateTimeOriginal || exif.Image?.DateTime || exif.exif?.DateTimeOriginal;
+    if (dateObj instanceof Date && !isNaN(dateObj.getTime())) {
+      date = dateObj.toISOString().split('T')[0];
+    }
+
+    // GPS coordinates
+    let latitude = null, longitude = null;
+    const gps = exif.GPSInfo || exif.gps;
+    if (gps?.GPSLatitude && gps?.GPSLongitude) {
+      latitude = dmsToDecimal(gps.GPSLatitude, gps.GPSLatitudeRef);
+      longitude = dmsToDecimal(gps.GPSLongitude, gps.GPSLongitudeRef);
+    }
+
+    return { date, latitude, longitude };
+  } catch {
+    return { date: null, latitude: null, longitude: null };
+  }
+}
+
+// Convert GPS DMS (degrees/minutes/seconds) to decimal
+function dmsToDecimal(dms, ref) {
+  if (!Array.isArray(dms) || dms.length < 3) return null;
+  let decimal = dms[0] + dms[1] / 60 + dms[2] / 3600;
+  if (ref === 'S' || ref === 'W') decimal = -decimal;
+  return Math.round(decimal * 10000000) / 10000000;
 }

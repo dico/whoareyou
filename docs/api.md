@@ -56,6 +56,10 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/:uuid/fields` | Add contact field |
 | PUT | `/:uuid/fields/:id` | Update field |
 | DELETE | `/:uuid/fields/:id` | Delete field |
+| GET | `/tools/trash` | List soft-deleted contacts |
+| POST | `/tools/restore/:uuid` | Restore soft-deleted contact |
+| DELETE | `/tools/permanent/:uuid` | Permanently delete contact and files |
+| DELETE | `/tools/empty-trash` | Permanently delete all trashed contacts |
 | GET | `/tools/duplicates` | Find potential duplicate contacts (filters dismissed) |
 | POST | `/tools/merge` | Merge two contacts |
 | POST | `/tools/dismiss-duplicate` | Dismiss a duplicate pair |
@@ -67,6 +71,10 @@ All endpoints require authentication unless noted. Responses are JSON.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/` | Timeline (filter by contact or company, paginate) |
+| GET | `/geo` | Photos with GPS coordinates for map |
+| GET | `/trash` | List soft-deleted posts |
+| POST | `/restore/:uuid` | Restore soft-deleted post |
+| DELETE | `/permanent/:uuid` | Permanently delete post and files |
 | GET | `/gallery` | Photo gallery for a contact |
 | POST | `/` | Create post |
 | PUT | `/:uuid` | Update post |
@@ -83,7 +91,8 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/contacts/:uuid/photos` | Upload contact photo (image only, sharp processed) |
 | PUT | `/contacts/:uuid/photos/:id/primary` | Set primary photo |
 | DELETE | `/contacts/:uuid/photos/:id` | Delete photo |
-| POST | `/posts/:uuid/media` | Upload post media (images, videos, documents) |
+| POST | `/posts/:uuid/media` | Upload post media (images, videos, documents). Returns `suggestedDate` from EXIF. |
+| DELETE | `/posts/:uuid/media/:mediaId` | Delete individual media item and files |
 
 ## Relationships (`/api/relationships`)
 

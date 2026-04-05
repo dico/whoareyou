@@ -447,7 +447,10 @@ export async function renderCompanyDetail(uuid) {
       if (groupPostMedia.length && post?.uuid) {
         const formData = new FormData();
         for (const file of groupPostMedia) formData.append('media', file);
-        await api.upload(`/posts/${post.uuid}/media`, formData);
+        const uploadResult = await api.upload(`/posts/${post.uuid}/media`, formData);
+        if (uploadResult?.suggestedDate) {
+          await api.put(`/posts/${post.uuid}`, { post_date: uploadResult.suggestedDate });
+        }
       }
 
       document.getElementById('group-post-body').value = '';

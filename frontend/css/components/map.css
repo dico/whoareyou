@@ -21,7 +21,35 @@
 
 .map-toolbar .search-box input {
   background: rgba(255, 255, 255, 0.9);
+  padding-left: var(--space-lg);
 }
+
+.map-toolbar .search-box i {
+  left: var(--space-sm);
+  font-size: 0.75rem;
+  z-index: 1;
+}
+
+.map-filters {
+  display: flex;
+  gap: 2px;
+  margin-top: var(--space-sm);
+}
+
+.map-filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.map-filter-toggle:hover { background: rgba(0,0,0,0.06); }
+.map-filter-toggle.active { color: var(--color-primary); background: rgba(0,122,255,0.1); }
 
 .map-container {
   flex: 1;

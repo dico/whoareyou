@@ -1,5 +1,6 @@
 import { api } from './api/client.js';
 import { setLocale } from './utils/i18n.js';
+import './utils/datepicker.js'; // Auto-init flatpickr on all date inputs
 import { renderLogin } from './pages/login.js';
 import { renderContacts } from './pages/contacts.js';
 import { renderContactDetail } from './pages/contact-detail.js';

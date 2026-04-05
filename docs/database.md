@@ -72,6 +72,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 | `contact_addresses` | Contact ↔ address with move history |
 | `post_contacts` | Tagged contacts in posts |
 | `post_comments` | Comments on posts (user or portal guest) |
+Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadata from uploaded images.
 | `post_reactions` | Emoji reactions (default ❤️) |
 | `companies` | Companies, schools, clubs, teams (groups). Fields: type, description, parent_id |
 | `company_photos` | Group photos (same pattern as contact_photos) |
@@ -116,7 +117,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 66 migrations
+- Currently 67 migrations
 
 ### Creating a New Migration
 ```bash

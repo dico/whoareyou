@@ -305,7 +305,11 @@ export async function renderTimeline(contactUuid = null) {
       if (pendingMedia.length && post?.uuid) {
         const formData = new FormData();
         for (const file of pendingMedia) formData.append('media', file);
-        await api.upload(`/posts/${post.uuid}/media`, formData);
+        const uploadResult = await api.upload(`/posts/${post.uuid}/media`, formData);
+        // Auto-set post date from image EXIF if available
+        if (uploadResult?.suggestedDate) {
+          await api.put(`/posts/${post.uuid}`, { post_date: uploadResult.suggestedDate });
+        }
       }
 
       document.getElementById('post-body').value = '';

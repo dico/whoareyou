@@ -20,7 +20,7 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 
-## Pages (27 files)
+## Pages (28 files)
 
 Each page exports a `render*()` function called by the router in `app.js`.
 
@@ -60,6 +60,7 @@ Each page exports a `render*()` function called by the router in `app.js`.
 | Duplicates | `/admin/duplicates` | `renderDuplicates()` |
 | Consistency | `/admin/consistency` | `renderConsistencyReport()` |
 | Export Data | `/admin/export-data` | `renderExportData()` — JSON and full backup download |
+| Trash | `/admin/trash` | `renderTrash()` — restore or permanently delete contacts/posts |
 | Security | `/admin/security` | `renderSecurityAdmin()` |
 
 ### Portal Pages
@@ -77,6 +78,7 @@ Each page exports a `render*()` function called by the router in `app.js`.
 | `utils/i18n.js` | `t()`, `setLocale()`, `getLocale()`, `formatDate()`, `formatDateLong()` | Internationalization |
 | `utils/auth-url.js` | `authUrl(path)` | Appends `?token=...` to upload URLs for auth |
 | `utils/drop-zone.js` | `enableDropZone(el, onFiles, opts)` | Drag-and-drop + paste for files. `{ acceptDocuments: true }` for non-image files |
+| `utils/datepicker.js` | Auto-init (MutationObserver) | Replaces `<input type="date">` with flatpickr. Locale-aware (dd.mm.yyyy for nb). No manual calls needed. |
 | `utils/visibility.js` | `toggleVisibilityBtn()` | Shared/private pill toggle handler |
 
 ## Patterns

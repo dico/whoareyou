@@ -209,7 +209,16 @@ el.remove();
 ```
 This provides visual confirmation that the item was removed, especially when identical items are adjacent.
 
-### 28. Portal post creation
+### 28. Date picker (`utils/datepicker.js`)
+All date inputs use flatpickr (CDN) for locale-aware formatting. **No manual initialization needed** — a MutationObserver automatically converts any `<input type="date">` that appears in the DOM.
+
+- Norwegian: `dd.mm.yyyy`, English: `dd/mm/yyyy`
+- Internal value is always `YYYY-MM-DD` (altInput mode)
+- Compact width via `.fp-date` class (`width: 120px`)
+- Lazy-loaded: flatpickr JS/CSS only fetched on first date input
+- Just use `<input type="date">` — it works everywhere (pages, modals, dynamic forms)
+
+### 29. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 
 ## i18n

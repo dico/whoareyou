@@ -58,7 +58,7 @@ whoareyou/
 │       ├── routes/               # 17 route modules
 │       ├── services/             # Email, image, geocoding, geolocation
 │       ├── utils/                # Errors, validation, sessions, IP, settings
-│       └── migrations/           # 66 Knex migrations
+│       └── migrations/           # 67 Knex migrations
 ├── frontend/
 │   ├── index.html                # SPA entry point
 │   ├── portal.html               # Portal entry point (planned)
@@ -70,7 +70,7 @@ whoareyou/
 │   │   ├── app.js                # Router + state + init
 │   │   ├── api/client.js         # API client (fetch wrapper)
 │   │   ├── components/           # Reusable UI components (12 files)
-│   │   ├── pages/                # Page renderers (27 files)
+│   │   ├── pages/                # Page renderers (28 files)
 │   │   └── utils/                # i18n, auth-url, drop-zone, visibility
 │   ├── locales/                  # en.json, nb.json
 │   └── img/                      # Logo, icons, flags

@@ -217,6 +217,32 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             `}
             <textarea class="form-control edit-post-body" rows="3">${escapeHtml(p.body)}</textarea>
             <div class="edit-link-preview d-none"></div>
+            ${p.media.length ? `
+            <div class="edit-media-list post-media-preview">
+              ${p.media.map(m => {
+                if (m.file_type?.startsWith('image')) {
+                  return `<div class="media-preview-item" data-media-id="${m.id}">
+                    <img src="${authUrl(m.thumbnail_path || m.file_path)}" alt="">
+                    <button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>
+                  </div>`;
+                }
+                if (m.file_type?.startsWith('video')) {
+                  return `<div class="media-preview-item" data-media-id="${m.id}">
+                    <video src="${authUrl(m.file_path)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video>
+                    <div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div>
+                    <button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>
+                  </div>`;
+                }
+                const icon = m.file_type?.includes('pdf') ? 'bi-file-earmark-pdf' : 'bi-file-earmark';
+                return `<div class="media-preview-item media-preview-doc" data-media-id="${m.id}">
+                  <i class="${icon}"></i>
+                  <span class="media-preview-doc-name">${m.original_name || 'file'}</span>
+                  <button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>
+                </div>`;
+              }).join('')}
+            </div>
+            ` : ''}
+            <div class="edit-media-preview post-media-preview d-none"></div>
             <div class="edit-bar">
               <div class="edit-tags-list">
                 ${p.contacts.map((c) => `
@@ -226,6 +252,10 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
                   </span>
                 `).join('')}
                 <button type="button" class="edit-action btn-add-tag-edit" title="${t('posts.tagContact')}"><i class="bi bi-person-plus"></i></button>
+                <label class="edit-action" title="${t('posts.addMedia')}" style="cursor:pointer">
+                  <i class="bi bi-image"></i>
+                  <input type="file" class="edit-media-input" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
+                </label>
               </div>
               <div class="edit-actions">
                 <input type="date" class="form-control form-control-sm edit-post-date" value="${p.post_date ? new Date(p.post_date).toISOString().split('T')[0] : ''}">
@@ -274,7 +304,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             const tag = document.createElement('span');
             tag.className = 'edit-tag';
             tag.dataset.uuid = contact.uuid;
-            tag.innerHTML = `${contact.first_name} ${contact.last_name || ''} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
+            tag.innerHTML = `${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
             tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
             const addBtn = tagsList.querySelector('.btn-add-tag-edit');
             tagsList.insertBefore(tag, addBtn);
@@ -411,6 +441,65 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           tagsList.insertBefore(tag, btn);
         } catch (err) {
           console.error('Add tag error:', err);
+        }
+      });
+    });
+
+    // Remove existing media in edit mode
+    el.querySelectorAll('.btn-remove-media').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const postEl = btn.closest('[data-post-uuid]');
+        const uuid = postEl?.dataset.postUuid;
+        const mediaId = btn.dataset.mediaId;
+        if (!uuid || !mediaId) return;
+        try {
+          await api.delete(`/posts/${uuid}/media/${mediaId}`);
+          const item = btn.closest('.media-preview-item');
+          if (item) { item.style.transition = 'opacity 0.2s'; item.style.opacity = '0'; setTimeout(() => item.remove(), 200); }
+        } catch (err) {
+          console.error('Remove media error:', err);
+        }
+      });
+    });
+
+    // Add new media in edit mode
+    el.querySelectorAll('.edit-media-input').forEach(input => {
+      input.addEventListener('change', async (e) => {
+        const form = input.closest('.edit-post-form');
+        const postEl = form?.closest('[data-post-uuid]');
+        const uuid = postEl?.dataset.postUuid;
+        if (!uuid || !e.target.files?.length) return;
+
+        const formData = new FormData();
+        for (const file of e.target.files) formData.append('media', file);
+        input.value = '';
+
+        try {
+          const { media } = await api.upload(`/posts/${uuid}/media`, formData);
+          // Show newly added media in preview
+          const previewEl = form.querySelector('.edit-media-preview');
+          if (previewEl && media?.length) {
+            previewEl.classList.remove('d-none');
+            for (const m of media) {
+              const div = document.createElement('div');
+              div.className = 'media-preview-item';
+              div.dataset.mediaId = m.id;
+              if (m.file_type?.startsWith('image')) {
+                div.innerHTML = `<img src="${authUrl(m.thumbnail_path || m.file_path)}" alt=""><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>`;
+              } else {
+                const icon = m.file_type?.includes('pdf') ? 'bi-file-earmark-pdf' : 'bi-file-earmark';
+                div.className += ' media-preview-doc';
+                div.innerHTML = `<i class="${icon}"></i><span class="media-preview-doc-name">${m.original_name || 'file'}</span><button type="button" class="media-preview-remove btn-remove-media" data-media-id="${m.id}"><i class="bi bi-x"></i></button>`;
+              }
+              div.querySelector('.btn-remove-media').addEventListener('click', async () => {
+                await api.delete(`/posts/${uuid}/media/${m.id}`);
+                div.style.transition = 'opacity 0.2s'; div.style.opacity = '0'; setTimeout(() => div.remove(), 200);
+              });
+              previewEl.appendChild(div);
+            }
+          }
+        } catch (err) {
+          console.error('Upload media error:', err);
         }
       });
     });

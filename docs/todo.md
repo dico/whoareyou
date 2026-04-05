@@ -57,24 +57,6 @@
 
 ## Low Priority
 
-### Post edit: media management
-**Status:** Not started
-**Why:** When editing a post, users can't add or remove attached media (images, videos, documents). Currently only text, date, tags, and about-contact can be changed during edit.
-**Needed:**
-- Show existing media in edit mode with remove (X) button per item
-- Allow adding new media via file picker or drag-and-drop
-- Backend: endpoint to delete individual post_media items
-
-### Date picker: locale-aware
-**Status:** Not started
-**Why:** Native `<input type="date">` uses browser/OS locale for display format (mm/dd/yyyy vs dd/mm/yyyy). Norwegian users expect dd.mm.yyyy. The browser locale setting doesn't always override this.
-**Options:**
-1. Replace with a lightweight JS date picker (e.g. flatpickr, ~5KB) configured with app locale
-2. Use three separate selects (day/month/year) like we do for birth dates
-3. Use `<input type="text">` with pattern validation and a calendar popup
-
-**Recommendation:** flatpickr with locale config — minimal footprint, works everywhere, supports `nb` locale out of the box. When implemented, replace ALL `<input type="date">` across the app and document the component in `design-guidelines.md`.
-
 ### Gift module UX improvements
 **Status:** Not started
 **Issues:**

@@ -76,7 +76,7 @@ router.get('/', async (req, res, next) => {
         .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)),
       db('post_media')
         .whereIn('post_id', postIds)
-        .select('post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
+        .select('id', 'post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
         .orderBy('sort_order'),
       profileContactIds.length
         ? db('contacts')
@@ -132,6 +132,7 @@ router.get('/', async (req, res, next) => {
     for (const m of media) {
       if (!mediaByPost[m.post_id]) mediaByPost[m.post_id] = [];
       mediaByPost[m.post_id].push({
+        id: m.id,
         file_path: m.file_path,
         thumbnail_path: m.thumbnail_path,
         file_type: m.file_type,
@@ -364,6 +365,51 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// GET /api/posts/geo — photos with GPS coordinates for map
+router.get('/geo', async (req, res, next) => {
+  try {
+    const photos = await db('post_media')
+      .join('posts', 'post_media.post_id', 'posts.id')
+      .where({ 'posts.tenant_id': req.tenantId })
+      .whereNull('posts.deleted_at')
+      .whereNotNull('post_media.latitude')
+      .whereNotNull('post_media.longitude')
+      .where('post_media.file_type', 'like', 'image/%')
+      .select(
+        'post_media.thumbnail_path', 'post_media.file_path',
+        'post_media.latitude', 'post_media.longitude', 'post_media.taken_at',
+        'post_media.original_name',
+        'posts.uuid as post_uuid', 'posts.body as post_body', 'posts.contact_id'
+      )
+      .orderBy('post_media.taken_at', 'desc');
+
+    // Resolve contact names for posts
+    const contactIds = [...new Set(photos.map(p => p.contact_id).filter(Boolean))];
+    const contactMap = new Map();
+    if (contactIds.length) {
+      const contacts = await db('contacts').where({ tenant_id: req.tenantId }).whereIn('id', contactIds).select('id', 'uuid', 'first_name', 'last_name');
+      for (const c of contacts) contactMap.set(c.id, c);
+    }
+
+    res.json({
+      photos: photos.map(p => {
+        const contact = p.contact_id ? contactMap.get(p.contact_id) : null;
+        return {
+          thumbnail_path: p.thumbnail_path,
+          file_path: p.file_path,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          taken_at: p.taken_at,
+          original_name: p.original_name,
+          post_uuid: p.post_uuid,
+          post_body: p.post_body,
+          contact: contact ? { uuid: contact.uuid, first_name: contact.first_name, last_name: contact.last_name } : null,
+        };
+      }),
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/posts/trash — list soft-deleted posts
 router.get('/trash', async (req, res, next) => {
   try {
@@ -399,12 +445,14 @@ router.delete('/permanent/:uuid', async (req, res, next) => {
       .first();
     if (!post) throw new AppError('Post not found', 404);
 
-    // Delete media files from disk
+    // Delete media files from disk (with path traversal protection)
     const media = await db('post_media').where({ post_id: post.id }).select('file_path', 'thumbnail_path');
-    const uploadsDir = config.uploads?.dir || '/app/uploads';
+    const uploadsDir = path.resolve(config.uploads?.dir || '/app/uploads');
     for (const m of media) {
       for (const p of [m.file_path, m.thumbnail_path]) {
-        if (p) { try { fs.unlinkSync(path.join(uploadsDir, p.replace(/^\/uploads\//, ''))); } catch {} }
+        if (!p) continue;
+        const absPath = path.resolve(uploadsDir, p.replace(/^\/uploads\//, ''));
+        if (absPath.startsWith(uploadsDir)) { try { fs.unlinkSync(absPath); } catch {} }
       }
     }
 

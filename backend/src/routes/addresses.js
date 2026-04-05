@@ -70,11 +70,14 @@ router.get('/search', async (req, res, next) => {
       .where(function () {
         this.where('addresses.street', 'like', `%${q}%`)
           .orWhere('addresses.city', 'like', `%${q}%`)
-          .orWhere('addresses.postal_code', 'like', `%${q}%`);
+          .orWhere('addresses.postal_code', 'like', `%${q}%`)
+          .orWhere('contacts.first_name', 'like', `%${q}%`)
+          .orWhere('contacts.last_name', 'like', `%${q}%`);
       })
       .select(
         'addresses.id as address_id',
         'addresses.street', 'addresses.postal_code', 'addresses.city',
+        'addresses.latitude', 'addresses.longitude',
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
         'contact_addresses.label'
       );
