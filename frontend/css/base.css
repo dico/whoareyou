@@ -280,6 +280,8 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
   padding: var(--space-sm) var(--space-lg);
   background: var(--color-surface);
   border: var(--glass-border);
