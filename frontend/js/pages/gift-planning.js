@@ -80,8 +80,6 @@ async function loadPlanningList() {
 
 function renderIdeaCard(g) {
   const statusColor = STATUS_COLORS[g.status] || 'secondary';
-  const giversText = g.givers?.map(c => `${c.first_name} ${c.last_name || ''}`.trim()).join(', ') || '';
-
   return `
     <div class="gift-card gift-card-idea" data-uuid="${g.uuid}">
       <div class="gift-card-image">
@@ -93,8 +91,7 @@ function renderIdeaCard(g) {
       <div class="gift-card-body">
         <div class="gift-card-title">${esc(g.title)}</div>
         <div class="gift-card-sub text-muted small">
-          ${g.event_name ? `<span class="gift-event-type-badge gift-type-other" style="font-size:0.65rem">${esc(g.event_name)}</span> ` : ''}
-          ${giversText ? `${t('gifts.from').toLowerCase()} ${giversText}` : ''}
+          ${g.price ? `${g.price} ${g.currency_code || 'NOK'}` : ''}
         </div>
       </div>
       <div class="gift-card-end">
