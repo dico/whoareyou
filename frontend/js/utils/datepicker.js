@@ -81,18 +81,17 @@ function scanAndInit(root) {
 // Initial scan
 document.addEventListener('DOMContentLoaded', () => scanAndInit());
 
-// Watch for dynamically added date inputs
-const observer = new MutationObserver((mutations) => {
-  for (const m of mutations) {
-    for (const node of m.addedNodes) {
-      if (node.nodeType !== 1) continue;
-      if (node.matches?.('input[type="date"]')) initInput(node);
-      else if (node.querySelectorAll) {
-        const inputs = node.querySelectorAll('input[type="date"]:not([data-fp-init])');
-        inputs.forEach(input => initInput(input));
-      }
-    }
-  }
+// Watch for dynamically added date inputs (debounced to avoid performance issues)
+let scanTimeout;
+const observer = new MutationObserver(() => {
+  clearTimeout(scanTimeout);
+  scanTimeout = setTimeout(() => scanAndInit(), 200);
 });
 
-observer.observe(document.body, { childList: true, subtree: true });
+if (document.body) {
+  observer.observe(document.body, { childList: true, subtree: true });
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
