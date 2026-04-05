@@ -27,8 +27,8 @@
 **Why:** App must handle years of daily posts, photos, and comments without degradation.
 
 **Backend optimizations:**
-1. **Post API response size** — reactions currently include full name + avatar per person per post. With many reactions × many posts, response grows fast. Optimize: only send reaction count + reacted flag on list, fetch full reaction details on demand (when user clicks).
-2. **N+1 avatar queries** — posts endpoint runs subqueries for profile photos. Use a single batch query instead.
+1. ~~**Post API response size**~~ — Done. Reactions now send only count + reacted + max 3 first names. Full people list (with avatars) loaded on demand via `GET /posts/:uuid/reactions`.
+2. ~~**N+1 avatar queries**~~ — Done. Removed avatar queries from reaction processing in post list and toggle. Avatars only fetched in on-demand reaction popup.
 3. **Pagination cursor** — current offset-based pagination gets slower as offset grows. Switch to cursor-based (WHERE id < lastId) for timeline.
 4. **Database indexes** — verify indexes on posts(tenant_id, deleted_at, post_date), post_media(post_id), post_reactions(post_id), post_comments(post_id).
 

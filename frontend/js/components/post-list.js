@@ -5,7 +5,7 @@ import { t, formatDate, timeAgo, formatDateTime } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 
 // Store reaction people per post (avoids JSON-in-HTML-attribute issues)
-const reactionPeopleMap = new Map();
+// Reaction people loaded on demand via GET /posts/:uuid/reactions
 // Store edit link preview per post UUID
 const editLinkPreviewMap = new Map();
 
@@ -170,7 +170,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           ${p.link_preview ? renderLinkPreview(p.link_preview) : ''}
           ${p.reaction_count || p.comment_count ? `
           <div class="post-engagement-bar">
-            ${p.reaction_count ? (() => { reactionPeopleMap.set(p.uuid, p.reaction_people || []); return `<button class="post-engagement-likes btn-show-likes" data-uuid="${p.uuid}">
+            ${p.reaction_count ? (() => { return `<button class="post-engagement-likes btn-show-likes" data-uuid="${p.uuid}">
               <i class="bi bi-heart-fill text-danger"></i>
               <span>${formatLikeNames(p.reaction_names, p.reaction_count)}</span>
             </button>`; })() : ''}
@@ -602,7 +602,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     el.querySelectorAll('.btn-react').forEach(btn => {
       btn.addEventListener('click', async () => {
         const uuid = btn.dataset.uuid;
-        const { action, reaction_names, reaction_count, reaction_people } = await api.post(`/posts/${uuid}/reactions`, { emoji: '❤️' });
+        const { action, reaction_names, reaction_count } = await api.post(`/posts/${uuid}/reactions`, { emoji: '❤️' });
         const icon = btn.querySelector('i');
         icon.className = action === 'added' ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
 
@@ -611,7 +611,6 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         const engagementBar = post.querySelector('.post-engagement-bar');
         const likesEl = post.querySelector('.post-engagement-likes');
         if (reaction_count > 0) {
-          reactionPeopleMap.set(uuid, reaction_people || []);
           const likesHtml = `<button class="post-engagement-likes btn-show-likes" data-uuid="${uuid}">
             <i class="bi bi-heart-fill text-danger"></i>
             <span>${formatLikeNames(reaction_names || [], reaction_count)}</span>
@@ -636,7 +635,12 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       const likesBtn = e.target.closest('.btn-show-likes');
       if (!likesBtn) return;
       e.preventDefault();
-      const people = reactionPeopleMap.get(likesBtn.dataset.uuid) || [];
+      // Fetch reaction people on demand
+      let people;
+      try {
+        const data = await api.get(`/posts/${likesBtn.dataset.uuid}/reactions`);
+        people = data.people || [];
+      } catch { people = []; }
       if (!people.length) return;
 
       const modalEl = document.createElement('div');
