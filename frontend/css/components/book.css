@@ -1,0 +1,964 @@
+/* Book viewer — screen + print styles.
+ *
+ * Pages are fixed-size boxes. Screen view uses transform: scale to fit them
+ * in the viewport. Print view removes the scale and lets the browser lay out
+ * one physical page per .book-page.
+ */
+
+:root {
+  /* Default page size: 200 x 200 mm square photo book. */
+  --book-page-width: 200mm;
+  --book-page-height: 200mm;
+  --book-bg: #f3f2ee;
+  --book-paper: #ffffff;
+  --book-ink: #1a1a1a;
+  --book-muted: #6b6b6b;
+  --book-accent: #c88b3a;
+}
+
+.book-viewer {
+  min-height: calc(100vh - 60px);
+  background: var(--book-bg);
+  display: flex;
+  flex-direction: column;
+  /* Break out of the .app-content max-width (1000px) so the book can use
+   * the full viewport width. Negative margins compensate for app-content
+   * padding, and 100vw + left offset centers against the viewport. */
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  /* Pull up through .app-content's top padding so the toolbar sits flush
+   * against the navbar. */
+  margin-top: calc(var(--space-lg) * -1);
+}
+
+/* Toolbar bar spans the full viewport width, inner content is constrained
+ * to match .app-content max-width (1000px) and stays centered. */
+.book-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+.book-toolbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.book-toolbar-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.book-toolbar-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.book-page-indicator {
+  font-variant-numeric: tabular-nums;
+  color: var(--book-muted);
+  font-size: 0.9rem;
+}
+
+.book-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  position: relative;
+}
+
+.book-nav {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--book-ink);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  margin: 0 var(--space-md);
+}
+.book-nav i { line-height: 1; display: block; }
+
+.book-nav:hover { background: #fff; }
+
+/* The "frame" takes the SCALED dimensions in layout so siblings respect
+ * the actual visual size. The inner .book-pages has its unscaled size and
+ * is scaled via `transform: scale(var(--book-scale))`. --book-scale is
+ * computed in JS to fit the viewport. */
+.book-pages-frame {
+  position: relative;
+  width: calc(var(--book-page-width) * var(--book-scale, 1));
+  height: calc(var(--book-page-height) * var(--book-scale, 1));
+  flex-shrink: 0;
+}
+.book-pages-frame.is-spread {
+  width: calc((var(--book-page-width) * 2 + 2mm) * var(--book-scale, 1));
+}
+
+.book-pages {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--book-page-width);
+  height: var(--book-page-height);
+  transform: scale(var(--book-scale, 1));
+  transform-origin: top left;
+}
+
+.book-pages.is-spread {
+  width: calc(var(--book-page-width) * 2 + 2mm);
+}
+
+/* Pages are stacked at the same position; only the active one is visible.
+ * In spread mode, the active left page sits flush against the spine,
+ * the right page sits to its right. */
+.book-page-wrap {
+  position: absolute;
+  inset: 0;
+  display: none;
+  transform-origin: top left;
+}
+
+.book-page-wrap.is-active {
+  display: block;
+}
+
+.book-pages.is-spread .book-page-wrap.is-active {
+  width: var(--book-page-width);
+}
+.book-pages.is-spread .book-page-wrap.is-left {
+  left: 0;
+  right: auto;
+  box-shadow: inset -2px 0 6px rgba(0,0,0,0.08);
+}
+.book-pages.is-spread .book-page-wrap.is-right {
+  left: calc(var(--book-page-width) + 2mm);
+  right: auto;
+  box-shadow: inset 2px 0 6px rgba(0,0,0,0.08);
+}
+
+.book-page {
+  width: var(--book-page-width);
+  height: var(--book-page-height);
+  background: var(--book-paper);
+  color: var(--book-ink);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  font-family: Georgia, 'Times New Roman', serif;
+  /* Fit the fixed-size page into the viewport container. */
+  transform-origin: top left;
+}
+
+/* Scaling handled dynamically via --book-scale CSS var set by JS. */
+
+/* ── Book list (in generate-book page) ──────────────────── */
+.book-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.book-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.book-list-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: inherit;
+}
+.book-list-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(200,139,58,0.12);
+  color: #c88b3a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.book-list-info { flex: 1; min-width: 0; }
+.book-list-title { font-weight: 600; margin: 0; }
+.book-list-meta { color: var(--color-text-muted, #6b6b6b); font-size: 0.85rem; margin: 0; }
+.book-list-actions { flex-shrink: 0; display: flex; gap: var(--space-xs); }
+
+/* Segmented view-mode group */
+.book-viewmode-group .btn {
+  border-color: rgba(0,0,0,0.15);
+}
+.book-viewmode-group .btn.active {
+  background: var(--book-accent);
+  border-color: var(--book-accent);
+  color: #fff;
+}
+.book-viewmode-group .btn.active:hover {
+  background: var(--book-accent);
+  color: #fff;
+}
+
+/* Page-edit pencil (hover overlay on each flip page) */
+.book-page-edit-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.92);
+  color: var(--book-ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  z-index: 4;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.book-page-wrap.is-active:hover .book-page-edit-btn,
+.book-viewer.is-curate .book-page-wrap.is-active .book-page-edit-btn {
+  opacity: 1;
+}
+.book-page-edit-btn:hover { background: #fff; }
+.book-viewer.is-curate .book-page-edit-btn {
+  background: var(--book-accent);
+  color: #fff;
+}
+
+/* ── Curate mode ─────────────────────────── */
+.book-viewer.is-curate .book-post-image,
+.book-viewer.is-curate .book-post-extras img {
+  cursor: crosshair;
+  outline: 2px dashed var(--book-accent);
+  outline-offset: -4px;
+}
+.book-viewer.is-curate .book-page-wrap.is-active .book-post-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(200,139,58,0.06);
+  pointer-events: none;
+  z-index: 1;
+}
+.book-curate-hint {
+  position: absolute;
+  bottom: var(--space-md);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+/* Active toolbar button */
+.book-toolbar .btn.active {
+  background: var(--book-accent);
+  border-color: var(--book-accent);
+  color: #fff;
+}
+
+/* Save status */
+.book-save-status {
+  font-style: italic;
+  min-width: 80px;
+  display: inline-block;
+}
+
+/* ── Grid view ───────────────────────────── */
+.book-viewer.is-grid .book-stage { display: none; }
+
+/* Thumb scale: 200mm ≈ 755.9px at 96dpi.
+ * --book-thumb-size (CSS px) × --book-thumb-scale must equal 200mm.
+ * 220px / 755.9px ≈ 0.291. */
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--book-thumb-size, 220px));
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  justify-content: center;
+}
+
+.book-grid-item {
+  position: relative;
+  width: var(--book-thumb-size, 220px);
+  height: var(--book-thumb-size, 220px);
+  background: var(--book-paper);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.book-grid-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.book-grid-item.is-excluded {
+  opacity: 0.4;
+}
+.book-grid-item.is-excluded::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(45deg, transparent 0, transparent 20px, rgba(255,59,48,0.15) 20px, rgba(255,59,48,0.15) 22px);
+  pointer-events: none;
+}
+
+/* The thumbnail wraps a real .book-page scaled down to fit the grid item.
+ * Scale is 220px / 200mm ≈ 0.291. If --book-thumb-size changes, update scale. */
+.book-grid-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--book-page-width);
+  height: var(--book-page-height);
+  transform: scale(0.291);
+  transform-origin: top left;
+  pointer-events: none;
+}
+.book-grid-thumb .book-page {
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.book-grid-toggle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.95);
+  color: var(--book-ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  z-index: 2;
+}
+.book-grid-toggle:hover { background: #fff; }
+.book-grid-item.is-excluded .book-grid-toggle {
+  background: rgba(255,59,48,0.95);
+  color: #fff;
+}
+
+/* ── Editor view ─────────────────────────── */
+.book-viewer.is-editor .book-stage { display: none; }
+
+.book-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.book-editor-empty {
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.book-editor-summary {
+  background: var(--color-surface, #fff);
+  border-radius: 8px;
+  padding: var(--space-md) var(--space-lg);
+  font-size: 1.05rem;
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.book-editor-summary strong {
+  font-size: 1.4rem;
+  color: var(--book-accent);
+}
+
+.book-weight-group .btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+.book-weight-group .btn.active {
+  background: var(--book-accent);
+  border-color: var(--book-accent);
+  color: #fff;
+}
+
+.book-editor-auto-hint {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--book-muted);
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.book-editor-row.book-editor-weight-hidden {
+  opacity: 0.5;
+}
+.book-editor-row.book-editor-weight-hidden .book-editor-preview-scale {
+  filter: grayscale(0.8);
+}
+
+.book-grid-hidden-header {
+  grid-column: 1 / -1;
+  padding: var(--space-md) 0 0;
+}
+
+.book-editor-row {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+  background: var(--color-surface, #fff);
+  border-radius: 12px;
+  padding: var(--space-md);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.book-editor-row.is-excluded {
+  opacity: 0.55;
+}
+.book-editor-row.is-excluded .book-editor-preview-scale {
+  filter: grayscale(1);
+}
+
+/* Scaled-down page on the left. 200mm × 0.4 ≈ 302px. */
+.book-editor-preview {
+  width: 302px;
+  height: 302px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+.book-editor-preview-scale {
+  width: var(--book-page-width);
+  height: var(--book-page-height);
+  transform: scale(0.4);
+  transform-origin: top left;
+  pointer-events: none;
+}
+.book-editor-preview-scale .book-page {
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.book-editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.book-editor-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  padding-bottom: 6px;
+}
+.book-editor-num {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--book-ink);
+}
+.book-editor-date {
+  font-size: 0.85rem;
+  color: var(--book-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.book-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.book-editor-label {
+  font-size: 0.75rem;
+  color: var(--book-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.book-editor-tpl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.book-editor-tpl-row .book-tpl-btn {
+  background: rgba(0,0,0,0.04);
+}
+.book-editor-tpl-row .book-tpl-btn:hover {
+  background: rgba(0,0,0,0.1);
+}
+
+.book-editor-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 64px);
+  gap: 6px;
+}
+.book-editor-img-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #eee;
+}
+.book-editor-img-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.book-editor-img-thumb.is-excluded img {
+  opacity: 0.3;
+  filter: grayscale(1);
+}
+.book-editor-img-toggle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,59,48,0.92);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.book-editor-img-thumb.is-excluded .book-editor-img-toggle {
+  background: rgba(52,199,89,0.92);
+}
+
+@media (max-width: 720px) {
+  .book-editor-row { flex-direction: column; }
+  .book-editor-preview { width: 100%; max-width: 302px; margin: 0 auto; }
+}
+
+/* ── Cover ─────────────────────────────────── */
+.book-page-cover {
+  background: linear-gradient(135deg, #2c3e50 0%, #4a6582 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20mm;
+}
+.book-cover-inner { max-width: 140mm; }
+.book-cover-title {
+  font-size: 42pt;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 8mm;
+  line-height: 1.1;
+}
+.book-cover-subtitle {
+  font-size: 16pt;
+  font-style: italic;
+  opacity: 0.85;
+  margin: 0 0 12mm;
+}
+.book-cover-dates {
+  font-size: 14pt;
+  letter-spacing: 0.1em;
+  opacity: 0.75;
+  margin: 0;
+}
+
+/* ── Chapter divider ───────────────────────── */
+.book-page-chapter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #faf8f3;
+}
+.book-chapter-year {
+  font-size: 96pt;
+  font-weight: 300;
+  color: var(--book-accent);
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+/* ── Back cover ────────────────────────────── */
+.book-page-back {
+  background: #2c3e50;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20mm;
+  text-align: center;
+}
+.book-back-text {
+  font-style: italic;
+  font-size: 12pt;
+  opacity: 0.7;
+}
+
+/* ── Post page (template host) ───────────────── */
+.book-page-post { padding: 0; }
+.book-tpl {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Reusable image box used across templates. */
+.book-img {
+  position: relative;
+  overflow: hidden;
+  background: #eee;
+}
+.book-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.book-img-empty {
+  background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%);
+}
+
+.book-post-body {
+  padding: 8mm 12mm;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+}
+
+.book-post-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9pt;
+  color: var(--book-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.book-post-text {
+  font-size: 12pt;
+  line-height: 1.5;
+  color: var(--book-ink);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.book-post-text-long {
+  -webkit-line-clamp: 20;
+  font-size: 13pt;
+}
+
+.book-post-comments {
+  font-size: 9pt;
+  color: var(--book-muted);
+  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  margin-top: auto;
+  max-height: 30mm;
+  overflow: hidden;
+}
+.book-post-comment strong {
+  color: var(--book-ink);
+  font-style: normal;
+}
+
+.book-post-reactions {
+  font-size: 10pt;
+  color: #d33;
+}
+
+/* Image exclude button (visible in curate mode only). */
+.book-img-remove {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,59,48,0.92);
+  color: #fff;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.book-viewer.is-curate .book-img-remove { display: inline-flex; }
+.book-img-remove:hover { background: #d92c2c; }
+
+/* Template: hero-top (default) */
+.book-tpl-hero-top .book-tpl-hero {
+  width: 100%;
+  height: 60%;
+  flex-shrink: 0;
+}
+
+/* Template: full-bleed — image fills entire page, caption overlays bottom */
+.book-tpl-full-bleed {
+  position: relative;
+}
+.book-tpl-full-bleed .book-tpl-bleed {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+.book-tpl-full-bleed .book-tpl-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12mm;
+  background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
+  color: #fff;
+}
+.book-tpl-full-bleed .book-post-meta { color: rgba(255,255,255,0.85); }
+.book-tpl-full-bleed .book-post-text {
+  color: #fff;
+  -webkit-line-clamp: 3;
+  font-size: 13pt;
+}
+
+/* Template: grids */
+.book-tpl-grid .book-tpl-grid-inner {
+  width: 100%;
+  height: 78%;
+  display: grid;
+  gap: 2mm;
+  padding: 2mm;
+  flex-shrink: 0;
+}
+.book-tpl-grid-2 .book-tpl-grid-inner { grid-template-columns: 1fr 1fr; }
+.book-tpl-grid-3 .book-tpl-grid-inner { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
+.book-tpl-grid-3 .book-grid-cell:first-child { grid-row: span 2; }
+.book-tpl-grid-4 .book-tpl-grid-inner { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.book-tpl-grid .book-grid-cell { border-radius: 1mm; }
+
+/* Compact body used when grid dominates the page. */
+.book-post-body-compact { padding: 6mm 12mm; gap: 2mm; }
+.book-post-body-compact .book-post-text { -webkit-line-clamp: 2; font-size: 11pt; }
+.book-post-body-compact .book-post-comments { max-height: 12mm; }
+
+/* Template: text-heavy */
+.book-tpl-text-heavy .book-tpl-text-hero {
+  width: 100%;
+  height: 30%;
+  flex-shrink: 0;
+}
+.book-tpl-text-heavy .book-post-body-long { padding: 10mm 14mm; }
+
+/* ── Batch page (multiple small posts on one page) ── */
+.book-page-batch {
+  padding: 8mm;
+}
+.book-batch-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4mm;
+}
+.book-batch-cell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.book-batch-img {
+  width: 100%;
+  flex: 1;
+  border-radius: 1mm;
+  min-height: 0;
+}
+.book-batch-caption {
+  padding: 2mm 1mm 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  flex-shrink: 0;
+  max-height: 18mm;
+  overflow: hidden;
+}
+.book-batch-date {
+  font-size: 7pt;
+  color: var(--book-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.book-batch-body {
+  font-size: 8pt;
+  line-height: 1.3;
+  color: var(--book-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Template picker (curate mode) ────────── */
+.book-template-picker {
+  position: absolute;
+  top: var(--space-md);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 999px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 5;
+}
+.book-template-picker-label {
+  font-size: 0.8rem;
+  color: var(--book-muted);
+  padding: 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.book-tpl-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--book-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.book-tpl-btn:hover { background: rgba(0,0,0,0.06); color: var(--book-ink); }
+.book-tpl-btn.is-active {
+  background: var(--book-accent);
+  color: #fff;
+}
+
+.book-empty-state {
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+/* ── Print styles ─────────────────────────────────────────────
+ * One .book-page per physical page. Hides the viewer chrome and
+ * shows every page sequentially, full-size. */
+@media print {
+  @page {
+    size: 200mm 200mm;
+    margin: 0;
+  }
+
+  body { background: #fff !important; }
+
+  /* Hide everything except the book pages. */
+  #app-navbar,
+  .no-print,
+  .book-toolbar,
+  .book-nav,
+  .book-empty-state { display: none !important; }
+
+  #app-content, .page-container, .book-viewer, .book-stage {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .book-pages {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    position: static !important;
+  }
+
+  .book-page-wrap {
+    position: static !important;
+    display: block !important;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .book-page-wrap:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .book-page {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 200mm !important;
+    height: 200mm !important;
+    transform: none !important;
+  }
+}

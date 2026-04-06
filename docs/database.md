@@ -91,6 +91,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `audit_log` | Sensitive operation logging |
 | `export_log` | Export audit trail (user, IP, country, type, status, encryption) |
 | `ip_geo_cache` | IP → country cache (30-day TTL) |
+| `book_jobs` | Photo book definitions (title, contacts, date range, layout options). See [todo.md](todo.md) book generation section. |
 
 ## Gift Tables
 

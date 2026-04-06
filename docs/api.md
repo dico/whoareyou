@@ -133,6 +133,18 @@ List, mark-read, generate (birthdays, anniversaries).
 ### Gifts (`/api/gifts`)
 Products (CRUD, URL scraping, images), events (CRUD, auto-fill), orders (CRUD, status lifecycle), wishlists (CRUD, items).
 
+### Books (`/api/books`)
+Photo book generation (Phase 1 MVP). Books are definitions — the HTML preview is rendered client-side from `/data`, and PDF is produced via browser print.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | List current user's books |
+| POST | `/` | Create a book (title, contact_uuids, date_from/to, layout_options) |
+| GET | `/:uuid` | Book metadata |
+| PATCH | `/:uuid` | Update title/subtitle/layout_options |
+| DELETE | `/:uuid` | Delete book |
+| GET | `/:uuid/data` | Full rendered content: contacts + posts (with media, comments, reactions) filtered by contact, date range, and visibility. Never includes `private` posts. |
+
 ### Export (`/api/export`)
 Data export with two modes: instant JSON ZIP (`GET /data`) and full backup with media (`POST /full`, `GET /status/:jobId`, `GET /download/:jobId`). See [export.md](export.md) for field documentation.
 

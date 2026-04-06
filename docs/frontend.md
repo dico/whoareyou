@@ -47,6 +47,12 @@ Each page exports a `render*()` function called by the router in `app.js`.
 | Wishlists | `/gifts/wishlists` | `renderGiftWishlists()` |
 | Planning | `/gifts/planning` | `renderGiftPlanning()` |
 
+### Book Pages
+| Page | Route | Function |
+|------|-------|----------|
+| Generate Book | `/settings/generate-book` | `renderGenerateBook()` — wizard to create a book (title, contact, date range, language, chapter grouping) |
+| Book Preview | `/books/:uuid/preview` | `renderBookPreview(uuid)` — flippable HTML book reader. Keyboard arrows navigate pages. "Print / Save as PDF" triggers `window.print()` which uses `@media print` rules in [book.css](../frontend/css/components/book.css) to lay out one physical page per `.book-page`. No server-side PDF in Phase 1. |
+
 ### Admin Pages
 | Page | Route | Function |
 |------|-------|----------|

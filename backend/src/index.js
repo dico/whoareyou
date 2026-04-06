@@ -22,6 +22,7 @@ import systemRoutes from './routes/system.js';
 import giftRoutes from './routes/gifts.js';
 import importRoutes from './routes/import.js';
 import exportRoutes from './routes/export.js';
+import bookRoutes from './routes/books.js';
 import portalRoutes from './routes/portal.js';
 import portalAdminRoutes from './routes/portal-admin.js';
 
@@ -130,6 +131,7 @@ const exportLimiter = rateLimit({
   skip: (req) => !req.path.startsWith('/data') && !req.path.startsWith('/full') && !req.path.startsWith('/download'),
 });
 app.use('/api/export', exportLimiter, authenticate, tenantScope, exportRoutes);
+app.use('/api/books', authenticate, tenantScope, bookRoutes);
 app.use('/api', authenticate, tenantScope, uploadRoutes);
 
 // Protected file serving — auth check + tenant validation

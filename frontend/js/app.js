@@ -28,6 +28,8 @@ import { renderGiftEventDetail } from './pages/gift-event-detail.js';
 import { renderGiftProducts } from './pages/gift-products.js';
 import { renderGiftWishlists } from './pages/gift-wishlists.js';
 import { renderGiftPlanning } from './pages/gift-planning.js';
+import { renderGenerateBook, renderEditBook } from './pages/generate-book.js';
+import { renderBookPreview } from './pages/book-preview.js';
 import { renderNavbar } from './components/navbar.js';
 import { renderPortalLogin, renderPortalTimeline, handleShareLink } from './pages/portal-timeline.js';
 
@@ -62,6 +64,9 @@ const routes = {
   '/gifts/products': () => renderGiftProducts(),
   '/gifts/wishlists': () => renderGiftWishlists(),
   '/gifts/planning': () => renderGiftPlanning(),
+  '/settings/generate-book': () => renderGenerateBook(),
+  '/settings/generate-book/:uuid/edit': (params) => renderEditBook(params.uuid),
+  '/books/:uuid/preview': (params) => renderBookPreview(params.uuid),
   '/login': () => renderLogin(),
   '/reset-password': () => renderLogin(),
 };
