@@ -125,12 +125,6 @@ function attachPlanningHandlers() {
       e.preventDefault();
       const mid = 'edit-gift-' + Date.now();
       const g = giftsData.get(btn.dataset.uuid) || {};
-      const giverChips = (g.givers || []).map(c => `
-        <span class="contact-chip" data-uuid="${c.uuid}" style="font-size:0.75rem">
-          ${c.avatar ? `<span class="contact-chip-avatar"><img src="${authUrl(c.avatar)}" alt=""></span>` : `<span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>`}
-          ${c.first_name}
-          <button type="button" class="contact-chip-remove edit-remove-participant" data-uuid="${c.uuid}" data-role="giver"><i class="bi bi-x"></i></button>
-        </span>`).join('');
       const recipientChips = (g.recipients || []).map(c => `
         <span class="contact-chip" data-uuid="${c.uuid}" style="font-size:0.75rem">
           ${c.avatar ? `<span class="contact-chip-avatar"><img src="${authUrl(c.avatar)}" alt=""></span>` : `<span class="contact-chip-avatar"><span>${(c.first_name?.[0] || '')}</span></span>`}
@@ -214,7 +208,7 @@ function attachPlanningHandlers() {
       const pickerInput = productWrap.querySelector('.product-picker-input');
       if (pickerInput) pickerInput.value = btn.dataset.title || '';
 
-      // Contact search for givers and recipients
+      // Contact search for recipients (planning has no "from" — always from household)
       const setupParticipantSearch = (inputId, containerId, role) => {
         attachContactSearch(document.getElementById(inputId), {
           limit: 6, floating: true,

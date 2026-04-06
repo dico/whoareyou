@@ -39,13 +39,7 @@
 ### Gift module UX improvements
 **Status:** In progress
 **Remaining:**
-3. **Wedding: two honorees** — second honoree field (requires migration)
-6. **Planning page redesign:**
-   - Remove "From" field — family app, always from the household
-   - Remove "Change event" / "Remove from event" from planning dropdown — planning is pre-purchase, not event-linked. Transfer to event when marked as purchased/given.
-   - ~~Edit modal: product card~~ — done, shows image + title + URL with change button
-   - Planning dropdown should use `glass-dropdown` class (currently transparent)
-   - ~~Visibility~~: already implemented — `applyVisibilityFilter` hides shared gifts from recipients who are logged-in users
+- **Wedding: two honorees** — second honoree field (requires migration)
 
 ### admin-tenant.js misuses `.product-picker-dropdown` class
 **Status:** Not started
