@@ -51,6 +51,19 @@ function postYear(post) {
 
 const BATCH_PAGE_CAPACITY = 4; // small posts per batch page
 
+// Content-stable key for a batch: sorted UUIDs joined. Survives reordering
+// within the batch but resets if posts are added or removed.
+function batchKey(posts) {
+  return posts.map(p => p.uuid).sort().join('|');
+}
+
+// Valid batch layout variants per post count, with the first entry as default.
+const BATCH_VARIANTS = {
+  2: ['horizontal', 'vertical'],
+  3: ['big-left', 'big-top'],
+  4: ['grid', 'rows', 'columns'],
+};
+
 function scorePost(post) {
   const likes = (post.reactions || []).length;
   const comments = (post.comments || []).length;
@@ -61,9 +74,9 @@ function scorePost(post) {
 
 function autoWeightForPost(post) {
   const score = scorePost(post);
-  if (score >= 20) return 'big';
-  if (score >= 8) return 'normal';
-  return 'small';
+  // Posts with meaningful engagement or content get their own page; the
+  // rest are batched onto shared pages to save space.
+  return score >= 8 ? 'full' : 'small';
 }
 
 function effectiveWeight(post, overrides) {
@@ -87,7 +100,29 @@ function buildPages(bookData, overrides) {
   const flushBatch = (batch) => {
     while (batch.length) {
       const slice = batch.splice(0, BATCH_PAGE_CAPACITY);
-      pages.push({ type: 'batch', posts: slice });
+      if (slice.length === 1) {
+        pages.push({ type: 'post', post: slice[0], weight: 'small-solo' });
+      } else {
+        // Apply manual ordering if the user reordered this batch. The
+        // stored order only includes posts still present in the batch;
+        // any new posts append at the end in chronological order.
+        const key = batchKey(slice);
+        const storedOrder = overrides.batchOrder?.[key];
+        let ordered = slice;
+        if (Array.isArray(storedOrder)) {
+          const byUuid = new Map(slice.map(p => [p.uuid, p]));
+          const result = [];
+          for (const uuid of storedOrder) {
+            if (byUuid.has(uuid)) {
+              result.push(byUuid.get(uuid));
+              byUuid.delete(uuid);
+            }
+          }
+          for (const p of byUuid.values()) result.push(p);
+          ordered = result;
+        }
+        pages.push({ type: 'batch', posts: ordered, key });
+      }
     }
   };
 
@@ -114,7 +149,7 @@ function buildPages(bookData, overrides) {
       batch.push(post);
       if (batch.length === BATCH_PAGE_CAPACITY) flushBatch(batch);
     } else {
-      // big or normal interrupts a batch run
+      // 'full' interrupts a batch run
       flushBatch(batch);
       pages.push({ type: 'post', post, weight });
     }
@@ -166,8 +201,14 @@ function renderBackPage() {
 // the page body inside `.book-page-post`. Adding a new template is just
 // adding an entry to TEMPLATES and an auto-select rule.
 
-const TEMPLATES = ['hero-top', 'full-bleed', 'grid-2', 'grid-3', 'grid-4', 'text-heavy'];
-const VALID_WEIGHTS = ['big', 'normal', 'small', 'hidden'];
+const TEMPLATES = ['hero-top', 'full-bleed', 'grid-2', 'grid-3', 'grid-4', 'text-heavy', 'image-side'];
+// Three-state weight model: a post either gets its own page, shares a
+// batch page with other small posts, or is hidden. The visual style of a
+// full page is decided by template selection (auto-picked from content +
+// engagement score, or manually overridden in the page editor).
+const VALID_WEIGHTS = ['full', 'small', 'hidden'];
+// Legacy values from earlier versions of the model.
+const WEIGHT_LEGACY = { big: 'full', normal: 'full' };
 // Focal point format: "<num>% <num>%" — strict to prevent CSS injection via
 // user-saved layout_options.overrides.mediaFocal[...] values.
 const FOCAL_RE = /^\d+(\.\d+)?%\s\d+(\.\d+)?%$/;
@@ -179,24 +220,24 @@ function safeTemplate(value) {
   return TEMPLATES.includes(value) ? value : null;
 }
 function safeWeight(value) {
-  return VALID_WEIGHTS.includes(value) ? value : null;
+  if (VALID_WEIGHTS.includes(value)) return value;
+  if (WEIGHT_LEGACY[value]) return WEIGHT_LEGACY[value];
+  return null;
 }
 
-function autoSelectTemplate(ctx, weight) {
-  const { images, bodyLen } = ctx;
-  // Big posts always get an impact layout.
-  if (weight === 'big') {
-    if (images.length === 0) return 'text-heavy';
-    if (images.length === 1) return 'full-bleed';
-    if (images.length === 2) return 'grid-2';
-    if (images.length === 3) return 'grid-3';
-    return 'grid-4';
-  }
-  // Normal and fallback auto logic.
+function autoSelectTemplate(ctx) {
+  const { images, bodyLen, comments, post } = ctx;
+  const commentCount = (comments || []).length;
+  const score = scorePost(post);
+  // High-engagement posts with a single image get the impact full-bleed.
+  const isHighImpact = score >= 20;
+  // Lots of comments + 1-2 images → side-by-side so comments get their
+  // own column instead of being squeezed under the image.
+  if (commentCount >= 4 && images.length >= 1 && images.length <= 2) return 'image-side';
   if (bodyLen > 600 && images.length <= 1) return 'text-heavy';
   if (images.length === 0) return 'text-heavy';
   if (images.length === 1) {
-    if (bodyLen < 40) return 'full-bleed';
+    if (isHighImpact || bodyLen < 40) return 'full-bleed';
     return 'hero-top';
   }
   if (images.length === 2) return 'grid-2';
@@ -227,27 +268,48 @@ function imageBox(media, overrides, extraClass = '') {
 }
 
 function renderMeta(ctx) {
+  // The contact name is redundant when the book is dedicated to a single
+  // contact (their name is on the cover). Only show on multi-contact books.
+  // Reactions live inline in the meta row so they don't steal vertical
+  // space from the comments list below.
+  const reactionBadge = ctx.reactionCount
+    ? `<span class="book-post-reactions-inline">❤ ${ctx.reactionCount}</span>`
+    : '';
   return `
     <div class="book-post-meta">
-      ${ctx.dateStr ? `<span class="book-post-date">${escapeHtml(ctx.dateStr)}</span>` : ''}
-      ${ctx.authorName ? `<span class="book-post-author">${escapeHtml(ctx.authorName)}</span>` : ''}
+      <span class="book-post-meta-left">
+        ${ctx.dateStr ? `<span class="book-post-date">${escapeHtml(ctx.dateStr)}</span>` : ''}
+        ${reactionBadge}
+      </span>
+      ${ctx.showAuthor && ctx.authorName ? `<span class="book-post-author">${escapeHtml(ctx.authorName)}</span>` : ''}
+    </div>
+  `;
+}
+
+function renderCommentBubble(c) {
+  const initials = (c.author_name || '').split(/\s+/).filter(Boolean).map(s => s[0]).join('').toUpperCase().slice(0, 2);
+  const avatarHtml = c.author_avatar
+    ? `<img src="${authUrl(c.author_avatar)}" alt="">`
+    : `<span>${escapeHtml(initials || '?')}</span>`;
+  return `
+    <div class="book-comment">
+      <span class="book-comment-avatar">${avatarHtml}</span>
+      <div class="book-comment-bubble">
+        ${c.author_name ? `<span class="book-comment-author">${escapeHtml(c.author_name)}</span>` : ''}
+        <span class="book-comment-text">${escapeHtml(c.body)}</span>
+      </div>
     </div>
   `;
 }
 
 function renderCommentsAndReactions(ctx) {
-  const commentsHtml = ctx.comments.length
+  // Reactions are rendered inline in renderMeta to preserve vertical space
+  // for comments. This function now only renders the comment list.
+  return ctx.comments.length
     ? `<div class="book-post-comments">
-         ${ctx.comments.slice(0, 6).map(c => `
-           <div class="book-post-comment">
-             ${c.author_name ? `<strong>${escapeHtml(c.author_name)}:</strong> ` : ''}
-             ${escapeHtml(c.body)}
-           </div>
-         `).join('')}
+         ${ctx.comments.slice(0, 6).map(renderCommentBubble).join('')}
        </div>`
     : '';
-  const reactionsHtml = ctx.reactionCount ? `<div class="book-post-reactions">❤ ${ctx.reactionCount}</div>` : '';
-  return commentsHtml + reactionsHtml;
 }
 
 function renderTplHeroTop(ctx) {
@@ -270,6 +332,7 @@ function renderTplFullBleed(ctx) {
       <div class="book-tpl-caption">
         ${renderMeta(ctx)}
         ${ctx.body ? `<div class="book-post-text">${escapeHtml(ctx.body)}</div>` : ''}
+        ${renderCommentsAndReactions(ctx)}
       </div>
     </div>
   `;
@@ -304,10 +367,25 @@ function renderTplTextHeavy(ctx) {
   const heroImage = ctx.images[0];
   return `
     <div class="book-tpl book-tpl-text-heavy">
-      ${heroImage ? `<div class="book-tpl-text-hero">${imageBox(heroImage, ctx.overrides, '')}</div>` : ''}
+      ${heroImage ? imageBox(heroImage, ctx.overrides, 'book-tpl-text-hero') : ''}
       <div class="book-post-body book-post-body-long">
         ${renderMeta(ctx)}
-        ${ctx.body ? `<div class="book-post-text book-post-text-long">${escapeHtml(ctx.body)}</div>` : ''}
+        ${ctx.body ? `<div class="book-post-text-long-body">${escapeHtml(ctx.body)}</div>` : ''}
+        ${renderCommentsAndReactions(ctx)}
+      </div>
+    </div>
+  `;
+}
+
+// Image-side: image fills the left half, content (meta, body, comments)
+// runs as a column on the right. Best when a post has many comments.
+function renderTplImageSide(ctx) {
+  return `
+    <div class="book-tpl book-tpl-image-side">
+      ${imageBox(ctx.images[0], ctx.overrides, 'book-tpl-side-img')}
+      <div class="book-tpl-side-content">
+        ${renderMeta(ctx)}
+        ${ctx.body ? `<div class="book-post-text-long-body">${escapeHtml(ctx.body)}</div>` : ''}
         ${renderCommentsAndReactions(ctx)}
       </div>
     </div>
@@ -321,31 +399,39 @@ function renderTemplate(name, ctx) {
     case 'grid-3': return renderTplGrid(ctx, 3);
     case 'grid-4': return renderTplGrid(ctx, 4);
     case 'text-heavy': return renderTplTextHeavy(ctx);
+    case 'image-side': return renderTplImageSide(ctx);
     case 'hero-top':
     default: return renderTplHeroTop(ctx);
   }
 }
 
-function renderPostPage(post, overrides, weight) {
+function renderPostPage(post, overrides, weight, bookMeta) {
   const excludedMedia = new Set(overrides.excludedMedia || []);
   const allImages = (post.media || []).filter(m => (m.file_type || '').startsWith('image/'));
   const images = allImages.filter(m => !excludedMedia.has(m.file_path));
 
+  const effectiveBody = overrides.customText?.[post.uuid] != null
+    ? overrides.customText[post.uuid]
+    : (post.body || '');
+  const hideComments = !!overrides.hideComments?.[post.uuid];
   const ctx = {
     post,
     overrides,
     images,
-    body: post.body || '',
-    bodyLen: (post.body || '').length,
+    body: effectiveBody,
+    bodyLen: effectiveBody.length,
     dateStr: post.post_date ? formatDateLong(post.post_date) : '',
     authorName: post.contact ? [post.contact.first_name, post.contact.last_name].filter(Boolean).join(' ') : '',
-    comments: post.comments || [],
+    comments: hideComments ? [] : (post.comments || []),
     reactionCount: (post.reactions || []).length,
+    // Only show the contact name on pages when the book covers multiple
+    // contacts — otherwise the name is redundant with the book title.
+    showAuthor: (bookMeta?.contactCount || 0) > 1,
   };
 
   const override = safeTemplate(overrides.templates?.[post.uuid]);
-  const templateName = override || autoSelectTemplate(ctx, weight);
-  const safeW = safeWeight(weight) || 'normal';
+  const templateName = override || autoSelectTemplate(ctx);
+  const safeW = safeWeight(weight) || 'full';
 
   return `
     <div class="book-page book-page-post book-page-weight-${safeW}" data-post-uuid="${escapeHtml(post.uuid)}" data-template="${templateName}">
@@ -354,8 +440,12 @@ function renderPostPage(post, overrides, weight) {
   `;
 }
 
-// Batch page: 4 small posts on one page, kept in chronological order.
-function renderBatchPage(posts, overrides) {
+// Batch page: 2-4 small posts on one page. Uses an adaptive layout based on
+// post count, with user-selectable variants per count (e.g. 3 posts can be
+// "big-left" or "big-top"). Post order can also be customized per batch.
+function renderBatchPage(posts, overrides, key) {
+  const variants = BATCH_VARIANTS[posts.length] || ['grid'];
+  const variant = (key && overrides.batchVariant?.[key]) || variants[0];
   const excludedMedia = new Set(overrides.excludedMedia || []);
   const cells = posts.map((post) => {
     const images = (post.media || [])
@@ -376,30 +466,38 @@ function renderBatchPage(posts, overrides) {
   }).join('');
 
   return `
-    <div class="book-page book-page-batch">
+    <div class="book-page book-page-batch book-page-batch-${posts.length} book-page-batch-${variant}">
       <div class="book-batch-grid">${cells}</div>
     </div>
   `;
 }
 
-function renderPage(page, overrides) {
+function renderPage(page, overrides, bookMeta) {
   switch (page.type) {
     case 'cover': return renderCoverPage(page.book);
     case 'chapter': return renderChapterPage(page.year);
     case 'back': return renderBackPage();
-    case 'post': return renderPostPage(page.post, overrides, page.weight);
-    case 'batch': return renderBatchPage(page.posts, overrides);
+    case 'post': return renderPostPage(page.post, overrides, page.weight, bookMeta);
+    case 'batch': return renderBatchPage(page.posts, overrides, page.key);
     default: return '<div class="book-page"></div>';
   }
 }
 
-function readPageFromHash() {
-  const m = (window.location.hash || '').match(/p=(\d+)/);
-  return m ? Math.max(0, parseInt(m[1], 10) - 1) : 0;
+// URL hash format: #view=flip&p=42, #view=grid, #view=editor
+// Default is #view=flip&p=1 if no hash. Keeps refresh on the correct view.
+function readHashState() {
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  const params = new URLSearchParams(hash);
+  const view = params.get('view') || 'flip';
+  const page = parseInt(params.get('p') || '1', 10);
+  return { view, page: Math.max(0, page - 1) };
 }
 
-function writePageToHash(pageIdx) {
-  const newHash = `#p=${pageIdx + 1}`;
+function writeHashState({ view, pageIdx }) {
+  const params = new URLSearchParams();
+  params.set('view', view);
+  if (view === 'flip' && pageIdx != null) params.set('p', String(pageIdx + 1));
+  const newHash = '#' + params.toString();
   if (window.location.hash !== newHash) {
     history.replaceState({}, '', window.location.pathname + newHash);
   }
@@ -502,6 +600,12 @@ export async function renderBookPreview(bookUuid) {
     return;
   }
 
+  // Book-level metadata passed to every page renderer. Used e.g. to decide
+  // whether to show the contact name in the meta row.
+  const bookMeta = {
+    contactCount: (data.book.contact_uuids || []).length,
+  };
+
   // Overrides live in book.layout_options.overrides. Clone so we don't mutate
   // the response object unnecessarily.
   const overrides = {
@@ -510,6 +614,17 @@ export async function renderBookPreview(bookUuid) {
     mediaFocal: { ...(data.book.layout_options?.overrides?.mediaFocal || {}) },
     templates: { ...(data.book.layout_options?.overrides?.templates || {}) },
     postWeight: { ...(data.book.layout_options?.overrides?.postWeight || {}) },
+    // Per-post body text override: used instead of post.body in book
+    // rendering only (never mutates the original post).
+    customText: { ...(data.book.layout_options?.overrides?.customText || {}) },
+    // Per-post comment visibility override (true = hide comments on this
+    // page even if the book-level includeComments setting is on).
+    hideComments: { ...(data.book.layout_options?.overrides?.hideComments || {}) },
+    // Per-batch layout variant and post order. Keyed by a content-stable
+    // hash of the sorted post UUIDs in the batch so the key survives
+    // reorderings. Reset automatically if the batch composition changes.
+    batchVariant: { ...(data.book.layout_options?.overrides?.batchVariant || {}) },
+    batchOrder: { ...(data.book.layout_options?.overrides?.batchOrder || {}) },
   };
 
   // Debounced PATCH of the full layout_options.overrides.
@@ -529,6 +644,10 @@ export async function renderBookPreview(bookUuid) {
             mediaFocal: overrides.mediaFocal,
             templates: overrides.templates,
             postWeight: overrides.postWeight,
+            customText: overrides.customText,
+            hideComments: overrides.hideComments,
+            batchVariant: overrides.batchVariant,
+            batchOrder: overrides.batchOrder,
           },
         };
         await api.patch(`/books/${bookUuid}`, { layout_options: merged });
@@ -544,19 +663,26 @@ export async function renderBookPreview(bookUuid) {
   };
 
   // View state. gridMode and editorMode are mutually exclusive alternatives
-  // to the flip view. spreadMode and curateMode are sub-modes of flip view.
+  // to the flip view. spreadMode is a sub-mode of flip view. pageEditPostUuid,
+  // when set, takes over the whole stage with a dedicated single-page editor.
   let spreadMode = localStorage.getItem('bookSpreadMode') === '1';
-  let curateMode = false;
   let gridMode = false;
   let editorMode = false;
+  let pageEditPostUuid = null;
+  let batchEditPageIdx = null;
+
+  // Restore view mode from URL hash so refresh keeps the user where they were.
+  const initialState = readHashState();
+  if (initialState.view === 'grid') gridMode = true;
+  else if (initialState.view === 'editor') editorMode = true;
 
   let pages = buildPages(data, overrides);
-  let currentPage = Math.min(readPageFromHash(), pages.length - 1);
+  let currentPage = Math.min(initialState.page, pages.length - 1);
   if (currentPage < 0) currentPage = 0;
 
   const renderShell = () => {
     content.innerHTML = `
-      <div class="book-viewer${curateMode ? ' is-curate' : ''}${gridMode ? ' is-grid' : ''}${editorMode ? ' is-editor' : ''}" id="book-viewer">
+      <div class="book-viewer${gridMode ? ' is-grid' : ''}${editorMode ? ' is-editor' : ''}${(pageEditPostUuid || batchEditPageIdx != null) ? ' is-page-edit' : ''}" id="book-viewer">
         <div class="book-toolbar no-print">
           <div class="book-toolbar-inner">
             <button class="btn btn-outline-secondary btn-sm" id="book-btn-back">
@@ -598,7 +724,7 @@ export async function renderBookPreview(bookUuid) {
           </div>
         </div>
 
-        ${gridMode ? renderGridView() : (editorMode ? renderEditorView() : renderFlipView())}
+        ${batchEditPageIdx != null ? renderBatchEditView() : (pageEditPostUuid ? renderPageEditView() : (gridMode ? renderGridView() : (editorMode ? renderEditorView() : renderFlipView())))}
 
         ${data.posts.length === 0 ? `<div class="book-empty-state no-print"><p class="text-muted">${t('book.emptyState')}</p></div>` : ''}
       </div>
@@ -619,10 +745,15 @@ export async function renderBookPreview(bookUuid) {
         <div class="book-pages ${spreadMode ? 'is-spread' : ''}" id="book-pages">
           ${pages.map((p, i) => `
             <div class="book-page-wrap" data-idx="${i}">
-              ${renderPage(p, overrides)}
-              ${(p.type === 'post' || p.type === 'batch') ? `
-                <button type="button" class="book-page-edit-btn no-print" data-page-edit-toggle title="${escapeHtml(t('book.editPage'))}">
-                  <i class="bi bi-${curateMode ? 'check-lg' : 'pencil'}"></i>
+              ${renderPage(p, overrides, bookMeta)}
+              ${p.type === 'post' ? `
+                <button type="button" class="book-page-edit-btn no-print" data-page-edit-post="${escapeHtml(p.post.uuid)}" title="${escapeHtml(t('book.editPage'))}">
+                  <i class="bi bi-pencil"></i>
+                </button>
+              ` : ''}
+              ${p.type === 'batch' ? `
+                <button type="button" class="book-page-edit-btn no-print" data-page-edit-batch="${i}" title="${escapeHtml(t('book.editPage'))}">
+                  <i class="bi bi-pencil"></i>
                 </button>
               ` : ''}
             </div>
@@ -632,58 +763,318 @@ export async function renderBookPreview(bookUuid) {
       <button class="book-nav book-nav-next no-print" id="book-nav-next" aria-label="next">
         <i class="bi bi-chevron-right"></i>
       </button>
-      ${curateMode ? renderTemplatePicker() : ''}
-      ${curateMode ? `
-        <div class="book-curate-hint no-print">
-          <i class="bi bi-info-circle me-1"></i>${t('book.curateHint')}
-        </div>
-      ` : ''}
     </div>
   `;
 
-  const renderGridView = () => {
-    // Grid shows the actual packed pages (including batch pages), plus
-    // hidden posts surfaced individually for recovery.
-    const hiddenPosts = data.posts.filter(p => effectiveWeight(p, overrides) === 'hidden');
+  // Dedicated page editor — takes over the stage with a large preview on
+  // the left and a control panel on the right. All per-page edits happen
+  // here (focal point, template, custom text, image exclusion).
+  const renderPageEditView = () => {
+    const post = data.posts.find(p => p.uuid === pageEditPostUuid);
+    if (!post) return '<div class="book-empty-state"><p class="text-muted">Post not found</p></div>';
 
-    const visiblePages = pages; // already packed via buildPages
+    const weight = effectiveWeight(post, overrides);
+    const activeTpl = safeTemplate(overrides.templates[post.uuid]) || 'auto';
+    const customText = overrides.customText[post.uuid];
+    const allImages = (post.media || []).filter(m => (m.file_type || '').startsWith('image/'));
+    const excludedMedia = new Set(overrides.excludedMedia || []);
+
+    // Only show templates that make visual sense for this image count.
+    const availableCount = allImages.filter(m => !excludedMedia.has(m.file_path)).length;
+    const tplButtons = [{ id: 'auto', icon: 'magic' }];
+    if (availableCount >= 1) {
+      tplButtons.push({ id: 'hero-top', icon: 'image' });
+      tplButtons.push({ id: 'full-bleed', icon: 'aspect-ratio' });
+      tplButtons.push({ id: 'image-side', icon: 'layout-text-sidebar-reverse' });
+    }
+    if (availableCount >= 2) tplButtons.push({ id: 'grid-2', icon: 'layout-split' });
+    if (availableCount >= 3) tplButtons.push({ id: 'grid-3', icon: 'grid-3x2-gap' });
+    if (availableCount >= 4) tplButtons.push({ id: 'grid-4', icon: 'grid' });
+    tplButtons.push({ id: 'text-heavy', icon: 'text-paragraph' });
 
     return `
+      <div class="book-page-editor">
+        <div class="book-page-editor-preview">
+          <div class="book-page-editor-preview-frame">
+            <div class="book-page-editor-preview-scale" id="book-page-editor-scale">
+              ${renderPage({ type: 'post', post, weight }, overrides, bookMeta)}
+            </div>
+          </div>
+          <p class="text-muted small mt-3 text-center">
+            <i class="bi bi-info-circle me-1"></i>${t('book.pageEditHint')}
+          </p>
+        </div>
+        <div class="book-page-editor-panel glass-card">
+          <div class="book-page-editor-header">
+            <div>
+              <div class="book-page-editor-title">${escapeHtml(post.post_date ? formatDateLong(post.post_date) : '')}</div>
+              <div class="text-muted small">${t('book.weight')}: ${t('book.weight_' + weight)}</div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="book-page-editor-done">
+              <i class="bi bi-check-lg me-1"></i>${t('book.done')}
+            </button>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.template')}</label>
+            <div class="book-editor-tpl-row">
+              ${tplButtons.map(b => `
+                <button type="button"
+                  class="book-tpl-btn ${activeTpl === b.id ? 'is-active' : ''}"
+                  data-page-editor-tpl="${b.id}"
+                  title="${escapeHtml(t('book.tpl_' + b.id.replace('-', '_')))}">
+                  <i class="bi bi-${b.icon}"></i>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label" for="book-page-editor-text">${t('book.customText')}</label>
+            <textarea class="form-control form-control-sm" id="book-page-editor-text" rows="5" placeholder="${escapeHtml(post.body || t('book.customTextPlaceholder'))}">${escapeHtml(customText != null ? customText : '')}</textarea>
+            <div class="form-text">${t('book.customTextHint')}</div>
+          </div>
+
+          ${allImages.length ? `
+            <div class="book-page-editor-section">
+              <label class="book-editor-label">${t('book.images')} (${availableCount}/${allImages.length})</label>
+              <div class="book-editor-images">
+                ${allImages.map(m => {
+                  const isImgExcluded = excludedMedia.has(m.file_path);
+                  return `
+                    <div class="book-editor-img-thumb ${isImgExcluded ? 'is-excluded' : ''}">
+                      <img src="${authUrl(m.file_path)}" alt="">
+                      <button type="button"
+                        class="book-editor-img-toggle"
+                        data-page-editor-img="${escapeHtml(m.file_path)}"
+                        title="${isImgExcluded ? escapeHtml(t('book.include')) : escapeHtml(t('book.excludeImage'))}">
+                        <i class="bi bi-${isImgExcluded ? 'arrow-counterclockwise' : 'x-lg'}"></i>
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.commentsLabel')}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="book-page-editor-comments" ${overrides.hideComments[post.uuid] ? '' : 'checked'}>
+              <label class="form-check-label" for="book-page-editor-comments">${t('book.showCommentsOnPage')}</label>
+            </div>
+          </div>
+
+          <div class="book-page-editor-section">
+            <button type="button" class="btn btn-outline-danger btn-sm w-100" data-page-editor-hide>
+              <i class="bi bi-eye-slash me-1"></i>${t('book.excludePage')}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Batch editor: shown when the pencil is clicked on a batch page. Focused
+  // strictly on editing THIS page — focal points and per-post captions.
+  // Structural actions (promote / hide / change weight) live in the Editor
+  // view, not here. That way clicking in the batch editor never causes
+  // surprising book-wide changes.
+  const renderBatchEditView = () => {
+    const page = pages[batchEditPageIdx];
+    if (!page || page.type !== 'batch') {
+      return '<div class="book-empty-state"><p class="text-muted">Batch not found</p></div>';
+    }
+
+    return `
+      <div class="book-page-editor">
+        <div class="book-page-editor-preview">
+          <div class="book-page-editor-preview-frame">
+            <div class="book-page-editor-preview-scale" id="book-page-editor-scale">
+              ${renderPage(page, overrides, bookMeta)}
+            </div>
+          </div>
+          <p class="text-muted small mt-3 text-center">
+            <i class="bi bi-info-circle me-1"></i>${t('book.batchEditHint')}
+          </p>
+        </div>
+        <div class="book-page-editor-panel glass-card">
+          <div class="book-page-editor-header">
+            <div>
+              <div class="book-page-editor-title">${t('book.batchPageTitle', { count: page.posts.length })}</div>
+              <div class="text-muted small">${t('book.batchPageSubtitle')}</div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="book-page-editor-done">
+              <i class="bi bi-check-lg me-1"></i>${t('book.done')}
+            </button>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.layout')}</label>
+            <div class="book-batch-variant-row">
+              ${(BATCH_VARIANTS[page.posts.length] || []).map((v) => {
+                const activeVariant = (page.key && overrides.batchVariant?.[page.key]) || BATCH_VARIANTS[page.posts.length][0];
+                const icon = {
+                  'horizontal': 'layout-split',
+                  'vertical': 'layout-split rotate-90',
+                  'big-left': 'layout-sidebar',
+                  'big-top': 'window',
+                  'grid': 'grid',
+                  'rows': 'list',
+                  'columns': 'three-dots-vertical',
+                }[v] || 'grid';
+                return `
+                  <button type="button"
+                    class="book-tpl-btn ${activeVariant === v ? 'is-active' : ''}"
+                    data-batch-variant="${v}"
+                    title="${escapeHtml(t('book.batchVariant_' + v.replace('-', '_')))}">
+                    <i class="bi bi-${icon.split(' ')[0]}"></i>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.postsInBatch')}</label>
+            <div class="book-batch-edit-list">
+              ${page.posts.map((post, slotIdx) => {
+                const img = (post.media || []).find(m => (m.file_type || '').startsWith('image/'));
+                const displayText = overrides.customText[post.uuid] != null
+                  ? overrides.customText[post.uuid]
+                  : (post.body || '');
+                return `
+                  <div class="book-batch-edit-item" data-slot="${slotIdx}">
+                    <div class="book-batch-edit-reorder">
+                      <button type="button" class="btn btn-link btn-sm p-0"
+                        data-batch-move="up" data-batch-slot="${slotIdx}"
+                        ${slotIdx === 0 ? 'disabled' : ''}
+                        title="${escapeHtml(t('book.moveUp'))}">
+                        <i class="bi bi-chevron-up"></i>
+                      </button>
+                      <button type="button" class="btn btn-link btn-sm p-0"
+                        data-batch-move="down" data-batch-slot="${slotIdx}"
+                        ${slotIdx === page.posts.length - 1 ? 'disabled' : ''}
+                        title="${escapeHtml(t('book.moveDown'))}">
+                        <i class="bi bi-chevron-down"></i>
+                      </button>
+                    </div>
+                    ${img ? `<img src="${authUrl(img.thumbnail_path || img.file_path)}" alt="">` : '<div class="book-batch-edit-noimg"></div>'}
+                    <div class="book-batch-edit-info">
+                      <div class="book-batch-edit-date">${escapeHtml(post.post_date ? formatDateLong(post.post_date) : '')}</div>
+                      <div class="book-batch-edit-snippet">${escapeHtml(displayText.slice(0, 60))}</div>
+                    </div>
+                    <button type="button" class="btn btn-link btn-sm p-1" data-batch-caption="${escapeHtml(post.uuid)}" title="${escapeHtml(t('book.editCaption'))}">
+                      <i class="bi bi-chat-left-text"></i>
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Small modal for editing just the caption text of a single post inside
+  // a batch. Keeps the user on the batch page instead of navigating away.
+  const showCaptionModal = (post) => {
+    const existing = document.getElementById('book-caption-modal');
+    if (existing) existing.remove();
+    const current = overrides.customText[post.uuid] != null
+      ? overrides.customText[post.uuid]
+      : (post.body || '');
+    const wrap = document.createElement('div');
+    wrap.id = 'book-caption-modal';
+    wrap.className = 'modal fade';
+    wrap.tabIndex = -1;
+    wrap.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content glass-card">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('book.editCaption')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted small">${escapeHtml(post.post_date ? formatDateLong(post.post_date) : '')}</p>
+            <textarea class="form-control" id="caption-text" rows="5" placeholder="${escapeHtml(post.body || '')}">${escapeHtml(current)}</textarea>
+            <div class="form-text">${t('book.customTextHint')}</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+            <button type="button" class="btn btn-primary btn-sm" id="caption-save">${t('common.save')}</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    const modal = new window.bootstrap.Modal(wrap);
+    modal.show();
+    wrap.querySelector('#caption-save').onclick = () => {
+      const val = wrap.querySelector('#caption-text').value;
+      if (val === '' || val === (post.body || '')) {
+        delete overrides.customText[post.uuid];
+      } else {
+        overrides.customText[post.uuid] = val;
+      }
+      saveOverrides();
+      modal.hide();
+      // Refresh only the preview and list
+      const scale = document.getElementById('book-page-editor-scale');
+      if (scale) {
+        const page = pages[batchEditPageIdx];
+        if (page) scale.innerHTML = renderPage(page, overrides, bookMeta);
+      }
+      // Re-render the list snippet
+      const item = document.querySelector(`[data-batch-caption="${post.uuid}"]`);
+      if (item) {
+        const row = item.closest('.book-batch-edit-item');
+        const snippetEl = row?.querySelector('.book-batch-edit-snippet');
+        if (snippetEl) {
+          const displayText = overrides.customText[post.uuid] != null
+            ? overrides.customText[post.uuid]
+            : (post.body || '');
+          snippetEl.textContent = displayText.slice(0, 60);
+        }
+      }
+    };
+    wrap.addEventListener('hidden.bs.modal', () => wrap.remove());
+  };
+
+  // Grid view: compact overview of the packed pages. Click a thumbnail to
+  // jump to that page in flip view. Hover shows a pencil to open the
+  // corresponding page editor. Exclusion and weight changes are NOT
+  // available here — those belong in the Editor view.
+  const renderGridView = () => {
+    return `
       <div class="book-grid">
-        ${visiblePages.map((p) => {
+        ${pages.map((p, i) => {
           const postUuid = p.type === 'post' ? p.post.uuid : null;
+          const isBatch = p.type === 'batch';
+          const clickable = !!(postUuid || isBatch || p.type === 'cover' || p.type === 'chapter' || p.type === 'back');
           return `
-            <div class="book-grid-item" ${postUuid ? `data-grid-post="${escapeHtml(postUuid)}"` : ''}>
+            <div class="book-grid-item ${clickable ? 'is-clickable' : ''}" data-grid-idx="${i}">
               <div class="book-grid-thumb">
-                ${renderPage(p, overrides)}
+                ${renderPage(p, overrides, bookMeta)}
               </div>
               ${postUuid ? `
-                <button type="button" class="book-grid-toggle"
-                        data-grid-toggle="${escapeHtml(postUuid)}"
-                        title="${t('book.excludePage')}">
-                  <i class="bi bi-x-lg"></i>
+                <button type="button" class="book-grid-edit-btn no-print"
+                        data-grid-edit-post="${escapeHtml(postUuid)}"
+                        title="${escapeHtml(t('book.editPage'))}">
+                  <i class="bi bi-pencil"></i>
+                </button>
+              ` : ''}
+              ${isBatch ? `
+                <button type="button" class="book-grid-edit-btn no-print"
+                        data-grid-edit-batch="${i}"
+                        title="${escapeHtml(t('book.editPage'))}">
+                  <i class="bi bi-pencil"></i>
                 </button>
               ` : ''}
             </div>
           `;
         }).join('')}
-        ${hiddenPosts.length ? `
-          <div class="book-grid-hidden-header">
-            <h6 class="text-muted mb-0"><i class="bi bi-eye-slash me-2"></i>${t('book.hiddenPostsHeader')} (${hiddenPosts.length})</h6>
-          </div>
-          ${hiddenPosts.map((post) => `
-            <div class="book-grid-item is-excluded" data-grid-post="${escapeHtml(post.uuid)}">
-              <div class="book-grid-thumb">
-                ${renderPage({ type: 'post', post, weight: autoWeightForPost(post) }, overrides)}
-              </div>
-              <button type="button" class="book-grid-toggle"
-                      data-grid-toggle="${escapeHtml(post.uuid)}"
-                      title="${t('book.include')}">
-                <i class="bi bi-arrow-counterclockwise"></i>
-              </button>
-            </div>
-          `).join('')}
-        ` : ''}
       </div>
     `;
   };
@@ -691,104 +1082,166 @@ export async function renderBookPreview(bookUuid) {
   // Editor view: vertical list of every post ordered chronologically, with
   // a side panel to change the post's weight. Weight is the primary lever
   // that controls how much space the post gets in the book and whether it
-  // shares a page with other small posts. Template override is tucked under
-  // "advanced" — weight covers 99% of the use cases.
+  // shares a page with other small posts.
+  //
+  // Performance: a full re-render of all rows is expensive (each row contains
+  // a scaled book page). We render each row via renderEditorRow() and the
+  // weight handler updates only the changed row + the page-count summary.
+
+  const editorBatchPostUuids = () => {
+    const set = new Set();
+    for (const p of pages) {
+      if (p.type === 'batch') for (const bp of p.posts) set.add(bp.uuid);
+    }
+    return set;
+  };
+
+  const renderEditorRow = (post, idx, batchUuids) => {
+    const weight = effectiveWeight(post, overrides);
+    const autoW = autoWeightForPost(post);
+    const isOverridden = !!overrides.postWeight[post.uuid];
+    const isExcluded = weight === 'hidden';
+    const inBatch = batchUuids.has(post.uuid);
+    const allImages = (post.media || []).filter(m => (m.file_type || '').startsWith('image/'));
+    const excludedMedia = new Set(overrides.excludedMedia || []);
+    const visibleImages = allImages.filter(m => !excludedMedia.has(m.file_path)).length;
+    return `
+      <div class="book-editor-row ${isExcluded ? 'is-excluded' : ''} book-editor-weight-${weight}" data-editor-post="${escapeHtml(post.uuid)}">
+        <div class="book-editor-preview">
+          <div class="book-editor-preview-scale">
+            ${renderPage({ type: 'post', post, weight }, overrides, bookMeta)}
+          </div>
+        </div>
+        <div class="book-editor-panel">
+          <div class="book-editor-panel-header">
+            <span class="book-editor-num">#${idx + 1}</span>
+            <span class="book-editor-date">${escapeHtml(post.post_date ? formatDateLong(post.post_date) : '')}</span>
+          </div>
+
+          <div class="book-editor-section">
+            <label class="book-editor-label">
+              ${t('book.weight')}
+              ${isOverridden ? `<span class="book-editor-auto-hint">(${t('book.manualOverride')})</span>` : `<span class="book-editor-auto-hint">${t('book.auto')}: ${t('book.weight_' + autoW)}</span>`}
+            </label>
+            <div class="btn-group book-weight-group w-100" role="group">
+              ${['full', 'small', 'hidden'].map(w => `
+                <button type="button"
+                  class="btn btn-sm btn-outline-secondary ${weight === w ? 'active' : ''}"
+                  data-editor-weight="${w}"
+                  data-post-uuid="${escapeHtml(post.uuid)}"
+                  title="${escapeHtml(t('book.weightDesc_' + w))}">
+                  <i class="bi bi-${w === 'full' ? 'file-earmark' : w === 'small' ? 'collection' : 'eye-slash'}"></i>
+                  ${t('book.weight_' + w)}
+                </button>
+              `).join('')}
+            </div>
+            ${isOverridden ? `
+              <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-editor-reset-weight="${escapeHtml(post.uuid)}">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>${t('book.resetToAuto')}
+              </button>
+            ` : ''}
+            ${inBatch ? `
+              <p class="text-muted small mb-0 mt-1"><i class="bi bi-info-circle me-1"></i>${t('book.sharedPageHint')}</p>
+            ` : ''}
+          </div>
+
+          ${allImages.length && !isExcluded ? `
+            <div class="book-editor-section">
+              <label class="book-editor-label">${t('book.images')} (${visibleImages}/${allImages.length})</label>
+              <div class="book-editor-images">
+                ${allImages.map(m => {
+                  const isImgExcluded = excludedMedia.has(m.file_path);
+                  return `
+                    <div class="book-editor-img-thumb ${isImgExcluded ? 'is-excluded' : ''}">
+                      <img src="${authUrl(m.file_path)}" alt="">
+                      <button type="button"
+                        class="book-editor-img-toggle"
+                        data-editor-img-toggle="${escapeHtml(m.file_path)}"
+                        title="${isImgExcluded ? escapeHtml(t('book.include')) : escapeHtml(t('book.excludeImage'))}">
+                        <i class="bi bi-${isImgExcluded ? 'arrow-counterclockwise' : 'x-lg'}"></i>
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  };
+
   const renderEditorView = () => {
     if (!data.posts.length) {
       return `<div class="book-editor-empty"><p class="text-muted">${t('book.emptyState')}</p></div>`;
     }
-
-    // Compute page count live so the user can see impact of weight changes.
-    const pageCount = pages.length;
-
-    // Pre-compute which posts land on shared batch pages so we can badge them.
-    const batchPostUuids = new Set();
-    for (const p of pages) {
-      if (p.type === 'batch') for (const bp of p.posts) batchPostUuids.add(bp.uuid);
-    }
-
+    const batchUuids = editorBatchPostUuids();
     return `
       <div class="book-editor">
         <div class="book-editor-summary">
-          <strong>${pageCount}</strong> ${t('book.pagesTotal')}
+          <strong id="book-editor-page-count">${pages.length}</strong> ${t('book.pagesTotal')}
           <span class="text-muted small ms-2">${t('book.editorSummaryHint')}</span>
         </div>
-        ${data.posts.map((post, i) => {
-          const weight = effectiveWeight(post, overrides);
-          const autoW = autoWeightForPost(post);
-          const isOverridden = !!overrides.postWeight[post.uuid];
-          const isExcluded = weight === 'hidden';
-          const inBatch = batchPostUuids.has(post.uuid);
-          const allImages = (post.media || []).filter(m => (m.file_type || '').startsWith('image/'));
-          const excludedMedia = new Set(overrides.excludedMedia || []);
-          return `
-            <div class="book-editor-row ${isExcluded ? 'is-excluded' : ''} book-editor-weight-${weight}" data-editor-post="${escapeHtml(post.uuid)}">
-              <div class="book-editor-preview">
-                <div class="book-editor-preview-scale">
-                  ${renderPage({ type: 'post', post, weight }, overrides)}
-                </div>
-              </div>
-              <div class="book-editor-panel">
-                <div class="book-editor-panel-header">
-                  <span class="book-editor-num">#${i + 1}</span>
-                  <span class="book-editor-date">${escapeHtml(post.post_date ? formatDateLong(post.post_date) : '')}</span>
-                </div>
-
-                <div class="book-editor-section">
-                  <label class="book-editor-label">
-                    ${t('book.weight')}
-                    ${isOverridden ? `<span class="book-editor-auto-hint">(${t('book.manualOverride')})</span>` : `<span class="book-editor-auto-hint">${t('book.auto')}: ${t('book.weight_' + autoW)}</span>`}
-                  </label>
-                  <div class="btn-group book-weight-group w-100" role="group">
-                    ${['big', 'normal', 'small', 'hidden'].map(w => `
-                      <button type="button"
-                        class="btn btn-sm btn-outline-secondary ${weight === w ? 'active' : ''}"
-                        data-editor-weight="${w}"
-                        data-post-uuid="${escapeHtml(post.uuid)}"
-                        title="${escapeHtml(t('book.weightDesc_' + w))}">
-                        <i class="bi bi-${w === 'big' ? 'star-fill' : w === 'normal' ? 'circle-fill' : w === 'small' ? 'dash-circle' : 'eye-slash'}"></i>
-                        ${t('book.weight_' + w)}
-                      </button>
-                    `).join('')}
-                  </div>
-                  ${isOverridden ? `
-                    <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-editor-reset-weight="${escapeHtml(post.uuid)}">
-                      <i class="bi bi-arrow-counterclockwise me-1"></i>${t('book.resetToAuto')}
-                    </button>
-                  ` : ''}
-                  ${inBatch ? `
-                    <p class="text-muted small mb-0 mt-1"><i class="bi bi-info-circle me-1"></i>${t('book.sharedPageHint')}</p>
-                  ` : ''}
-                </div>
-
-                ${allImages.length && !isExcluded ? `
-                  <div class="book-editor-section">
-                    <label class="book-editor-label">${t('book.images')} (${allImages.length - [...excludedMedia].filter(p => allImages.some(i => i.file_path === p)).length}/${allImages.length})</label>
-                    <div class="book-editor-images">
-                      ${allImages.map(m => {
-                        const isImgExcluded = excludedMedia.has(m.file_path);
-                        return `
-                          <div class="book-editor-img-thumb ${isImgExcluded ? 'is-excluded' : ''}">
-                            <img src="${authUrl(m.file_path)}" alt="">
-                            <button type="button"
-                              class="book-editor-img-toggle"
-                              data-editor-img-toggle="${escapeHtml(m.file_path)}"
-                              title="${isImgExcluded ? escapeHtml(t('book.include')) : escapeHtml(t('book.excludeImage'))}">
-                              <i class="bi bi-${isImgExcluded ? 'arrow-counterclockwise' : 'x-lg'}"></i>
-                            </button>
-                          </div>
-                        `;
-                      }).join('')}
-                    </div>
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          `;
-        }).join('')}
+        ${data.posts.map((post, i) => renderEditorRow(post, i, batchUuids)).join('')}
       </div>
     `;
   };
+
+  // Update only one editor row in place after a change. Avoids re-rendering
+  // hundreds of rows when the user toggles weight on a single post.
+  const updateEditorRow = (postUuid) => {
+    const row = document.querySelector(`[data-editor-post="${postUuid}"]`);
+    if (!row) return;
+    const idx = data.posts.findIndex(p => p.uuid === postUuid);
+    const post = data.posts[idx];
+    const batchUuids = editorBatchPostUuids();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderEditorRow(post, idx, batchUuids).trim();
+    const newRow = tmp.firstChild;
+    row.replaceWith(newRow);
+    attachEditorRowHandlers(newRow);
+
+    // Refresh the live page-count badge.
+    const counter = document.getElementById('book-editor-page-count');
+    if (counter) counter.textContent = String(pages.length);
+  };
+
+  // Attach handlers for the buttons inside a single editor row.
+  function attachEditorRowHandlers(row) {
+    row.querySelectorAll('[data-editor-weight]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const postUuid = btn.dataset.postUuid;
+        overrides.postWeight[postUuid] = btn.dataset.editorWeight;
+        saveOverrides();
+        rebuildPages({ skipRender: true });
+        updateEditorRow(postUuid);
+      };
+    });
+    row.querySelectorAll('[data-editor-reset-weight]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const postUuid = btn.dataset.editorResetWeight;
+        delete overrides.postWeight[postUuid];
+        saveOverrides();
+        rebuildPages({ skipRender: true });
+        updateEditorRow(postUuid);
+      };
+    });
+    row.querySelectorAll('[data-editor-img-toggle]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const mediaPath = btn.dataset.editorImgToggle;
+        const idx = overrides.excludedMedia.indexOf(mediaPath);
+        if (idx >= 0) overrides.excludedMedia.splice(idx, 1);
+        else overrides.excludedMedia.push(mediaPath);
+        saveOverrides();
+        rebuildPages({ skipRender: true });
+        const postUuid = row.dataset.editorPost;
+        updateEditorRow(postUuid);
+      };
+    });
+  }
 
   const updateFlipView = () => {
     const pagesEl = document.getElementById('book-pages');
@@ -820,19 +1273,7 @@ export async function renderBookPreview(bookUuid) {
     });
 
     if (indicator) indicator.textContent = `${currentPage + 1} / ${pages.length}`;
-    writePageToHash(currentPage);
-
-    // Re-render the template picker since its active state depends on the
-    // currently visible post page.
-    if (curateMode) {
-      const existing = document.querySelector('.book-template-picker');
-      if (existing) {
-        existing.outerHTML = renderTemplatePicker();
-        document.querySelectorAll('.book-tpl-btn[data-tpl]').forEach((btn) => {
-          btn.onclick = () => setTemplateForCurrentPage(btn.dataset.tpl);
-        });
-      }
-    }
+    writeHashState({ view: 'flip', pageIdx: currentPage });
   };
 
   // Compute how much the book-pages need to shrink to fit the stage.
@@ -872,10 +1313,10 @@ export async function renderBookPreview(bookUuid) {
     });
   };
 
-  const rebuildPages = () => {
+  const rebuildPages = (opts = {}) => {
     pages = buildPages(data, overrides);
     if (currentPage >= pages.length) currentPage = Math.max(0, pages.length - 1);
-    renderShell();
+    if (!opts.skipRender) renderShell();
   };
 
   const goTo = (idx) => {
@@ -901,100 +1342,6 @@ export async function renderBookPreview(bookUuid) {
     } else {
       goTo(currentPage - 1);
     }
-  };
-
-  // Click an image in curate mode → set focal point at the click location.
-  // Click the × overlay → exclude that individual image.
-  const handleFlipClick = (e) => {
-    if (!curateMode) return;
-
-    // Exclude button on an image
-    const excludeBtn = e.target.closest('[data-exclude-media]');
-    if (excludeBtn) {
-      const mediaPath = excludeBtn.dataset.excludeMedia;
-      if (!overrides.excludedMedia.includes(mediaPath)) {
-        overrides.excludedMedia.push(mediaPath);
-      }
-      saveOverrides();
-      rebuildPages();
-      e.stopPropagation();
-      return;
-    }
-
-    // Focal point on an image
-    const bookImg = e.target.closest('.book-img img, .book-post-extras img');
-    if (bookImg) {
-      const box = bookImg.closest('[data-media-path]');
-      const mediaPath = box?.dataset?.mediaPath;
-      if (!mediaPath) return;
-      const rect = bookImg.getBoundingClientRect();
-      const pctX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-      const pctY = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
-      const value = `${pctX.toFixed(1)}% ${pctY.toFixed(1)}%`;
-      overrides.mediaFocal[mediaPath] = value;
-      bookImg.style.objectPosition = value;
-      saveOverrides();
-      e.stopPropagation();
-    }
-  };
-
-  // Template picker: change the layout template for the current post page.
-  const setTemplateForCurrentPage = (templateName) => {
-    const page = pages[currentPage];
-    if (!page || page.type !== 'post') return;
-    const postUuid = page.post.uuid;
-    if (templateName === 'auto') {
-      delete overrides.templates[postUuid];
-    } else {
-      overrides.templates[postUuid] = templateName;
-    }
-    saveOverrides();
-    rebuildPages();
-  };
-
-  const renderTemplatePicker = () => {
-    const page = pages[currentPage];
-    if (!page || page.type !== 'post') return '';
-    const currentOverride = overrides.templates[page.post.uuid];
-    const activeTpl = currentOverride || 'auto';
-    const buttons = [
-      { id: 'auto', icon: 'magic' },
-      { id: 'hero-top', icon: 'image' },
-      { id: 'full-bleed', icon: 'aspect-ratio' },
-      { id: 'grid-2', icon: 'layout-split' },
-      { id: 'grid-3', icon: 'grid-3x2-gap' },
-      { id: 'grid-4', icon: 'grid' },
-      { id: 'text-heavy', icon: 'text-paragraph' },
-    ];
-    return `
-      <div class="book-template-picker no-print">
-        <span class="book-template-picker-label">${t('book.template')}:</span>
-        ${buttons.map(b => `
-          <button type="button"
-            class="book-tpl-btn ${activeTpl === b.id ? 'is-active' : ''}"
-            data-tpl="${b.id}"
-            title="${escapeHtml(t('book.tpl_' + b.id.replace('-', '_')))}">
-            <i class="bi bi-${b.icon}"></i>
-          </button>
-        `).join('')}
-      </div>
-    `;
-  };
-
-  // Toggle visibility of a post. Uses the weight model: hidden posts are
-  // excluded from the book but remain visible in the editor for recovery.
-  const togglePostExclusion = (postUuid) => {
-    const post = data.posts.find(p => p.uuid === postUuid);
-    if (!post) return;
-    const current = effectiveWeight(post, overrides);
-    if (current === 'hidden') {
-      // Un-hide: clear the override so auto-weight applies again.
-      delete overrides.postWeight[postUuid];
-    } else {
-      overrides.postWeight[postUuid] = 'hidden';
-    }
-    saveOverrides();
-    rebuildPages();
   };
 
   function attachShellHandlers() {
@@ -1031,48 +1378,187 @@ export async function renderBookPreview(bookUuid) {
         renderShell();
       };
     }
-    // Segmented view mode buttons — mutually exclusive.
+    // Segmented view mode buttons — mutually exclusive. Clicking any exits
+    // sub-modes like page-edit or batch-edit.
     document.getElementById('book-btn-flip').onclick = () => {
       gridMode = false; editorMode = false;
+      pageEditPostUuid = null; batchEditPageIdx = null;
+      writeHashState({ view: 'flip', pageIdx: currentPage });
       renderShell();
     };
     document.getElementById('book-btn-grid').onclick = () => {
-      gridMode = true; editorMode = false; curateMode = false;
+      gridMode = true; editorMode = false;
+      pageEditPostUuid = null; batchEditPageIdx = null;
+      writeHashState({ view: 'grid' });
       renderShell();
     };
     document.getElementById('book-btn-editor').onclick = () => {
-      editorMode = true; gridMode = false; curateMode = false;
+      editorMode = true; gridMode = false;
+      pageEditPostUuid = null; batchEditPageIdx = null;
+      writeHashState({ view: 'editor' });
       renderShell();
     };
 
-    if (editorMode) {
-      // Weight buttons per row — the primary control
-      document.querySelectorAll('[data-editor-weight]').forEach((btn) => {
-        btn.onclick = (e) => {
+    // Batch editor handlers — opened via pencil on a batch page. Focused
+    // only on editing THIS page (focal points + captions). Structural
+    // changes happen in the Editor view.
+    if (batchEditPageIdx != null) {
+      const scaleEl = document.getElementById('book-page-editor-scale');
+      if (scaleEl) {
+        const frame = scaleEl.parentElement;
+        const applyScale = () => {
+          const w = frame.clientWidth;
+          const MM = 96 / 25.4;
+          const scale = Math.min(1, w / (200 * MM));
+          scaleEl.style.transform = `scale(${scale})`;
+          frame.style.height = `${200 * MM * scale}px`;
+        };
+        applyScale();
+        window.requestAnimationFrame(applyScale);
+
+        // Click an image in the batch preview → set focal point.
+        scaleEl.querySelectorAll('.book-img img').forEach((img) => {
+          img.style.cursor = 'crosshair';
+          img.addEventListener('click', (e) => {
+            const box = img.closest('[data-media-path]');
+            const mediaPath = box?.dataset?.mediaPath;
+            if (!mediaPath) return;
+            const rect = img.getBoundingClientRect();
+            const pctX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            const pctY = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+            const value = `${pctX.toFixed(1)}% ${pctY.toFixed(1)}%`;
+            overrides.mediaFocal[mediaPath] = value;
+            img.style.objectPosition = value;
+            saveOverrides();
+            e.stopPropagation();
+          });
+        });
+      }
+
+      // Caption edit — opens a compact modal, keeps user on the batch page.
+      document.querySelectorAll('[data-batch-caption]').forEach((btn) => {
+        btn.onclick = () => {
+          const postUuid = btn.dataset.batchCaption;
+          const post = data.posts.find(p => p.uuid === postUuid);
+          if (post) showCaptionModal(post);
+        };
+      });
+
+      // Layout variant picker
+      const currentBatch = pages[batchEditPageIdx];
+      const currentBatchKey = currentBatch?.key;
+      document.querySelectorAll('[data-batch-variant]').forEach((btn) => {
+        btn.onclick = () => {
+          if (!currentBatchKey) return;
+          overrides.batchVariant[currentBatchKey] = btn.dataset.batchVariant;
+          saveOverrides();
+          rebuildPages({ skipRender: true });
+          renderShell();
+        };
+      });
+
+      // Move a post up or down within the batch
+      document.querySelectorAll('[data-batch-move]').forEach((btn) => {
+        btn.onclick = () => {
+          if (!currentBatchKey) return;
+          const dir = btn.dataset.batchMove;
+          const slotIdx = parseInt(btn.dataset.batchSlot, 10);
+          const currentOrder = [...currentBatch.posts.map(p => p.uuid)];
+          const targetIdx = dir === 'up' ? slotIdx - 1 : slotIdx + 1;
+          if (targetIdx < 0 || targetIdx >= currentOrder.length) return;
+          [currentOrder[slotIdx], currentOrder[targetIdx]] = [currentOrder[targetIdx], currentOrder[slotIdx]];
+          overrides.batchOrder[currentBatchKey] = currentOrder;
+          saveOverrides();
+          rebuildPages({ skipRender: true });
+          renderShell();
+        };
+      });
+
+      document.getElementById('book-page-editor-done').onclick = () => {
+        batchEditPageIdx = null;
+        renderShell();
+      };
+      return;
+    }
+
+    // Page editor handlers — the dedicated per-page edit view.
+    if (pageEditPostUuid) {
+      const scaleEl = document.getElementById('book-page-editor-scale');
+      // Compute preview scale to fit available width.
+      if (scaleEl) {
+        const frame = scaleEl.parentElement;
+        const applyScale = () => {
+          const w = frame.clientWidth;
+          const MM = 96 / 25.4;
+          const scale = Math.min(1, w / (200 * MM));
+          scaleEl.style.transform = `scale(${scale})`;
+          frame.style.height = `${200 * MM * scale}px`;
+        };
+        applyScale();
+        window.requestAnimationFrame(applyScale);
+      }
+
+      // Click image in preview → set focal point
+      const previewImgs = document.querySelectorAll('#book-page-editor-scale .book-img img');
+      previewImgs.forEach((img) => {
+        img.style.cursor = 'crosshair';
+        img.addEventListener('click', (e) => {
+          const box = img.closest('[data-media-path]');
+          const mediaPath = box?.dataset?.mediaPath;
+          if (!mediaPath) return;
+          const rect = img.getBoundingClientRect();
+          const pctX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+          const pctY = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+          const value = `${pctX.toFixed(1)}% ${pctY.toFixed(1)}%`;
+          overrides.mediaFocal[mediaPath] = value;
+          img.style.objectPosition = value;
+          saveOverrides();
           e.stopPropagation();
-          const postUuid = btn.dataset.postUuid;
-          overrides.postWeight[postUuid] = btn.dataset.editorWeight;
+        });
+      });
+
+      // Template buttons
+      document.querySelectorAll('[data-page-editor-tpl]').forEach((btn) => {
+        btn.onclick = () => {
+          const tpl = btn.dataset.pageEditorTpl;
+          if (tpl === 'auto') delete overrides.templates[pageEditPostUuid];
+          else overrides.templates[pageEditPostUuid] = tpl;
           saveOverrides();
           rebuildPages();
           renderShell();
         };
       });
-      // Reset weight to auto
-      document.querySelectorAll('[data-editor-reset-weight]').forEach((btn) => {
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          const postUuid = btn.dataset.editorResetWeight;
-          delete overrides.postWeight[postUuid];
-          saveOverrides();
-          rebuildPages();
-          renderShell();
-        };
-      });
+
+      // Custom text with debounced auto-save
+      const textEl = document.getElementById('book-page-editor-text');
+      if (textEl) {
+        let textTimer = null;
+        textEl.addEventListener('input', () => {
+          if (textTimer) clearTimeout(textTimer);
+          textTimer = setTimeout(() => {
+            const val = textEl.value;
+            if (val === '' || val === (data.posts.find(p => p.uuid === pageEditPostUuid)?.body || '')) {
+              delete overrides.customText[pageEditPostUuid];
+            } else {
+              overrides.customText[pageEditPostUuid] = val;
+            }
+            saveOverrides();
+            // Re-render just the preview inside the editor without losing
+            // textarea focus.
+            const scale = document.getElementById('book-page-editor-scale');
+            if (scale) {
+              const post = data.posts.find(p => p.uuid === pageEditPostUuid);
+              const weight = effectiveWeight(post, overrides);
+              scale.innerHTML = renderPage({ type: 'post', post, weight }, overrides, bookMeta);
+            }
+          }, 400);
+        });
+      }
+
       // Per-image exclude toggles
-      document.querySelectorAll('[data-editor-img-toggle]').forEach((btn) => {
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          const mediaPath = btn.dataset.editorImgToggle;
+      document.querySelectorAll('[data-page-editor-img]').forEach((btn) => {
+        btn.onclick = () => {
+          const mediaPath = btn.dataset.pageEditorImg;
           const idx = overrides.excludedMedia.indexOf(mediaPath);
           if (idx >= 0) overrides.excludedMedia.splice(idx, 1);
           else overrides.excludedMedia.push(mediaPath);
@@ -1080,43 +1566,101 @@ export async function renderBookPreview(bookUuid) {
           renderShell();
         };
       });
+
+      // Comment visibility toggle
+      const commentsToggle = document.getElementById('book-page-editor-comments');
+      if (commentsToggle) {
+        commentsToggle.onchange = () => {
+          if (commentsToggle.checked) {
+            delete overrides.hideComments[pageEditPostUuid];
+          } else {
+            overrides.hideComments[pageEditPostUuid] = true;
+          }
+          saveOverrides();
+          // Re-render preview only
+          const scale = document.getElementById('book-page-editor-scale');
+          if (scale) {
+            const post = data.posts.find(p => p.uuid === pageEditPostUuid);
+            const weight = effectiveWeight(post, overrides);
+            scale.innerHTML = renderPage({ type: 'post', post, weight }, overrides, bookMeta);
+          }
+        };
+      }
+
+      // Hide page
+      const hideBtn = document.querySelector('[data-page-editor-hide]');
+      if (hideBtn) {
+        hideBtn.onclick = () => {
+          overrides.postWeight[pageEditPostUuid] = 'hidden';
+          saveOverrides();
+          pageEditPostUuid = null;
+          rebuildPages();
+          renderShell();
+        };
+      }
+
+      // Done button
+      document.getElementById('book-page-editor-done').onclick = () => {
+        pageEditPostUuid = null;
+        rebuildPages();
+        renderShell();
+      };
+
+      return; // Skip other handlers
+    }
+
+    if (editorMode) {
+      // Attach handlers per row — clicking a weight button only re-renders
+      // that row, not the whole editor (which would be very slow for books
+      // with hundreds of posts).
+      document.querySelectorAll('.book-editor-row').forEach(attachEditorRowHandlers);
     } else if (!gridMode) {
       document.getElementById('book-nav-prev').onclick = prev;
       document.getElementById('book-nav-next').onclick = next;
-      // Page-edit pencil: toggles curate mode for the whole flip view.
-      document.querySelectorAll('[data-page-edit-toggle]').forEach((btn) => {
+      // Pencil on a post page → dedicated per-page editor
+      document.querySelectorAll('[data-page-edit-post]').forEach((btn) => {
         btn.onclick = (e) => {
           e.stopPropagation();
-          curateMode = !curateMode;
+          pageEditPostUuid = btn.dataset.pageEditPost;
           renderShell();
         };
       });
-      // Curate-mode interactions on flip view
-      const pagesEl = document.getElementById('book-pages');
-      if (pagesEl) {
-        pagesEl.addEventListener('click', handleFlipClick);
-      }
-      // Template picker buttons
-      document.querySelectorAll('.book-tpl-btn[data-tpl]').forEach((btn) => {
-        btn.onclick = () => setTemplateForCurrentPage(btn.dataset.tpl);
+      // Pencil on a batch page → batch editor
+      document.querySelectorAll('[data-page-edit-batch]').forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          batchEditPageIdx = parseInt(btn.dataset.pageEditBatch, 10);
+          renderShell();
+        };
       });
     } else {
-      // Grid interactions
+      // Grid interactions: click to jump to flip view, pencil to edit
       const viewer = document.getElementById('book-viewer');
-      viewer.querySelectorAll('[data-grid-toggle]').forEach((btn) => {
+      // Pencil buttons — open the matching editor, don't bubble to the
+      // jump-to-page click on the parent item.
+      viewer.querySelectorAll('[data-grid-edit-post]').forEach((btn) => {
         btn.onclick = (e) => {
           e.stopPropagation();
-          togglePostExclusion(btn.dataset.gridToggle);
-        };
-      });
-      viewer.querySelectorAll('[data-grid-post]').forEach((item) => {
-        item.onclick = () => {
-          // Jump to this page in flip view.
-          const postUuid = item.dataset.gridPost;
+          pageEditPostUuid = btn.dataset.gridEditPost;
           gridMode = false;
           renderShell();
-          // Find the page index after rebuild.
-          const idx = pages.findIndex(p => p.type === 'post' && p.post.uuid === postUuid);
+        };
+      });
+      viewer.querySelectorAll('[data-grid-edit-batch]').forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          batchEditPageIdx = parseInt(btn.dataset.gridEditBatch, 10);
+          gridMode = false;
+          renderShell();
+        };
+      });
+      // Clicking the thumbnail itself jumps to that page in flip view.
+      viewer.querySelectorAll('[data-grid-idx]').forEach((item) => {
+        item.onclick = () => {
+          const idx = parseInt(item.dataset.gridIdx, 10);
+          gridMode = false;
+          writeHashState({ view: 'flip', pageIdx: idx });
+          renderShell();
           if (idx >= 0) goTo(idx);
         };
       });
@@ -1150,6 +1694,10 @@ export async function renderBookPreview(bookUuid) {
             mediaFocal: overrides.mediaFocal,
             templates: overrides.templates,
             postWeight: overrides.postWeight,
+            customText: overrides.customText,
+            hideComments: overrides.hideComments,
+            batchVariant: overrides.batchVariant,
+            batchOrder: overrides.batchOrder,
           },
         };
         api.patch(`/books/${bookUuid}`, { layout_options: merged }).catch(() => {});

@@ -360,7 +360,8 @@
   border-radius: 0;
 }
 
-.book-grid-toggle {
+/* Pencil that appears on grid thumbnail hover for editing that page. */
+.book-grid-edit-btn {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -376,11 +377,171 @@
   justify-content: center;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   z-index: 2;
+  opacity: 0;
+  transition: opacity 0.12s;
 }
-.book-grid-toggle:hover { background: #fff; }
-.book-grid-item.is-excluded .book-grid-toggle {
-  background: rgba(255,59,48,0.95);
-  color: #fff;
+.book-grid-item:hover .book-grid-edit-btn { opacity: 1; }
+.book-grid-edit-btn:hover { background: #fff; }
+.book-grid-item.is-clickable { cursor: pointer; }
+
+/* ── Page editor (dedicated per-page edit view) ── */
+.book-viewer.is-page-edit .book-stage { display: none; }
+
+.book-page-editor {
+  display: flex;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  max-width: 1400px;
+  margin: 0 auto;
+  align-items: flex-start;
+}
+
+.book-page-editor-preview {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 600px;
+  max-width: 60vw;
+}
+
+.book-page-editor-preview-frame {
+  width: 100%;
+  max-width: 600px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+
+.book-page-editor-preview-scale {
+  width: var(--book-page-width);
+  height: var(--book-page-height);
+  transform-origin: top left;
+  /* transform: scale(...) set in JS */
+}
+
+.book-page-editor-panel {
+  flex: 1;
+  min-width: 320px;
+  max-width: 420px;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  position: sticky;
+  top: 80px;
+}
+
+.book-page-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+.book-page-editor-title {
+  font-weight: 600;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--book-ink);
+}
+
+.book-page-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+@media (max-width: 900px) {
+  .book-page-editor { flex-direction: column; }
+  .book-page-editor-panel {
+    position: static;
+    max-width: none;
+    width: 100%;
+  }
+}
+
+/* Batch editor — list of posts in a shared page */
+.book-batch-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.book-batch-edit-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.03);
+}
+.book-batch-edit-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.book-batch-edit-noimg {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #e8e8e8, #d0d0d0);
+  flex-shrink: 0;
+}
+.book-batch-edit-info {
+  flex: 1;
+  min-width: 0;
+}
+.book-batch-edit-date {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--book-muted);
+  letter-spacing: 0.05em;
+}
+.book-batch-edit-snippet {
+  font-size: 0.85rem;
+  color: var(--book-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-batch-edit-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.book-batch-edit-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.book-batch-edit-reorder .btn {
+  width: 22px;
+  height: 18px;
+  line-height: 1;
+  color: var(--book-muted);
+}
+.book-batch-edit-reorder .btn:disabled { opacity: 0.3; }
+.book-batch-edit-reorder .btn:hover:not(:disabled) { color: var(--book-ink); }
+
+.book-batch-variant-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.book-batch-variant-row .book-tpl-btn {
+  background: rgba(0,0,0,0.04);
+}
+.book-batch-variant-row .book-tpl-btn:hover {
+  background: rgba(0,0,0,0.1);
 }
 
 /* ── Editor view ─────────────────────────── */
@@ -466,10 +627,11 @@
   filter: grayscale(1);
 }
 
-/* Scaled-down page on the left. 200mm × 0.4 ≈ 302px. */
+/* Scaled-down page on the left. 200mm × 0.55 ≈ 416px — large enough that
+ * post text and comments are readable when deciding what to do. */
 .book-editor-preview {
-  width: 302px;
-  height: 302px;
+  width: 416px;
+  height: 416px;
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 4px;
@@ -478,7 +640,7 @@
 .book-editor-preview-scale {
   width: var(--book-page-width);
   height: var(--book-page-height);
-  transform: scale(0.4);
+  transform: scale(0.55);
   transform-origin: top left;
   pointer-events: none;
 }
@@ -687,11 +849,23 @@
 .book-post-meta {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   font-size: 9pt;
   color: var(--book-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+.book-post-meta-left {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4mm;
+}
+.book-post-reactions-inline {
+  color: #d33;
+  text-transform: none;
+  font-weight: 600;
+}
+.book-tpl-full-bleed .book-post-reactions-inline { color: #ff9b9b; }
 
 .book-post-text {
   font-size: 12pt;
@@ -709,19 +883,62 @@
 }
 
 .book-post-comments {
-  font-size: 9pt;
-  color: var(--book-muted);
-  font-style: italic;
   display: flex;
   flex-direction: column;
-  gap: 1mm;
+  gap: 2mm;
   margin-top: auto;
-  max-height: 30mm;
+  max-height: 70mm;
   overflow: hidden;
 }
-.book-post-comment strong {
+
+/* Comment bubble: small avatar + rounded bubble with bold name above text.
+ * Mirrors the main timeline comment design (design guideline #19). */
+.book-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 2mm;
+}
+.book-comment-avatar {
+  flex-shrink: 0;
+  width: 7mm;
+  height: 7mm;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e8e8e8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7pt;
+  font-weight: 600;
+  color: var(--book-muted);
+}
+.book-comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.book-comment-bubble {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0,0,0,0.05);
+  border-radius: 3mm;
+  padding: 1.5mm 3mm;
+  font-size: 9pt;
+  line-height: 1.35;
   color: var(--book-ink);
-  font-style: normal;
+}
+.book-comment-author {
+  display: block;
+  font-weight: 600;
+  font-size: 8pt;
+  color: var(--book-ink);
+  margin-bottom: 0.5mm;
+}
+.book-comment-text {
+  display: block;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .book-post-reactions {
@@ -772,8 +989,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 12mm;
-  background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
+  max-height: 70%;
+  overflow: hidden;
+  padding: 14mm 12mm 12mm;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0.2) 80%, transparent 100%);
   color: #fff;
 }
 .book-tpl-full-bleed .book-post-meta { color: rgba(255,255,255,0.85); }
@@ -781,6 +1000,27 @@
   color: #fff;
   -webkit-line-clamp: 3;
   font-size: 13pt;
+}
+/* Comment bubbles on a full-bleed caption overlay: translucent white
+ * bubbles against the gradient for readability. The caption can grow
+ * tall enough to accommodate up to 6 bubbles. */
+.book-tpl-full-bleed .book-post-comments {
+  max-height: 80mm;
+  margin-top: 3mm;
+}
+.book-tpl-full-bleed .book-comment-bubble {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.book-tpl-full-bleed .book-comment-author { color: #fff; }
+.book-tpl-full-bleed .book-comment-avatar {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+.book-tpl-full-bleed .book-post-reactions {
+  color: #ffb6b6;
 }
 
 /* Template: grids */
@@ -803,15 +1043,65 @@
 .book-post-body-compact .book-post-text { -webkit-line-clamp: 2; font-size: 11pt; }
 .book-post-body-compact .book-post-comments { max-height: 12mm; }
 
-/* Template: text-heavy */
+/* Template: image-side. Image fills the left ~60%, content (meta + body
+ * + comments) runs as a column on the right ~40%. Best when comments are
+ * the main attraction. */
+.book-tpl-image-side {
+  flex-direction: row;
+}
+.book-tpl-side-img {
+  width: 60%;
+  height: 100%;
+  flex-shrink: 0;
+}
+.book-tpl-side-content {
+  flex: 1;
+  min-width: 0;
+  padding: 12mm 12mm 10mm;
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+  overflow: hidden;
+  background: var(--book-paper);
+}
+.book-tpl-image-side .book-post-text-long-body {
+  font-size: 11pt;
+  -webkit-line-clamp: 4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  flex: 0 0 auto;
+}
+.book-tpl-image-side .book-post-comments {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Template: text-heavy. The hero image takes 30% height; the rest of the
+ * page is dedicated to text. We use plain block layout for the body text
+ * (not -webkit-box) so it doesn't collapse inside the flex column. */
 .book-tpl-text-heavy .book-tpl-text-hero {
   width: 100%;
   height: 30%;
   flex-shrink: 0;
 }
-.book-tpl-text-heavy .book-post-body-long { padding: 10mm 14mm; }
+.book-tpl-text-heavy .book-post-body-long {
+  padding: 10mm 14mm;
+}
+.book-post-text-long-body {
+  font-size: 13pt;
+  line-height: 1.5;
+  color: var(--book-ink);
+  white-space: pre-wrap;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
 
-/* ── Batch page (multiple small posts on one page) ── */
+/* ── Batch page (multiple small posts on one page) ──
+ * Grid shape adapts to post count: 2 = half/half, 3 = one big + two small,
+ * 4 = 2×2. This keeps space from being wasted when a run of small posts
+ * ends with less than 4. */
 .book-page-batch {
   padding: 8mm;
 }
@@ -819,9 +1109,47 @@
   width: 100%;
   height: 100%;
   display: grid;
+  gap: 4mm;
+}
+/* 2 posts: horizontal (default, side by side) or vertical (stacked). */
+.book-page-batch-2.book-page-batch-horizontal .book-batch-grid {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+.book-page-batch-2.book-page-batch-vertical .book-batch-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* 3 posts: big-left (default, one big left + two stacked right) or
+ * big-top (one big top + two side by side bottom). */
+.book-page-batch-3.book-page-batch-big-left .book-batch-grid {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.book-page-batch-3.book-page-batch-big-left .book-batch-cell:first-child {
+  grid-row: span 2;
+}
+.book-page-batch-3.book-page-batch-big-top .book-batch-grid {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 2fr 1fr;
+}
+.book-page-batch-3.book-page-batch-big-top .book-batch-cell:first-child {
+  grid-column: span 2;
+}
+
+/* 4 posts: grid (2x2, default), rows (4 stacked), or columns (4 side by side). */
+.book-page-batch-4.book-page-batch-grid .book-batch-grid {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 4mm;
+}
+.book-page-batch-4.book-page-batch-rows .book-batch-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(4, 1fr);
+}
+.book-page-batch-4.book-page-batch-columns .book-batch-grid {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr;
 }
 .book-batch-cell {
   display: flex;

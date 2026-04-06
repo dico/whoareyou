@@ -246,6 +246,9 @@ router.get('/:uuid/data', async (req, res, next) => {
           'post_comments.created_at',
           'contacts.first_name as author_first',
           'contacts.last_name as author_last',
+          db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp
+            WHERE cp.contact_id = contacts.id AND cp.is_primary = true
+            LIMIT 1) as author_avatar`),
         );
     }
 
@@ -279,6 +282,7 @@ router.get('/:uuid/data', async (req, res, next) => {
         body: c.body,
         created_at: c.created_at,
         author_name: [c.author_first, c.author_last].filter(Boolean).join(' ') || null,
+        author_avatar: c.author_avatar || null,
       });
     }
     const reactionsByPost = new Map();

@@ -100,6 +100,7 @@ Flippable HTML book preview, single-contact, one template per post, browser-base
   - Per-template landscape/portrait crop modes
   - Mixed post+text batch layout (for "small" weight runs where one post has more interesting text)
 - **Custom per-page text** — user-editable caption/body that overrides `post.body` for book output only (never mutates the original post). Stored in `overrides.customText[postUuid]`.
+- **Comment placement option** — let user choose where comments appear per book or per page: below image (current), as a sidebar to the left/right of the image (more compact when there are many comments), or hidden. Sidebar layout would be a new template variant.
 - **Theming per book** — color scheme (cover background, accent color), font family, cover layout template. Store in `layout_options.theme = { coverBg, accent, fontFamily, coverTemplate }`. Scoped only to `.book-viewer` so the main app theme isn't affected.
 - **Custom cover** — upload own cover image, editable title placement, optional back-cover text/photo.
 - **Multi-contact books** ("family year book") — wizard accepts multiple contacts, title/subtitle user-defined
