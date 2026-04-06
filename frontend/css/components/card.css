@@ -38,6 +38,33 @@
   gap: var(--space-sm);
 }
 
+/* ── Reusable media picker (built on .contact-gallery-*) ── */
+.media-picker-grid {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+.media-picker-item.is-selected {
+  outline: 3px solid var(--color-primary, #007AFF);
+  outline-offset: -3px;
+}
+.media-picker-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary, #007AFF);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  font-size: 1rem;
+}
+.media-picker-toolbar { display: flex; gap: var(--space-sm); }
+
 /* Gallery lightbox with sidebar */
 .gallery-lb-content {
   display: grid;

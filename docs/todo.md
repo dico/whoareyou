@@ -2,6 +2,12 @@
 
 > Open tasks only. Completed work is documented in the relevant docs.
 
+## Migrations awaiting production deploy
+
+Once these migrations have run in production, the lines below can be removed.
+
+- `068_add_company_id_to_gift_order_participants.js` — adds nullable `company_id` FK and makes `contact_id` nullable so gifts can come from/go to groups. Run on dev via `cd /app/backend && npx knex migrate:latest` (batch 47).
+
 ## High Priority
 
 ### Standardize contact search component
@@ -82,31 +88,36 @@ Flippable HTML book preview, single-contact, one template per post, browser-base
 **Scope:** Improve layout quality and give deeper control over the output.
 
 **Done:**
-- Multiple layout templates (hero-top, full-bleed, grid-2, grid-3, grid-4, text-heavy)
-- Auto template selection from image count + body length + post weight
+- 7 layout templates (hero-top, full-bleed, grid-2, grid-3, grid-4, text-heavy, image-side)
+- Auto template selection from image count, body length, comment count, engagement score
 - Grouped view modes (Flip / Grid / Editor segmented control)
-- Per-page pencil-on-hover in flip view (replaces toolbar curate toggle)
+- Pencil-on-hover per page opens a dedicated page editor (big preview + side panel)
+- Dedicated batch editor for shared pages: variant picker (2/3/4-post layouts), reorder, per-post caption modal, focal point
+- 3-state weight model: `full | small | hidden`. Legacy `big`/`normal` mapped to `full` for backward compat
+- Adaptive batch layouts by post count; 1-post batches promoted to full pages
+- Auto-weight scoring based on likes × 3 + comments × 4 + bodyLen/20 + mediaCount × 2
+- Per-page custom text override (`overrides.customText`)
+- Per-page comment visibility toggle (`overrides.hideComments`)
+- Comment bubbles with author avatars
+- Image-side template with comment sidebar (auto-picks when comments ≥ 4)
 - Inline metadata edit modal (replaces navigate-to-wizard pattern)
-- Ellipsis dropdown for book-level actions (edit info / print / delete)
+- Ellipsis dropdowns for book-level actions (edit info / print / delete)
 - Per-row ellipsis in book list
-- **Weight-based packing** — posts have importance `big | normal | small | hidden`. Auto-weight scored from likes + comments + body length + media count. Small posts pack into shared 4-up pages. Hidden posts remain in editor for recovery. Live page count in editor.
 - Per-image exclusion within posts
-- Focal-point picker (click image in curate mode)
-- URL hash for current page
+- Focal-point picker (click image in page/batch editor)
+- URL hash preserves view mode + current page across refresh
+- Editor view optimized: partial updates on weight change instead of full re-render
+- Grid view is pure navigation (click to jump, pencil on hover to edit)
+- Overrides sanitized to prevent CSS/class injection
 
-**Still missing:**
-- **More layout templates** — currently 6 templates. Add:
-  - Collage (varied image sizes)
-  - Per-template landscape/portrait crop modes
-  - Mixed post+text batch layout (for "small" weight runs where one post has more interesting text)
-- **Custom per-page text** — user-editable caption/body that overrides `post.body` for book output only (never mutates the original post). Stored in `overrides.customText[postUuid]`.
-- **Comment placement option** — let user choose where comments appear per book or per page: below image (current), as a sidebar to the left/right of the image (more compact when there are many comments), or hidden. Sidebar layout would be a new template variant.
-- **Theming per book** — color scheme (cover background, accent color), font family, cover layout template. Store in `layout_options.theme = { coverBg, accent, fontFamily, coverTemplate }`. Scoped only to `.book-viewer` so the main app theme isn't affected.
-- **Custom cover** — upload own cover image, editable title placement, optional back-cover text/photo.
-- **Multi-contact books** ("family year book") — wizard accepts multiple contacts, title/subtitle user-defined
-- **Per-contact chapter grouping** option (in addition to per year / none)
-- **Timeline gap handling** — long periods without posts should show a "X months later" divider rather than jumping silently
-- **Page count / price estimate** — show live count in wizard + estimated Blurb price based on format
+**Still missing (Phase 2 continued):**
+- **Custom cover** — upload own cover image, editable title placement, optional back-cover text/photo
+- **Theming per book** — color scheme (cover bg, accent), font family, cover layout. Store in `layout_options.theme`. Scoped to `.book-viewer` so main app theme isn't affected
+- **Multi-contact books** ("family year book") — wizard accepts multiple contacts, show author name on posts, per-contact chapter grouping
+- **Timeline gap dividers** — long periods without posts should show a "X months later" divider rather than jumping silently
+- **Page count in wizard** — show estimated page count + optional Blurb price estimate before creating the book
+- **Collage template + landscape/portrait crop variants**
+- **Back-cover custom text** (currently hardcoded)
 
 #### Phase 2.5 — Small polish (nice-to-have, not blocking)
 - Back-cover custom text (currently hardcoded "Laget med WhoareYou")

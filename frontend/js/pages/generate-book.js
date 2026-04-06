@@ -46,9 +46,10 @@ function wizardFormHtml() {
         </div>
 
         <div class="mb-3">
-          <label class="form-label">${t('book.fieldContact')}</label>
-          <div id="book-contact-chip-wrap"></div>
+          <label class="form-label">${t('book.fieldContacts')}</label>
+          <div id="book-contact-chip-wrap" class="mb-2 d-flex flex-wrap gap-2 align-items-center"></div>
           <input type="text" class="form-control" id="book-contact-search" placeholder="${t('book.fieldContactPlaceholder')}">
+          <div class="form-text">${t('book.fieldContactsHint')}</div>
         </div>
 
         <div class="row g-2 mb-3">
@@ -74,6 +75,7 @@ function wizardFormHtml() {
           <label class="form-label">${t('book.fieldChapterGrouping')}</label>
           <select class="form-select" id="book-chapter-grouping">
             <option value="year">${t('book.chapterPerYear')}</option>
+            <option value="contact">${t('book.chapterPerContact')}</option>
             <option value="none">${t('book.chapterNone')}</option>
           </select>
         </div>
@@ -87,7 +89,8 @@ function wizardFormHtml() {
           <label class="form-check-label" for="book-include-reactions">${t('book.includeReactions')}</label>
         </div>
 
-        <div class="d-flex gap-2 justify-content-end">
+        <div class="d-flex gap-2 justify-content-end align-items-center">
+          <span class="text-muted small me-auto" id="book-preview-count"></span>
           <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-cancel">${t('common.cancel')}</button>
           <button type="submit" class="btn btn-primary btn-sm" id="btn-save">
             <i class="bi bi-eye me-1"></i>${t('book.createAndPreview')}
@@ -187,54 +190,93 @@ function attachWizardHandlers() {
 
   langSelect.value = getLocale() || 'nb';
 
-  let selectedContact = null;
+  // Multi-contact selection: keep an ordered list of selected contacts so
+  // a single book can cover an entire family.
+  const selectedContacts = [];
   const searchInput = document.getElementById('book-contact-search');
   const chipWrap = document.getElementById('book-contact-chip-wrap');
 
-  const renderChip = () => {
-    if (!selectedContact) {
+  const renderChips = () => {
+    if (!selectedContacts.length) {
       chipWrap.innerHTML = '';
-      searchInput.style.display = '';
       return;
     }
-    const name = [selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(' ');
-    const initials = [selectedContact.first_name, selectedContact.last_name]
-      .filter(Boolean).map(s => s[0]).join('').toUpperCase();
-    // Design guideline #7: always show profile photo in the avatar slot
-    // when available; fall back to initials.
-    const avatarHtml = selectedContact.avatar
-      ? `<img src="${authUrl(selectedContact.avatar)}" alt="">`
-      : `<span>${escapeHtml(initials)}</span>`;
-    chipWrap.innerHTML = `
-      <span class="contact-chip">
-        <span class="contact-chip-avatar">${avatarHtml}</span>
-        ${escapeHtml(name)}
-        <button type="button" class="contact-chip-remove" id="chip-remove" aria-label="remove">×</button>
-      </span>
-    `;
-    searchInput.style.display = 'none';
-    document.getElementById('chip-remove').onclick = () => {
-      selectedContact = null;
-      renderChip();
-      searchInput.focus();
-    };
+    chipWrap.innerHTML = selectedContacts.map((c, i) => {
+      const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
+      const initials = [c.first_name, c.last_name]
+        .filter(Boolean).map(s => s[0]).join('').toUpperCase();
+      const avatarHtml = c.avatar
+        ? `<img src="${authUrl(c.avatar)}" alt="">`
+        : `<span>${escapeHtml(initials)}</span>`;
+      return `
+        <span class="contact-chip" data-chip-idx="${i}">
+          <span class="contact-chip-avatar">${avatarHtml}</span>
+          ${escapeHtml(name)}
+          <button type="button" class="contact-chip-remove" data-remove-idx="${i}" aria-label="remove">×</button>
+        </span>
+      `;
+    }).join(' ');
+    chipWrap.querySelectorAll('[data-remove-idx]').forEach((btn) => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.removeIdx, 10);
+        selectedContacts.splice(idx, 1);
+        renderChips();
+        searchInput.focus();
+      };
+    });
   };
 
   attachContactSearch(searchInput, {
     onSelect: (c) => {
-      selectedContact = c;
-      if (!titleInput.value.trim()) {
+      // Skip duplicates
+      if (selectedContacts.some(s => s.uuid === c.uuid)) return;
+      selectedContacts.push(c);
+      if (selectedContacts.length === 1 && !titleInput.value.trim()) {
         titleInput.value = [c.first_name, c.last_name].filter(Boolean).join(' ');
       }
-      renderChip();
+      renderChips();
+      searchInput.value = '';
+      schedulePreview();
     },
   });
+
+  // Live page-count estimate. Debounced so the user can change date inputs
+  // without firing a request on every keystroke.
+  const previewEl = document.getElementById('book-preview-count');
+  let previewTimer = null;
+  const schedulePreview = () => {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(refreshPreview, 350);
+  };
+  const refreshPreview = async () => {
+    if (!selectedContacts.length) {
+      previewEl.textContent = '';
+      return;
+    }
+    previewEl.textContent = t('common.loading');
+    try {
+      const res = await api.post('/books/preview', {
+        contact_uuids: selectedContacts.map(c => c.uuid),
+        date_from: document.getElementById('book-date-from').value || null,
+        date_to: document.getElementById('book-date-to').value || null,
+        visibility_filter: 'shared_family',
+      });
+      previewEl.textContent = t('book.previewEstimate', {
+        posts: res.postCount,
+        pages: res.estimatedPages,
+      });
+    } catch {
+      previewEl.textContent = '';
+    }
+  };
+  document.getElementById('book-date-from').addEventListener('change', schedulePreview);
+  document.getElementById('book-date-to').addEventListener('change', schedulePreview);
 
   document.getElementById('btn-cancel').onclick = hideWizard;
 
   document.getElementById('book-form').onsubmit = async (e) => {
     e.preventDefault();
-    if (!selectedContact) {
+    if (!selectedContacts.length) {
       showError(t('book.errNoContact'));
       return;
     }
@@ -247,7 +289,7 @@ function attachWizardHandlers() {
       const payload = {
         title: titleInput.value.trim(),
         subtitle: subtitleInput.value.trim() || null,
-        contact_uuids: [selectedContact.uuid],
+        contact_uuids: selectedContacts.map(c => c.uuid),
         date_from: document.getElementById('book-date-from').value || null,
         date_to: document.getElementById('book-date-to').value || null,
         visibility_filter: 'shared_family',

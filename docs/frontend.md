@@ -20,6 +20,7 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `showProductDetailModal()` | `product-detail-modal.js` | Product detail modal with links, image, gift history. |
 | `openContactGiftModal()` / `giftContactLinkAttrs()` | `contact-gift-modal.js` | Modal shown when clicking a contact name anywhere in the gift app. Shows avatar, name, "open profile" button, and the contact's received/given gift history. Pages mark contact links with `giftContactLinkAttrs(contact)` — a global click delegate handles every link. |
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
+| `showMediaPicker()` | `media-picker.js` | Modal picker for selecting one or more existing images. Source-agnostic — currently supports `{ contactUuid }` (combines profile photos + post gallery) and `{ items }` (preloaded). Returns a Promise of selected items. Uses `.contact-gallery-grid` styling. New sources (groups, multi-contact, books) can be added in `loadFromSource`. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 
 ## Pages (28 files)

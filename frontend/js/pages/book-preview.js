@@ -16,6 +16,7 @@ import { navigate } from '../app.js';
 import { t, formatDateLong } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { confirmDialog } from '../components/dialogs.js';
+import { showMediaPicker } from '../components/media-picker.js';
 
 // Display an error via the shared confirmDialog (no native alert()).
 function showError(message) {
@@ -90,8 +91,16 @@ function effectiveWeight(post, overrides) {
 // Build pages using weight-based packing. Posts remain in chronological
 // order; small posts are collapsed into shared pages only when adjacent
 // (i.e. no big/normal post interrupts the run).
+//
+// Chapter grouping modes:
+//   'year'    — chapter divider at every year change
+//   'contact' — split posts into per-contact sections, each starting with
+//               a chapter divider showing the contact's name. Within a
+//               section, posts are still chronological. Only useful for
+//               multi-contact books.
+//   'none'    — no chapter dividers
 function buildPages(bookData, overrides) {
-  const { book, posts } = bookData;
+  const { book, posts, contacts } = bookData;
   const layout = book.layout_options || {};
 
   const pages = [];
@@ -103,9 +112,6 @@ function buildPages(bookData, overrides) {
       if (slice.length === 1) {
         pages.push({ type: 'post', post: slice[0], weight: 'small-solo' });
       } else {
-        // Apply manual ordering if the user reordered this batch. The
-        // stored order only includes posts still present in the batch;
-        // any new posts append at the end in chronological order.
         const key = batchKey(slice);
         const storedOrder = overrides.batchOrder?.[key];
         let ordered = slice;
@@ -126,35 +132,53 @@ function buildPages(bookData, overrides) {
     }
   };
 
-  const withYearDivider = layout.chapterGrouping === 'year';
-  let currentYear = null;
-  let batch = [];
-
-  for (const post of posts) {
-    const weight = effectiveWeight(post, overrides);
-    if (weight === 'hidden') continue;
-
-    // Year chapter divider — flush any pending small batch first so the
-    // divider visually separates years.
-    if (withYearDivider) {
-      const year = postYear(post);
-      if (year !== currentYear) {
+  // Process a sequence of posts (already filtered) producing pages with
+  // year-chapter dividers (if requested) and weight-based packing.
+  const processSequence = (sequence, withYearDivider) => {
+    let currentYear = null;
+    let batch = [];
+    for (const post of sequence) {
+      const weight = effectiveWeight(post, overrides);
+      if (weight === 'hidden') continue;
+      if (withYearDivider) {
+        const year = postYear(post);
+        if (year !== currentYear) {
+          flushBatch(batch);
+          currentYear = year;
+          pages.push({ type: 'chapter', year });
+        }
+      }
+      if (weight === 'small') {
+        batch.push(post);
+        if (batch.length === BATCH_PAGE_CAPACITY) flushBatch(batch);
+      } else {
         flushBatch(batch);
-        currentYear = year;
-        pages.push({ type: 'chapter', year });
+        pages.push({ type: 'post', post, weight });
       }
     }
+    flushBatch(batch);
+  };
 
-    if (weight === 'small') {
-      batch.push(post);
-      if (batch.length === BATCH_PAGE_CAPACITY) flushBatch(batch);
-    } else {
-      // 'full' interrupts a batch run
-      flushBatch(batch);
-      pages.push({ type: 'post', post, weight });
+  const grouping = layout.chapterGrouping || 'year';
+
+  if (grouping === 'contact' && contacts && contacts.length > 1) {
+    // Per-contact sections. Each contact gets a chapter divider with
+    // their name; their posts (subject only — tagged appearances are
+    // assumed to be reachable in another contact's section) are listed
+    // chronologically. Posts where the contact is not the subject are
+    // skipped to avoid duplication.
+    for (const c of contacts) {
+      const contactPosts = posts.filter(p => p.contact?.uuid === c.uuid);
+      if (!contactPosts.length) continue;
+      pages.push({
+        type: 'chapter',
+        year: [c.first_name, c.last_name].filter(Boolean).join(' '),
+      });
+      processSequence(contactPosts, false);
     }
+  } else {
+    processSequence(posts, grouping === 'year');
   }
-  flushBatch(batch);
 
   pages.push({ type: 'back', book });
   return pages;
@@ -164,8 +188,20 @@ function renderCoverPage(book) {
   const from = book.date_from ? new Date(book.date_from).getUTCFullYear() : null;
   const to = book.date_to ? new Date(book.date_to).getUTCFullYear() : null;
   const dateRange = from && to ? (from === to ? `${from}` : `${from} – ${to}`) : (from || to || '');
+  const theme = book.layout_options?.theme || {};
+  const coverImage = theme.coverImage;
+  const titlePos = theme.titlePosition || 'center';
+  // Inline style for the background — either a custom image, a solid
+  // color from the theme, or the default gradient.
+  let bgStyle = '';
+  if (coverImage) {
+    bgStyle = `background-image: url('${authUrl(coverImage)}'); background-size: cover; background-position: center;`;
+  } else if (theme.coverBg) {
+    bgStyle = `background: ${theme.coverBg};`;
+  }
   return `
-    <div class="book-page book-page-cover">
+    <div class="book-page book-page-cover book-cover-pos-${titlePos}" style="${bgStyle}">
+      ${coverImage ? '<div class="book-cover-overlay"></div>' : ''}
       <div class="book-cover-inner">
         <h1 class="book-cover-title">${escapeHtml(book.title)}</h1>
         ${book.subtitle ? `<p class="book-cover-subtitle">${escapeHtml(book.subtitle)}</p>` : ''}
@@ -185,11 +221,15 @@ function renderChapterPage(year) {
   `;
 }
 
-function renderBackPage() {
+function renderBackPage(book) {
+  const customBack = book?.layout_options?.theme?.backText;
+  const text = customBack && customBack.trim()
+    ? customBack
+    : t('book.backPageText');
   return `
     <div class="book-page book-page-back">
       <div class="book-back-inner">
-        <p class="book-back-text">${t('book.backPageText')}</p>
+        <p class="book-back-text">${escapeHtml(text)}</p>
       </div>
     </div>
   `;
@@ -476,11 +516,30 @@ function renderPage(page, overrides, bookMeta) {
   switch (page.type) {
     case 'cover': return renderCoverPage(page.book);
     case 'chapter': return renderChapterPage(page.year);
-    case 'back': return renderBackPage();
+    case 'back': return renderBackPage(page.book);
     case 'post': return renderPostPage(page.post, overrides, page.weight, bookMeta);
     case 'batch': return renderBatchPage(page.posts, overrides, page.key);
     default: return '<div class="book-page"></div>';
   }
+}
+
+// Page number element rendered on top of post/batch pages when the book
+// has page numbers enabled. Cover, chapter dividers and back cover never
+// show a number. Numbering starts at 1 on the first numbered page.
+function pageNumberHtml(pageIdx, pages, book) {
+  const showNumbers = book.layout_options?.showPageNumbers !== false;
+  if (!showNumbers) return '';
+  const page = pages[pageIdx];
+  if (!page || (page.type !== 'post' && page.type !== 'batch')) return '';
+  // Compute the visible number: count post/batch pages up to (and including) this index.
+  let n = 0;
+  for (let i = 0; i <= pageIdx; i++) {
+    const p = pages[i];
+    if (p.type === 'post' || p.type === 'batch') n += 1;
+  }
+  // Alternate left/right per book convention (odd = right, even = left).
+  const side = n % 2 === 1 ? 'right' : 'left';
+  return `<div class="book-page-number book-page-number-${side}">${n}</div>`;
 }
 
 // URL hash format: #view=flip&p=42, #view=grid, #view=editor
@@ -544,6 +603,7 @@ export function showEditInfoModal(book, onSave) {
               <label class="form-label">${t('book.fieldChapterGrouping')}</label>
               <select class="form-select" id="edit-chapter">
                 <option value="year"${(layout.chapterGrouping || 'year') === 'year' ? ' selected' : ''}>${t('book.chapterPerYear')}</option>
+                <option value="contact"${layout.chapterGrouping === 'contact' ? ' selected' : ''}>${t('book.chapterPerContact')}</option>
                 <option value="none"${layout.chapterGrouping === 'none' ? ' selected' : ''}>${t('book.chapterNone')}</option>
               </select>
             </div>
@@ -554,6 +614,10 @@ export function showEditInfoModal(book, onSave) {
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="edit-reactions" ${layout.includeReactions !== false ? 'checked' : ''}>
               <label class="form-check-label" for="edit-reactions">${t('book.includeReactions')}</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="edit-page-numbers" ${layout.showPageNumbers !== false ? 'checked' : ''}>
+              <label class="form-check-label" for="edit-page-numbers">${t('book.showPageNumbers')}</label>
             </div>
           </form>
         </div>
@@ -578,6 +642,7 @@ export function showEditInfoModal(book, onSave) {
         chapterGrouping: wrap.querySelector('#edit-chapter').value,
         includeComments: wrap.querySelector('#edit-comments').checked,
         includeReactions: wrap.querySelector('#edit-reactions').checked,
+        showPageNumbers: wrap.querySelector('#edit-page-numbers').checked,
       },
     };
     if (!payload.title) return;
@@ -590,7 +655,19 @@ export function showEditInfoModal(book, onSave) {
 
 export async function renderBookPreview(bookUuid) {
   const content = document.getElementById('app-content');
-  content.innerHTML = `<div class="page-container"><p class="text-muted">${t('common.loading')}</p></div>`;
+  // Skeleton loading state — gives feedback while large books fetch their
+  // /data response (which can take a few seconds for 1000+ post books).
+  content.innerHTML = `
+    <div class="book-skeleton">
+      <div class="book-skeleton-toolbar"></div>
+      <div class="book-skeleton-stage">
+        <div class="book-skeleton-page">
+          <div class="book-skeleton-shimmer"></div>
+        </div>
+      </div>
+      <p class="book-skeleton-label">${t('book.loading')}</p>
+    </div>
+  `;
 
   let data;
   try {
@@ -670,6 +747,23 @@ export async function renderBookPreview(bookUuid) {
   let editorMode = false;
   let pageEditPostUuid = null;
   let batchEditPageIdx = null;
+  let coverEditMode = false;
+
+  // Book theme (colors + fonts + cover image + title position) is stored
+  // on layout_options.theme. Applied via CSS custom properties on the
+  // .book-viewer element, scoped to the book only.
+  const themeVarsStyle = () => {
+    const theme = data.book.layout_options?.theme || {};
+    const parts = [];
+    if (theme.accent) parts.push(`--book-accent: ${theme.accent}`);
+    if (theme.fontFamily) parts.push(`--book-font: ${theme.fontFamily}`);
+    // Body font size scale: small/normal/large maps to a multiplier on
+    // the base 12pt body font.
+    const sizeScale = { small: 0.88, normal: 1, large: 1.12 };
+    const scale = sizeScale[theme.fontSize] || 1;
+    parts.push(`--book-text-scale: ${scale}`);
+    return parts.join('; ');
+  };
 
   // Restore view mode from URL hash so refresh keeps the user where they were.
   const initialState = readHashState();
@@ -682,7 +776,7 @@ export async function renderBookPreview(bookUuid) {
 
   const renderShell = () => {
     content.innerHTML = `
-      <div class="book-viewer${gridMode ? ' is-grid' : ''}${editorMode ? ' is-editor' : ''}${(pageEditPostUuid || batchEditPageIdx != null) ? ' is-page-edit' : ''}" id="book-viewer">
+      <div class="book-viewer${gridMode ? ' is-grid' : ''}${editorMode ? ' is-editor' : ''}${(pageEditPostUuid || batchEditPageIdx != null || coverEditMode) ? ' is-page-edit' : ''}" id="book-viewer" style="${themeVarsStyle()}">
         <div class="book-toolbar no-print">
           <div class="book-toolbar-inner">
             <button class="btn btn-outline-secondary btn-sm" id="book-btn-back">
@@ -724,7 +818,7 @@ export async function renderBookPreview(bookUuid) {
           </div>
         </div>
 
-        ${batchEditPageIdx != null ? renderBatchEditView() : (pageEditPostUuid ? renderPageEditView() : (gridMode ? renderGridView() : (editorMode ? renderEditorView() : renderFlipView())))}
+        ${coverEditMode ? renderCoverEditView() : (batchEditPageIdx != null ? renderBatchEditView() : (pageEditPostUuid ? renderPageEditView() : (gridMode ? renderGridView() : (editorMode ? renderEditorView() : renderFlipView()))))}
 
         ${data.posts.length === 0 ? `<div class="book-empty-state no-print"><p class="text-muted">${t('book.emptyState')}</p></div>` : ''}
       </div>
@@ -742,10 +836,11 @@ export async function renderBookPreview(bookUuid) {
         <i class="bi bi-chevron-left"></i>
       </button>
       <div class="book-pages-frame ${spreadMode ? 'is-spread' : ''}" id="book-pages-frame">
-        <div class="book-pages ${spreadMode ? 'is-spread' : ''}" id="book-pages">
+        <div class="book-pages ${spreadMode ? 'is-spread' : ''}" id="book-pages" data-flip-dir="next">
           ${pages.map((p, i) => `
             <div class="book-page-wrap" data-idx="${i}">
               ${renderPage(p, overrides, bookMeta)}
+              ${pageNumberHtml(i, pages, data.book)}
               ${p.type === 'post' ? `
                 <button type="button" class="book-page-edit-btn no-print" data-page-edit-post="${escapeHtml(p.post.uuid)}" title="${escapeHtml(t('book.editPage'))}">
                   <i class="bi bi-pencil"></i>
@@ -753,6 +848,11 @@ export async function renderBookPreview(bookUuid) {
               ` : ''}
               ${p.type === 'batch' ? `
                 <button type="button" class="book-page-edit-btn no-print" data-page-edit-batch="${i}" title="${escapeHtml(t('book.editPage'))}">
+                  <i class="bi bi-pencil"></i>
+                </button>
+              ` : ''}
+              ${p.type === 'cover' ? `
+                <button type="button" class="book-page-edit-btn no-print" data-page-edit-cover="1" title="${escapeHtml(t('book.editCover'))}">
                   <i class="bi bi-pencil"></i>
                 </button>
               ` : ''}
@@ -835,7 +935,7 @@ export async function renderBookPreview(bookUuid) {
             <div class="form-text">${t('book.customTextHint')}</div>
           </div>
 
-          ${allImages.length ? `
+          ${allImages.length > 1 ? `
             <div class="book-page-editor-section">
               <label class="book-editor-label">${t('book.images')} (${availableCount}/${allImages.length})</label>
               <div class="book-editor-images">
@@ -869,6 +969,136 @@ export async function renderBookPreview(bookUuid) {
             <button type="button" class="btn btn-outline-danger btn-sm w-100" data-page-editor-hide>
               <i class="bi bi-eye-slash me-1"></i>${t('book.excludePage')}
             </button>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Cover editor: dedicated view for customizing the book's front cover
+  // (background image or color, title position, accent color, font).
+  const renderCoverEditView = () => {
+    const theme = data.book.layout_options?.theme || {};
+    const titlePos = theme.titlePosition || 'center';
+    const accent = theme.accent || '#c88b3a';
+    const coverBg = theme.coverBg || '';
+    const fontFamily = theme.fontFamily || '';
+    const hasImage = !!theme.coverImage;
+
+    const FONTS = [
+      { id: '', label: 'Georgia (default)' },
+      { id: "'Palatino Linotype', Palatino, serif", label: 'Palatino' },
+      { id: 'Garamond, serif', label: 'Garamond' },
+      { id: 'Baskerville, serif', label: 'Baskerville' },
+      { id: "'Helvetica Neue', Helvetica, Arial, sans-serif", label: 'Helvetica' },
+      { id: "Inter, system-ui, sans-serif", label: 'Inter' },
+    ];
+
+    const POSITIONS = [
+      { id: 'center', icon: 'align-center' },
+      { id: 'top', icon: 'align-top' },
+      { id: 'bottom', icon: 'align-bottom' },
+      { id: 'bottom-left', icon: 'layout-text-window-reverse' },
+    ];
+
+    return `
+      <div class="book-page-editor">
+        <div class="book-page-editor-preview">
+          <div class="book-page-editor-preview-frame">
+            <div class="book-page-editor-preview-scale" id="book-page-editor-scale">
+              ${renderCoverPage(data.book)}
+            </div>
+          </div>
+          <p class="text-muted small mt-3 text-center">
+            <i class="bi bi-info-circle me-1"></i>${t('book.coverEditHint')}
+          </p>
+        </div>
+        <div class="book-page-editor-panel glass-card">
+          <div class="book-page-editor-header">
+            <div>
+              <div class="book-page-editor-title">${t('book.editCover')}</div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="book-page-editor-done">
+              <i class="bi bi-check-lg me-1"></i>${t('book.done')}
+            </button>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.fieldTitle')}</label>
+            <input type="text" class="form-control form-control-sm" id="cover-edit-title"
+              value="${escapeHtml(data.book.title || '')}" maxlength="255">
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.fieldSubtitle')}</label>
+            <input type="text" class="form-control form-control-sm" id="cover-edit-subtitle"
+              value="${escapeHtml(data.book.subtitle || '')}" maxlength="255">
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.coverBackground')}</label>
+            <div class="d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-primary btn-sm" id="cover-pick-from-book">
+                <i class="bi bi-images me-1"></i>${t('book.pickFromBook')}
+              </button>
+              <label class="btn btn-outline-secondary btn-sm mb-0">
+                <i class="bi bi-upload me-1"></i>${t('book.uploadImage')}
+                <input type="file" id="cover-upload" accept="image/*" class="d-none">
+              </label>
+              ${hasImage ? `
+                <button type="button" class="btn btn-outline-danger btn-sm" id="cover-remove-image">
+                  <i class="bi bi-trash3 me-1"></i>${t('book.removeImage')}
+                </button>
+              ` : ''}
+            </div>
+            <label class="book-editor-label mt-2">${t('book.orSolidColor')}</label>
+            <input type="color" class="form-control form-control-sm form-control-color"
+              id="cover-edit-bg" value="${escapeHtml(coverBg || '#2c3e50')}">
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.titlePosition')}</label>
+            <div class="book-editor-tpl-row">
+              ${POSITIONS.map(p => `
+                <button type="button"
+                  class="book-tpl-btn ${titlePos === p.id ? 'is-active' : ''}"
+                  data-cover-pos="${p.id}"
+                  title="${escapeHtml(t('book.pos_' + p.id.replace('-', '_')))}">
+                  <i class="bi bi-${p.icon}"></i>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label">${t('book.accentColor')}</label>
+            <input type="color" class="form-control form-control-sm form-control-color"
+              id="cover-edit-accent" value="${escapeHtml(accent)}">
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label" for="cover-edit-font">${t('book.fontFamily')}</label>
+            <select class="form-select form-select-sm" id="cover-edit-font">
+              ${FONTS.map(f => `
+                <option value="${escapeHtml(f.id)}" ${fontFamily === f.id ? 'selected' : ''}
+                  style="font-family: ${f.id || 'Georgia, serif'}">${escapeHtml(f.label)}</option>
+              `).join('')}
+            </select>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label" for="cover-edit-back">${t('book.backText')}</label>
+            <textarea class="form-control form-control-sm" id="cover-edit-back" rows="3"
+              placeholder="${escapeHtml(t('book.backPageText'))}">${escapeHtml(theme.backText || '')}</textarea>
+          </div>
+
+          <div class="book-page-editor-section">
+            <label class="book-editor-label" for="cover-edit-fontsize">${t('book.fontSize')}</label>
+            <select class="form-select form-select-sm" id="cover-edit-fontsize">
+              <option value="small" ${(theme.fontSize || 'normal') === 'small' ? 'selected' : ''}>${t('book.fontSize_small')}</option>
+              <option value="normal" ${(theme.fontSize || 'normal') === 'normal' ? 'selected' : ''}>${t('book.fontSize_normal')}</option>
+              <option value="large" ${theme.fontSize === 'large' ? 'selected' : ''}>${t('book.fontSize_large')}</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1069,6 +1299,13 @@ export async function renderBookPreview(bookUuid) {
                 <button type="button" class="book-grid-edit-btn no-print"
                         data-grid-edit-batch="${i}"
                         title="${escapeHtml(t('book.editPage'))}">
+                  <i class="bi bi-pencil"></i>
+                </button>
+              ` : ''}
+              ${p.type === 'cover' ? `
+                <button type="button" class="book-grid-edit-btn no-print"
+                        data-grid-edit-cover="1"
+                        title="${escapeHtml(t('book.editCover'))}">
                   <i class="bi bi-pencil"></i>
                 </button>
               ` : ''}
@@ -1320,7 +1557,30 @@ export async function renderBookPreview(bookUuid) {
   };
 
   const goTo = (idx) => {
-    currentPage = Math.max(0, Math.min(pages.length - 1, idx));
+    const targetPage = Math.max(0, Math.min(pages.length - 1, idx));
+    const dir = targetPage > currentPage ? 'next' : (targetPage < currentPage ? 'prev' : null);
+
+    // Tag the page being left behind so it slides out the opposite way.
+    if (dir) {
+      const pagesEl = document.getElementById('book-pages');
+      if (pagesEl) {
+        pagesEl.dataset.flipDir = dir;
+        const wraps = pagesEl.querySelectorAll('.book-page-wrap');
+        const oldWrap = wraps[currentPage];
+        if (oldWrap) {
+          // Clear any previous leaving classes first.
+          oldWrap.classList.remove('is-leaving-next', 'is-leaving-prev');
+          oldWrap.classList.add(`is-leaving-${dir}`);
+          // Strip the leaving class once the transition is done so the
+          // page returns to the off-screen position dictated by data-flip-dir.
+          setTimeout(() => {
+            oldWrap.classList.remove(`is-leaving-${dir}`);
+          }, 500);
+        }
+      }
+    }
+
+    currentPage = targetPage;
     if (spreadMode && currentPage > 0 && currentPage % 2 === 0) {
       currentPage = currentPage - 1;
     }
@@ -1345,7 +1605,18 @@ export async function renderBookPreview(bookUuid) {
   };
 
   function attachShellHandlers() {
-    document.getElementById('book-btn-back').onclick = () => navigate('/settings/generate-book');
+    document.getElementById('book-btn-back').onclick = () => {
+      // If in any sub-editor (page/batch/cover), back exits the editor
+      // first instead of leaving the book entirely.
+      if (pageEditPostUuid || batchEditPageIdx != null || coverEditMode) {
+        pageEditPostUuid = null;
+        batchEditPageIdx = null;
+        coverEditMode = false;
+        renderShell();
+        return;
+      }
+      navigate('/settings/generate-book');
+    };
     document.getElementById('book-btn-editmeta').onclick = () => openEditInfoModal();
     document.getElementById('book-btn-print').onclick = () => {
       // Always print the full (non-excluded) flip view, so disable grid mode first.
@@ -1382,22 +1653,183 @@ export async function renderBookPreview(bookUuid) {
     // sub-modes like page-edit or batch-edit.
     document.getElementById('book-btn-flip').onclick = () => {
       gridMode = false; editorMode = false;
-      pageEditPostUuid = null; batchEditPageIdx = null;
+      pageEditPostUuid = null; batchEditPageIdx = null; coverEditMode = false;
       writeHashState({ view: 'flip', pageIdx: currentPage });
       renderShell();
     };
     document.getElementById('book-btn-grid').onclick = () => {
       gridMode = true; editorMode = false;
-      pageEditPostUuid = null; batchEditPageIdx = null;
+      pageEditPostUuid = null; batchEditPageIdx = null; coverEditMode = false;
       writeHashState({ view: 'grid' });
       renderShell();
     };
     document.getElementById('book-btn-editor').onclick = () => {
       editorMode = true; gridMode = false;
-      pageEditPostUuid = null; batchEditPageIdx = null;
+      pageEditPostUuid = null; batchEditPageIdx = null; coverEditMode = false;
       writeHashState({ view: 'editor' });
       renderShell();
     };
+
+    // Cover editor handlers
+    if (coverEditMode) {
+      const scaleEl = document.getElementById('book-page-editor-scale');
+      if (scaleEl) {
+        const frame = scaleEl.parentElement;
+        const applyScale = () => {
+          const w = frame.clientWidth;
+          const MM = 96 / 25.4;
+          const scale = Math.min(1, w / (200 * MM));
+          scaleEl.style.transform = `scale(${scale})`;
+          frame.style.height = `${200 * MM * scale}px`;
+        };
+        applyScale();
+        window.requestAnimationFrame(applyScale);
+      }
+
+      const refreshCoverPreview = () => {
+        const scale = document.getElementById('book-page-editor-scale');
+        if (scale) scale.innerHTML = renderCoverPage(data.book);
+        const viewer = document.getElementById('book-viewer');
+        if (viewer) viewer.setAttribute('style', themeVarsStyle());
+      };
+
+      // Save a theme change to the book and refresh the preview.
+      const saveTheme = async (themePatch) => {
+        const merged = {
+          ...(data.book.layout_options || {}),
+          theme: { ...(data.book.layout_options?.theme || {}), ...themePatch },
+        };
+        data.book.layout_options = merged;
+        refreshCoverPreview();
+        try {
+          const res = await api.patch(`/books/${bookUuid}`, { layout_options: merged });
+          data.book = res.book;
+        } catch (err) {
+          showError(err.message || t('book.errSaveFailed'));
+        }
+      };
+
+      // Title / subtitle debounced save
+      const titleInput = document.getElementById('cover-edit-title');
+      const subtitleInput = document.getElementById('cover-edit-subtitle');
+      let metaTimer = null;
+      const scheduleMetaSave = () => {
+        if (metaTimer) clearTimeout(metaTimer);
+        metaTimer = setTimeout(async () => {
+          try {
+            const res = await api.patch(`/books/${bookUuid}`, {
+              title: titleInput.value.trim(),
+              subtitle: subtitleInput.value.trim() || null,
+            });
+            data.book = res.book;
+            refreshCoverPreview();
+          } catch (err) { showError(err.message || t('book.errSaveFailed')); }
+        }, 400);
+      };
+      titleInput.addEventListener('input', scheduleMetaSave);
+      subtitleInput.addEventListener('input', scheduleMetaSave);
+
+      // Title position
+      document.querySelectorAll('[data-cover-pos]').forEach((btn) => {
+        btn.onclick = () => {
+          saveTheme({ titlePosition: btn.dataset.coverPos });
+          document.querySelectorAll('[data-cover-pos]').forEach(b => b.classList.toggle('is-active', b === btn));
+        };
+      });
+
+      // Background solid color
+      const bgInput = document.getElementById('cover-edit-bg');
+      bgInput.addEventListener('input', () => {
+        saveTheme({ coverBg: bgInput.value, coverImage: null });
+      });
+
+      // Accent color
+      const accentInput = document.getElementById('cover-edit-accent');
+      accentInput.addEventListener('input', () => {
+        saveTheme({ accent: accentInput.value });
+      });
+
+      // Font family
+      const fontSelect = document.getElementById('cover-edit-font');
+      fontSelect.addEventListener('change', () => {
+        saveTheme({ fontFamily: fontSelect.value });
+      });
+
+      // Body font size
+      const fontSizeSelect = document.getElementById('cover-edit-fontsize');
+      fontSizeSelect.addEventListener('change', () => {
+        saveTheme({ fontSize: fontSizeSelect.value });
+      });
+
+      // Back-cover text (debounced)
+      const backTextEl = document.getElementById('cover-edit-back');
+      let backTextTimer = null;
+      backTextEl.addEventListener('input', () => {
+        if (backTextTimer) clearTimeout(backTextTimer);
+        backTextTimer = setTimeout(() => {
+          saveTheme({ backText: backTextEl.value || null });
+        }, 400);
+      });
+
+      // Pick cover from existing media (uses the reusable media-picker)
+      const pickBtn = document.getElementById('cover-pick-from-book');
+      if (pickBtn) {
+        pickBtn.onclick = async () => {
+          // Source from all of the book's contacts. The media picker
+          // dedupes images that appear for several contacts.
+          const contactUuids = data.book.contact_uuids || [];
+          if (!contactUuids.length) return;
+          const picked = await showMediaPicker({
+            title: t('book.pickFromBook'),
+            source: { contactUuids },
+          });
+          if (picked.length > 0) {
+            saveTheme({ coverImage: picked[0].file_path });
+          }
+        };
+      }
+
+      // Cover image upload
+      const uploadInput = document.getElementById('cover-upload');
+      uploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const fd = new FormData();
+          fd.append('cover', file);
+          const res = await api.upload(`/books/${bookUuid}/cover`, fd);
+          const merged = {
+            ...(data.book.layout_options || {}),
+            theme: { ...(data.book.layout_options?.theme || {}), coverImage: res.coverImage },
+          };
+          data.book.layout_options = merged;
+          renderShell();
+        } catch (err) { showError(err.message || t('book.errSaveFailed')); }
+        uploadInput.value = '';
+      });
+
+      // Remove uploaded cover image
+      const removeBtn = document.getElementById('cover-remove-image');
+      if (removeBtn) {
+        removeBtn.onclick = async () => {
+          try {
+            await api.delete(`/books/${bookUuid}/cover`);
+            const merged = {
+              ...(data.book.layout_options || {}),
+              theme: { ...(data.book.layout_options?.theme || {}), coverImage: null },
+            };
+            data.book.layout_options = merged;
+            renderShell();
+          } catch (err) { showError(err.message || t('book.errSaveFailed')); }
+        };
+      }
+
+      document.getElementById('book-page-editor-done').onclick = () => {
+        coverEditMode = false;
+        renderShell();
+      };
+      return;
+    }
 
     // Batch editor handlers — opened via pencil on a batch page. Focused
     // only on editing THIS page (focal points + captions). Structural
@@ -1617,6 +2049,29 @@ export async function renderBookPreview(bookUuid) {
     } else if (!gridMode) {
       document.getElementById('book-nav-prev').onclick = prev;
       document.getElementById('book-nav-next').onclick = next;
+      // Swipe gestures on the page frame for mobile navigation.
+      const frame = document.getElementById('book-pages-frame');
+      if (frame) {
+        let touchX = null;
+        let touchY = null;
+        frame.addEventListener('touchstart', (e) => {
+          if (e.touches.length !== 1) return;
+          touchX = e.touches[0].clientX;
+          touchY = e.touches[0].clientY;
+        }, { passive: true });
+        frame.addEventListener('touchend', (e) => {
+          if (touchX == null) return;
+          const t2 = e.changedTouches[0];
+          const dx = t2.clientX - touchX;
+          const dy = t2.clientY - touchY;
+          touchX = null; touchY = null;
+          // Horizontal swipe of at least 50px and mostly horizontal motion.
+          if (Math.abs(dx) >= 50 && Math.abs(dy) < 40) {
+            if (dx < 0) next(); else prev();
+          }
+        }, { passive: true });
+      }
+
       // Pencil on a post page → dedicated per-page editor
       document.querySelectorAll('[data-page-edit-post]').forEach((btn) => {
         btn.onclick = (e) => {
@@ -1630,6 +2085,14 @@ export async function renderBookPreview(bookUuid) {
         btn.onclick = (e) => {
           e.stopPropagation();
           batchEditPageIdx = parseInt(btn.dataset.pageEditBatch, 10);
+          renderShell();
+        };
+      });
+      // Pencil on the cover → cover editor
+      document.querySelectorAll('[data-page-edit-cover]').forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          coverEditMode = true;
           renderShell();
         };
       });
@@ -1650,6 +2113,14 @@ export async function renderBookPreview(bookUuid) {
         btn.onclick = (e) => {
           e.stopPropagation();
           batchEditPageIdx = parseInt(btn.dataset.gridEditBatch, 10);
+          gridMode = false;
+          renderShell();
+        };
+      });
+      viewer.querySelectorAll('[data-grid-edit-cover]').forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          coverEditMode = true;
           gridMode = false;
           renderShell();
         };

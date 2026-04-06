@@ -1,7 +1,22 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs/promises';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
+import { processImage } from '../services/image.js';
+import { config } from '../config/index.js';
+
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const coverUpload = multer({
+  dest: path.join(config.uploads.dir, 'temp'),
+  limits: { fileSize: config.uploads.maxFileSize },
+  fileFilter: (req, file, cb) => {
+    if (IMAGE_TYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new AppError('Only JPEG, PNG, WebP and GIF images are allowed', 400));
+  },
+});
 
 const router = Router();
 
@@ -325,5 +340,150 @@ function stripContact(c) {
     birth_year: c.birth_year,
   };
 }
+
+// ── POST /api/books/preview — estimate post + page count ──
+//
+// Returns the number of matching posts and a rough page estimate without
+// creating a book. Used by the create wizard to show "≈ N pages" before
+// the user commits.
+router.post('/preview', async (req, res, next) => {
+  try {
+    const { contact_uuids, date_from, date_to, visibility_filter } = req.body || {};
+    if (!Array.isArray(contact_uuids) || contact_uuids.length === 0) {
+      return res.json({ postCount: 0, estimatedPages: 0 });
+    }
+    const { ids: contactIds } = await resolveContacts(req.tenantId, contact_uuids);
+    if (!contactIds.length) {
+      return res.json({ postCount: 0, estimatedPages: 0 });
+    }
+    const allowedVisibilities = visibility_filter === 'shared'
+      ? ['shared'] : ['shared', 'family'];
+
+    const subjectPosts = await db('posts')
+      .where({ tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .whereIn('contact_id', contactIds)
+      .whereIn('visibility', allowedVisibilities)
+      .modify((q) => {
+        if (date_from) q.where('post_date', '>=', date_from);
+        if (date_to) q.where('post_date', '<=', date_to);
+      })
+      .select('id');
+
+    const taggedPosts = await db('post_contacts')
+      .join('posts', 'post_contacts.post_id', 'posts.id')
+      .where('posts.tenant_id', req.tenantId)
+      .whereNull('posts.deleted_at')
+      .whereIn('post_contacts.contact_id', contactIds)
+      .whereIn('posts.visibility', allowedVisibilities)
+      .modify((q) => {
+        if (date_from) q.where('posts.post_date', '>=', date_from);
+        if (date_to) q.where('posts.post_date', '<=', date_to);
+      })
+      .select('posts.id');
+
+    const postIdSet = new Set([...subjectPosts.map(p => p.id), ...taggedPosts.map(p => p.id)]);
+    const postIds = [...postIdSet];
+    const postCount = postIds.length;
+
+    if (!postCount) {
+      return res.json({ postCount: 0, estimatedPages: 2 }); // cover + back
+    }
+
+    // Score each post to estimate full vs small. Same formula as the
+    // frontend autoWeightForPost: full when score >= 8, else small.
+    // Score = likes×3 + comments×4 + bodyLen/20 + mediaCount×2.
+    const counts = await db('posts')
+      .whereIn('id', postIds)
+      .select('id', 'body')
+      .select(db.raw('(SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = posts.id) as likes'))
+      .select(db.raw('(SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = posts.id) as comments'))
+      .select(db.raw("(SELECT COUNT(*) FROM post_media pm WHERE pm.post_id = posts.id AND pm.file_type LIKE 'image/%') as media"));
+
+    let fullCount = 0;
+    let smallCount = 0;
+    for (const p of counts) {
+      const bodyLen = (p.body || '').length;
+      const score = Number(p.likes) * 3 + Number(p.comments) * 4 + bodyLen / 20 + Number(p.media) * 2;
+      if (score >= 8) fullCount += 1;
+      else smallCount += 1;
+    }
+
+    // Pages = cover + full posts + ceil(small/4 batches) + back. Adds a
+    // chapter divider per year as a rough estimate when grouping is on.
+    // We don't know the user's grouping choice yet so this is a baseline.
+    const batchPages = Math.ceil(smallCount / 4);
+    const estimatedPages = 2 + fullCount + batchPages;
+
+    res.json({ postCount, estimatedPages });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/books/:uuid/cover — upload custom cover image ──
+//
+// Stores the cover under /uploads/books/{bookUuid}/cover_*.webp and
+// updates layout_options.theme.coverImage to point at the new file.
+// Replacing the cover deletes the previous file.
+router.post('/:uuid/cover', coverUpload.single('cover'), async (req, res, next) => {
+  try {
+    if (!req.file) throw new AppError('No file uploaded', 400);
+    const book = await db('book_jobs')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId, user_id: req.user.id })
+      .first();
+    if (!book) throw new AppError('Book not found', 404);
+
+    const timestamp = Date.now();
+    const { filePath } = await processImage(
+      req.file.path,
+      `books/${book.uuid}`,
+      `cover_${timestamp}`,
+    );
+
+    // Remove previous cover file, if any
+    const layout = parseLayout(book.layout_options);
+    const prev = layout.theme?.coverImage;
+    if (prev && typeof prev === 'string' && prev.startsWith(`/uploads/books/${book.uuid}/`)) {
+      try {
+        const rel = prev.replace(/^\/uploads\//, '');
+        await fs.unlink(path.join(config.uploads.dir, rel));
+      } catch {}
+    }
+
+    const merged = { ...layout, theme: { ...(layout.theme || {}), coverImage: filePath } };
+    await db('book_jobs').where({ id: book.id }).update({
+      layout_options: JSON.stringify(merged),
+      updated_at: db.fn.now(),
+    });
+
+    res.json({ coverImage: filePath });
+  } catch (err) { next(err); }
+});
+
+// ── DELETE /api/books/:uuid/cover — remove custom cover image ──
+router.delete('/:uuid/cover', async (req, res, next) => {
+  try {
+    const book = await db('book_jobs')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId, user_id: req.user.id })
+      .first();
+    if (!book) throw new AppError('Book not found', 404);
+
+    const layout = parseLayout(book.layout_options);
+    const prev = layout.theme?.coverImage;
+    if (prev && typeof prev === 'string' && prev.startsWith(`/uploads/books/${book.uuid}/`)) {
+      try {
+        const rel = prev.replace(/^\/uploads\//, '');
+        await fs.unlink(path.join(config.uploads.dir, rel));
+      } catch {}
+    }
+
+    const merged = { ...layout, theme: { ...(layout.theme || {}), coverImage: null } };
+    await db('book_jobs').where({ id: book.id }).update({
+      layout_options: JSON.stringify(merged),
+      updated_at: db.fn.now(),
+    });
+
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
 
 export default router;

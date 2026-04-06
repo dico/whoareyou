@@ -30,13 +30,14 @@
   right: 50%;
   margin-left: -50vw;
   margin-right: -50vw;
-  /* Pull up through .app-content's top padding so the toolbar sits flush
-   * against the navbar. */
+  /* Compensate for .app-content's top + bottom padding so the viewer
+   * fills exactly (100vh - navbar) without creating overflow. */
   margin-top: calc(var(--space-lg) * -1);
+  margin-bottom: calc(var(--space-lg) * -1);
 }
 
-/* Toolbar bar spans the full viewport width, inner content is constrained
- * to match .app-content max-width (1000px) and stays centered. */
+/* Toolbar bar spans the full viewport width with a glass-effect background.
+ * Inner content stays within the standard 1000px width and is centered. */
 .book-toolbar {
   position: sticky;
   top: 0;
@@ -115,6 +116,9 @@
   width: calc(var(--book-page-width) * var(--book-scale, 1));
   height: calc(var(--book-page-height) * var(--book-scale, 1));
   flex-shrink: 0;
+  /* Clip the off-screen pages used by the flip animation so they don't
+   * create page-wide horizontal scrollbars. */
+  overflow: hidden;
 }
 .book-pages-frame.is-spread {
   width: calc((var(--book-page-width) * 2 + 2mm) * var(--book-scale, 1));
@@ -136,16 +140,50 @@
 
 /* Pages are stacked at the same position; only the active one is visible.
  * In spread mode, the active left page sits flush against the spine,
- * the right page sits to its right. */
+ * the right page sits to its right.
+ *
+ * Page-turn animation: pages slide horizontally based on the direction
+ * the user is flipping. data-flip-dir on .book-pages controls where new
+ * (incoming) pages start; .is-leaving-{dir} marks the page being left
+ * behind so it slides out to the opposite side. */
 .book-page-wrap {
   position: absolute;
   inset: 0;
-  display: none;
-  transform-origin: top left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(0);
+  transition:
+    opacity 0.32s ease,
+    transform 0.42s cubic-bezier(0.45, 0.05, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+/* Inactive pages sit off-screen on the side they will arrive from,
+ * based on the most recent flip direction. */
+.book-pages[data-flip-dir="next"] .book-page-wrap:not(.is-active):not(.is-leaving-next):not(.is-leaving-prev) {
+  transform: translateX(100%);
+}
+.book-pages[data-flip-dir="prev"] .book-page-wrap:not(.is-active):not(.is-leaving-next):not(.is-leaving-prev) {
+  transform: translateX(-100%);
 }
 
 .book-page-wrap.is-active {
-  display: block;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  z-index: 2;
+}
+
+/* The page being flipped away exits to the opposite side. */
+.book-page-wrap.is-leaving-next {
+  transform: translateX(-100%);
+  opacity: 0;
+  z-index: 1;
+}
+.book-page-wrap.is-leaving-prev {
+  transform: translateX(100%);
+  opacity: 0;
+  z-index: 1;
 }
 
 .book-pages.is-spread .book-page-wrap.is-active {
@@ -171,7 +209,7 @@
   border-radius: 2px;
   overflow: hidden;
   position: relative;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--book-font, Georgia, 'Times New Roman', serif);
   /* Fit the fixed-size page into the viewport container. */
   transform-origin: top left;
 }
@@ -227,6 +265,27 @@
 .book-viewmode-group .btn.active:hover {
   background: var(--book-accent);
   color: #fff;
+}
+
+/* Page numbers (book convention: odd on right, even on left). Sit at the
+ * bottom of the page outside the body padding. Hidden via the `no-print`
+ * sibling not needed — they're meant to be printed. */
+.book-page-number {
+  position: absolute;
+  bottom: 6mm;
+  font-size: 9pt;
+  color: var(--book-muted);
+  font-variant-numeric: tabular-nums;
+  z-index: 4;
+  pointer-events: none;
+}
+.book-page-number-left { left: 8mm; }
+.book-page-number-right { right: 8mm; }
+/* Light shadow makes them readable over full-bleed images. */
+.book-page-post[data-template="full-bleed"] ~ .book-page-number,
+.book-page-wrap:has(.book-page-post[data-template="full-bleed"]) .book-page-number {
+  color: rgba(255,255,255,0.9);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
 
 /* Page-edit pencil (hover overlay on each flip page) */
@@ -755,12 +814,31 @@
   background: linear-gradient(135deg, #2c3e50 0%, #4a6582 100%);
   color: #fff;
   display: flex;
-  align-items: center;
-  justify-content: center;
   text-align: center;
   padding: 20mm;
+  position: relative;
 }
-.book-cover-inner { max-width: 140mm; }
+/* Dark overlay for readability when a custom cover image is used. */
+.book-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%);
+  pointer-events: none;
+}
+.book-cover-inner {
+  max-width: 140mm;
+  position: relative;
+  z-index: 1;
+}
+
+/* Title position variants. */
+.book-cover-pos-center { align-items: center; justify-content: center; }
+.book-cover-pos-top { align-items: flex-start; justify-content: center; padding-top: 30mm; }
+.book-cover-pos-bottom { align-items: flex-end; justify-content: center; padding-bottom: 30mm; }
+.book-cover-pos-bottom-left {
+  align-items: flex-end; justify-content: flex-start;
+  padding-bottom: 24mm; padding-left: 20mm; text-align: left;
+}
 .book-cover-title {
   font-size: 42pt;
   font-weight: 700;
@@ -868,7 +946,7 @@
 .book-tpl-full-bleed .book-post-reactions-inline { color: #ff9b9b; }
 
 .book-post-text {
-  font-size: 12pt;
+  font-size: calc(12pt * var(--book-text-scale, 1));
   line-height: 1.5;
   color: var(--book-ink);
   white-space: pre-wrap;
@@ -1235,6 +1313,66 @@
   padding: var(--space-xl);
 }
 
+/* ── Loading skeleton ───────────────────── */
+.book-skeleton {
+  min-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: var(--space-xl);
+  background: var(--book-bg);
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  margin-left: -50vw;
+  margin-top: calc(var(--space-lg) * -1);
+}
+.book-skeleton-toolbar {
+  width: 100%;
+  max-width: 1000px;
+  height: 56px;
+  background: rgba(255,255,255,0.6);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  margin-bottom: var(--space-xl);
+}
+.book-skeleton-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+.book-skeleton-page {
+  width: 60vmin;
+  max-width: 500px;
+  aspect-ratio: 1;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  position: relative;
+  overflow: hidden;
+}
+.book-skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(200,139,58,0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: book-skeleton-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes book-skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.book-skeleton-label {
+  color: var(--book-muted);
+  margin-top: var(--space-lg);
+  font-size: 0.9rem;
+}
+
 /* ── Print styles ─────────────────────────────────────────────
  * One .book-page per physical page. Hides the viewer chrome and
  * shows every page sequentially, full-size. */
@@ -1273,6 +1411,8 @@
   .book-page-wrap {
     position: static !important;
     display: block !important;
+    opacity: 1 !important;
+    transform: none !important;
     page-break-after: always;
     break-after: page;
   }

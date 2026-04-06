@@ -160,12 +160,23 @@ app.use('/uploads/', (req, res, next) => {
 }, async (req, res, next) => {
   // Validate that the requested file belongs to the user's tenant
   const filePath = req.path; // e.g. /contacts/{uuid}/photo.webp or /posts/{uuid}/media.webp
-  const match = filePath.match(/^\/(contacts|posts|products)\/([a-f0-9-]+)\//);
+  const match = filePath.match(/^\/(contacts|posts|products|books)\/([a-f0-9-]+)\//);
   if (match) {
     const [, type, uuid] = match;
-    const table = type === 'contacts' ? 'contacts' : type === 'posts' ? 'posts' : 'gift_products';
+    const table = type === 'contacts' ? 'contacts'
+      : type === 'posts' ? 'posts'
+      : type === 'books' ? 'book_jobs'
+      : 'gift_products';
     const record = await db(table).where({ uuid, tenant_id: req.tenantId }).first();
     if (!record) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    // Book cover files are only served to the book's owner
+    if (type === 'books' && record.user_id !== req.user?.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    // Portal guests can never access book cover files
+    if (type === 'books' && req.portal) {
       return res.status(403).json({ error: 'Access denied' });
     }
     // Portal guests: verify the file belongs to an allowed contact
