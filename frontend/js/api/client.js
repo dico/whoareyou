@@ -25,7 +25,57 @@ async function refreshAccessToken() {
   return data.token;
 }
 
+/**
+ * Decode a JWT payload (base64url) without verifying the signature.
+ * Returns null if the token is malformed.
+ */
+function decodeJwt(token) {
+  try {
+    const payload = token.split('.')[1];
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refresh the access token if it has expired or is within 60 seconds
+ * of expiry. This keeps `localStorage.token` fresh enough that
+ * `<img src>` URLs with `?token=...` (which don't go through the
+ * fetch interceptor) stay valid between API calls.
+ */
+async function ensureFreshToken() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  const payload = decodeJwt(token);
+  if (!payload?.exp) return;
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp - now > 60) return; // still valid
+  if (!localStorage.getItem('refreshToken')) return;
+  try {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      refreshPromise = refreshAccessToken();
+    }
+    await refreshPromise;
+  } catch { /* ignore — request path will handle 401 */ }
+  finally {
+    isRefreshing = false;
+    refreshPromise = null;
+  }
+}
+
+// Background refresh: keep the access token fresh even when the user
+// is idle on the page without making API calls. Runs every 5 minutes;
+// ensureFreshToken is a no-op when the token has >60s left.
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => { ensureFreshToken().catch(() => {}); }, 5 * 60 * 1000);
+}
+
 async function request(method, path, body = null, _isRetry = false) {
+  await ensureFreshToken();
+
   const options = {
     method,
     headers: {},

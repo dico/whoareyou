@@ -407,23 +407,14 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
 
             <details class="mt-3">
               <summary class="text-muted small" style="cursor:pointer">${t('gifts.showAdvanced')}</summary>
-              <div class="row g-2 mt-2">
-                <div class="col-6">
-                  <label class="form-label small">${t('gifts.status')}</label>
-                  <select class="form-select form-select-sm" id="${mid}-status">
-                    ${['idea', 'reserved', 'purchased', 'wrapped', 'given'].map(s => {
-                      const defaultStatus = direction === 'incoming' ? 'given' : 'idea';
-                      return `<option value="${s}" ${s === defaultStatus ? 'selected' : ''}>${t('gifts.statuses.' + s)}</option>`;
-                    }).join('')}
-                  </select>
-                </div>
-                <div class="col-6">
-                  <label class="form-label small">${t('gifts.direction')}</label>
-                  <select class="form-select form-select-sm" id="${mid}-direction">
-                    <option value="outgoing" ${direction === 'outgoing' ? 'selected' : ''}>${t('gifts.outgoing')}</option>
-                    <option value="incoming" ${direction === 'incoming' ? 'selected' : ''}>${t('gifts.incoming')}</option>
-                  </select>
-                </div>
+              <div class="mt-2">
+                <label class="form-label small">${t('gifts.status')}</label>
+                <select class="form-select form-select-sm" id="${mid}-status">
+                  ${['idea', 'reserved', 'purchased', 'wrapped', 'given'].map(s => {
+                    const defaultStatus = direction === 'incoming' ? 'given' : 'idea';
+                    return `<option value="${s}" ${s === defaultStatus ? 'selected' : ''}>${t('gifts.statuses.' + s)}</option>`;
+                  }).join('')}
+                </select>
               </div>
             </details>
           </div>
@@ -450,7 +441,10 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   if (prefilledRecipients?.length) {
     recipients.push(...prefilledRecipients);
     renderModalChips(`${mid}-recipients`, recipients);
-  } else if (event?.honoree && direction === 'outgoing') {
+  } else if (event?.honoree) {
+    // Honoree is the default recipient for both directions:
+    //   outgoing = we give to honoree
+    //   incoming = honoree receives from others
     recipients.push(event.honoree);
     renderModalChips(`${mid}-recipients`, recipients);
   }
@@ -484,43 +478,51 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     if (countEl) countEl.textContent = addedGifts.length ? `${addedGifts.length} ${t('gifts.added')}` : '';
   }
 
-  // Add gift (per row)
+  // Add gift (per row). Returns true on success, false if nothing to add,
+  // throws on API failure.
   async function addGift() {
     const product = picker.getSelected();
-    if (!product) return;
+    if (!product || !product.title?.trim()) return false;
     const price = readPriceInput(document.getElementById(`${mid}-price`));
 
+    await api.post('/gifts/orders', {
+      title: product.title,
+      product_uuid: product.uuid || null,
+      event_uuid: eventUuid,
+      status: document.getElementById(`${mid}-status`).value,
+      order_type: direction,
+      price,
+      giver_uuids: givers.map(g => g.uuid),
+      recipient_uuids: recipients.map(r => r.uuid),
+    });
+    addedGifts.push({ title: product.title, price, image_url: product.image_url || null });
+    updateAddedList();
+    picker.clear();
+    document.getElementById(`${mid}-price`).value = '';
+    document.querySelector(`#${mid}-product input`)?.focus();
+    return true;
+  }
+
+  async function addGiftSafe() {
     try {
-      await api.post('/gifts/orders', {
-        title: product.title,
-        product_uuid: product.uuid || null,
-        event_uuid: eventUuid,
-        status: document.getElementById(`${mid}-status`).value,
-        order_type: document.getElementById(`${mid}-direction`).value,
-        price,
-        giver_uuids: givers.map(g => g.uuid),
-        recipient_uuids: recipients.map(r => r.uuid),
-      });
-      addedGifts.push({ title: product.title, price, image_url: product.image_url || null });
-      updateAddedList();
-      picker.clear();
-      document.getElementById(`${mid}-price`).value = '';
-      // Focus back on product input for rapid entry
-      document.querySelector(`#${mid}-product input`)?.focus();
+      return await addGift();
     } catch (err) {
-      confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+      console.error('Add gift failed', err);
+      confirmDialog(err.message || String(err), { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+      return false;
     }
   }
 
-  document.getElementById(`${mid}-add-btn`).addEventListener('click', addGift);
+  document.getElementById(`${mid}-add-btn`).addEventListener('click', addGiftSafe);
 
   // Enter in price field adds gift
   document.getElementById(`${mid}-price`).addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); addGift(); }
+    if (e.key === 'Enter') { e.preventDefault(); addGiftSafe(); }
   });
 
-  // Done — close and reload
-  document.getElementById(`${mid}-done`).addEventListener('click', () => {
+  // Done — flush any pending row (user may forget to click +), then close.
+  document.getElementById(`${mid}-done`).addEventListener('click', async () => {
+    await addGiftSafe();
     modal.hide();
   });
 

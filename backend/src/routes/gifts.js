@@ -13,13 +13,18 @@ function applyVisibilityFilter(query, userId, userLinkedContactId) {
         .where('gift_orders.created_by', userId);
     }).orWhere(function () {
       this.whereIn('gift_orders.visibility', ['shared', 'family']);
+      // Anti-spoiler: hide outgoing gifts that haven't been given yet from
+      // their recipient. Once status='given', or for incoming gifts (which
+      // are already-received history), the recipient should see them.
       if (userLinkedContactId) {
         this.whereNotExists(function () {
           this.select(db.raw(1))
             .from('gift_order_participants as gop')
             .whereRaw('gop.order_id = gift_orders.id')
             .where('gop.role', 'recipient')
-            .where('gop.contact_id', userLinkedContactId);
+            .where('gop.contact_id', userLinkedContactId)
+            .whereRaw(`gift_orders.order_type = 'outgoing'`)
+            .whereRaw(`gift_orders.status <> 'given'`);
         });
       }
     });
@@ -277,7 +282,9 @@ const productUpload = multer({
   dest: path.join(config.uploads.dir, 'temp'),
   limits: { fileSize: config.uploads.maxFileSize },
   fileFilter: (req, file, cb) => {
-    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype)) cb(null, true);
+    // Accept any image/* mimetype — sharp validates the actual file contents.
+    // Some sources send non-standard types like image/jpg or image/pjpeg.
+    if (file.mimetype?.startsWith('image/')) cb(null, true);
     else cb(new AppError('Only images allowed', 400));
   },
 });

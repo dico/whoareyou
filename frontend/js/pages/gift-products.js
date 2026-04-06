@@ -375,6 +375,8 @@ export async function showProductEditModal(productUuid) {
     if (document.getElementById('products-list')) {
       loadProducts(document.getElementById('product-search')?.value?.trim() || '');
     }
+    // Notify other pages (wishlists, planning, etc.) that a product changed
+    document.dispatchEvent(new CustomEvent('product-updated'));
   }, { once: true });
   modal.show();
 }
