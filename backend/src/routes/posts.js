@@ -14,7 +14,11 @@ const router = Router();
 router.get('/', async (req, res, next) => {
   try {
     const { contact, company, page, limit: rawLimit } = req.query;
-    const limit = Math.min(parseInt(rawLimit) || 20, 100);
+    // NOTE: hard cap lifted to 500 as a stopgap so the growing-limit
+    // "load more" pattern in post-list.js keeps working on contacts with
+    // hundreds of posts. Proper fix is cursor-based pagination — tracked
+    // in docs/todo.md under "Performance: scale for 5000+ posts".
+    const limit = Math.min(parseInt(rawLimit) || 20, 500);
     const offset = ((parseInt(page) || 1) - 1) * limit;
 
     let query = db('posts')

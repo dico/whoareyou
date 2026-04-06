@@ -1301,12 +1301,28 @@ function showGalleryLightbox(images, startIndex, contactUuid) {
           const { comments } = await api.get(`/posts/${img.post_uuid}/comments`);
           const el = document.getElementById(`${mid}-comments`);
           if (el) {
-            el.innerHTML = comments.length ? comments.map(c => `
-              <div class="gallery-lb-comment">
-                <strong class="small">${escapeHtml(c.user?.first_name || '')} ${escapeHtml(c.user?.last_name || '')}</strong>
-                <span class="small">${escapeHtml(c.body)}</span>
-              </div>
-            `).join('') : '';
+            el.innerHTML = comments.length ? comments.map(c => {
+              const firstName = c.user?.first_name || '?';
+              const initials = (firstName[0] || '?');
+              const avatarInner = c.user?.avatar
+                ? `<img src="${authUrl(c.user.avatar)}" alt="">`
+                : `<span>${escapeHtml(initials)}</span>`;
+              const avatarHtml = c.contact_uuid
+                ? `<a href="/contacts/${c.contact_uuid}" data-link class="gallery-lb-comment-avatar">${avatarInner}</a>`
+                : `<span class="gallery-lb-comment-avatar">${avatarInner}</span>`;
+              const nameHtml = c.contact_uuid
+                ? `<a href="/contacts/${c.contact_uuid}" data-link class="gallery-lb-comment-author">${escapeHtml(firstName)}</a>`
+                : `<strong class="gallery-lb-comment-author">${escapeHtml(firstName)}</strong>`;
+              return `
+                <div class="gallery-lb-comment">
+                  ${avatarHtml}
+                  <div class="gallery-lb-comment-body">
+                    ${nameHtml}
+                    <span class="small">${escapeHtml(c.body)}</span>
+                  </div>
+                </div>
+              `;
+            }).join('') : '';
           }
         } catch { /* ignore */ }
       }, 500);

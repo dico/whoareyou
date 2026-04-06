@@ -200,8 +200,10 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       </div>
     `).join('');
 
-    // Add "load more" button if there are more posts
-    const hasMore = data.pagination && data.posts.length >= currentLimit[key];
+    // Add "load more" button if the server has more posts than we've rendered.
+    // Compare against pagination.total rather than currentLimit[key] so the
+    // button stays visible even when the growing limit exceeds the backend cap.
+    const hasMore = data.pagination && data.posts.length < data.pagination.total;
     if (hasMore) {
       el.insertAdjacentHTML('beforeend', `
         <button class="btn btn-outline-secondary btn-sm w-100 mt-3 load-more-btn">

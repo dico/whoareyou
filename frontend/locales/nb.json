@@ -918,6 +918,8 @@
     "status": "Status",
     "notes": "Notater",
     "notesPlaceholder": "Notat (valgfritt)",
+    "errorRecipientRequired": "Velg minst én mottaker",
+    "errorGiverRequired": "Velg minst én giver",
     "statuses": {
       "idea": "Idé",
       "reserved": "Reservert",

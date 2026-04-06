@@ -918,6 +918,8 @@
     "status": "Status",
     "notes": "Notes",
     "notesPlaceholder": "Note (optional)",
+    "errorRecipientRequired": "Please select at least one recipient",
+    "errorGiverRequired": "Please select at least one giver",
     "statuses": {
       "idea": "Idea",
       "reserved": "Reserved",

@@ -259,38 +259,54 @@ function renderIncomingList(gifts, members) {
       };
     });
 
-  // Group gifts by recipient
-  const giftsByRecipient = new Map();
+  // Group gifts by the full recipient set (sorted UUID list) so a joint
+  // gift to "Kari + Ola" stays in one group with both names in the header,
+  // rather than being duplicated under each recipient individually.
+  const byRecipientSet = new Map();
   for (const g of gifts) {
-    const recipient = g.recipients?.[0];
-    const key = recipient?.uuid || '_unknown';
-    if (!giftsByRecipient.has(key)) giftsByRecipient.set(key, []);
-    giftsByRecipient.get(key).push(g);
+    const recs = g.recipients?.length ? g.recipients : [];
+    const key = recs.length ? recs.map(r => r.uuid).sort().join(',') : '_unknown';
+    if (!byRecipientSet.has(key)) {
+      byRecipientSet.set(key, { recipients: recs, gifts: [] });
+    }
+    byRecipientSet.get(key).gifts.push(g);
   }
 
-  const groups = [];
-  const shown = new Set();
-
+  // Ensure every family member has a section, even when they have no gifts
+  // yet. A member's solo section may already exist if they received
+  // individual gifts; otherwise we add an empty one.
   for (const m of familyMembers) {
-    groups.push({ contact: m, gifts: giftsByRecipient.get(m.uuid) || [] });
-    shown.add(m.uuid);
-  }
-
-  for (const [key, giftList] of giftsByRecipient) {
-    if (!shown.has(key)) {
-      const r = giftList[0]?.recipients?.[0] || { uuid: key, first_name: '?', last_name: '' };
-      groups.push({ contact: r, gifts: giftList });
+    if (!byRecipientSet.has(m.uuid)) {
+      byRecipientSet.set(m.uuid, { recipients: [m], gifts: [] });
     }
   }
 
+  const groups = [...byRecipientSet.values()];
   if (!groups.length) {
     return `<div class="empty-state"><i class="bi bi-gift"></i><p>${t('gifts.noGifts')}</p></div>`;
   }
 
-  return groups.map(group => {
-    const addBtn = `<button class="btn btn-link btn-sm gift-add-for-member" data-uuid="${group.contact.uuid}" data-name="${esc(group.contact.first_name)}"><i class="bi bi-plus-lg"></i></button>`;
+  // Sort: family-member-only groups first (matching the member order),
+  // then joint groups, then unknown.
+  const familyUuids = new Set(familyMembers.map(m => m.uuid));
+  const memberOrder = new Map(familyMembers.map((m, i) => [m.uuid, i]));
+  groups.sort((a, b) => {
+    const aSolo = a.recipients.length === 1 && familyUuids.has(a.recipients[0].uuid);
+    const bSolo = b.recipients.length === 1 && familyUuids.has(b.recipients[0].uuid);
+    if (aSolo && bSolo) return memberOrder.get(a.recipients[0].uuid) - memberOrder.get(b.recipients[0].uuid);
+    if (aSolo) return -1;
+    if (bSolo) return 1;
+    return 0;
+  });
 
-    // Group this member's gifts by giver(s) key
+  return groups.map(group => {
+    // Add button prefills with this group's recipient set
+    const recipientData = encodeURIComponent(JSON.stringify(
+      group.recipients.map(r => ({ uuid: r.uuid, first_name: r.first_name, last_name: r.last_name || '', avatar: r.avatar || null }))
+    ));
+    const addBtn = `<button class="btn btn-link btn-sm gift-add-for-recipients" data-recipients="${recipientData}"><i class="bi bi-plus-lg"></i></button>`;
+
+    // Group this recipient set's gifts by giver(s) key
     const byGiver = new Map();
     for (const g of group.gifts) {
       const key = g.givers?.map(c => c.uuid).sort().join(',') || '_unknown';
@@ -299,10 +315,13 @@ function renderIncomingList(gifts, members) {
     }
 
     const giverGroups = [...byGiver.values()];
+    const headerContacts = group.recipients.length
+      ? group.recipients
+      : [{ uuid: '_unknown', first_name: '?', last_name: '' }];
 
     return `
       <div class="gift-group">
-        ${renderGroupHeader([group.contact], { count: group.gifts.length, actionsHtml: addBtn })}
+        ${renderGroupHeader(headerContacts, { count: group.gifts.length, actionsHtml: addBtn })}
         ${group.gifts.length
           ? giverGroups.map(gg => {
             const uuids = gg.gifts.map(g => g.uuid).join(',');
@@ -421,7 +440,10 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
                 <label class="form-label small">${t('gifts.status')}</label>
                 <select class="form-select form-select-sm" id="${mid}-status">
                   ${['idea', 'reserved', 'purchased', 'wrapped', 'given', 'cancelled'].map(s => {
-                    const defaultStatus = editStatus || (direction === 'incoming' ? 'given' : 'idea');
+                    // Default: 'given' for incoming (already received), 'purchased' for outgoing
+                    // (gifts added from the Giving tab are things we've bought/are giving, not just ideas).
+                    // Planning-only 'idea'/'reserved' items live in the /gifts/planning page instead.
+                    const defaultStatus = editStatus || (direction === 'incoming' ? 'given' : 'purchased');
                     return `<option value="${s}" ${s === defaultStatus ? 'selected' : ''}>${t('gifts.statuses.' + s)}</option>`;
                   }).join('')}
                 </select>
@@ -561,6 +583,19 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     const giver_uuids = givers.map(g => g.uuid);
     const recipient_uuids = recipients.map(r => r.uuid);
 
+    // Nothing to save
+    if (!drafts.length) return;
+
+    // Require at least one recipient (outgoing: who's it for?)
+    // and one giver (incoming: who gave it?). Otherwise the row renders
+    // as an orphan with an empty From/To column.
+    if (direction === 'outgoing' && !recipient_uuids.length) {
+      throw new Error(t('gifts.errorRecipientRequired'));
+    }
+    if (direction === 'incoming' && !giver_uuids.length) {
+      throw new Error(t('gifts.errorGiverRequired'));
+    }
+
     // Delete original gifts that were removed from the drafts list
     if (isEdit) {
       const keptUuids = new Set(drafts.filter(d => d.uuid).map(d => d.uuid));
@@ -623,11 +658,6 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   modal.show();
 }
 
-function showGiftModalForRecipient(eventUuid, recipient) {
-  // Open the gift modal with incoming direction and pre-filled recipient
-  showGiftModal(eventUuid, null, 'incoming', [recipient]);
-}
-
 function renderModalChips(containerId, contacts) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -658,22 +688,12 @@ function attachGiftListHandlers(eventUuid) {
   const el = document.getElementById('gift-list');
   if (!el) return;
 
-  // "Add gift for member" in incoming view. Look up the full contact
-  // (including avatar) so the prefilled chip renders correctly.
-  el.querySelectorAll('.gift-add-for-member').forEach(btn => {
+  // "Add gift for recipients" in incoming view — prefills the modal with
+  // the full recipient set from this group's header.
+  el.querySelectorAll('.gift-add-for-recipients').forEach(btn => {
     btn.addEventListener('click', () => {
-      const uuid = btn.dataset.uuid;
-      const fromGift = pageGiftsCache
-        .flatMap(g => g.recipients || [])
-        .find(r => r.uuid === uuid);
-      const fromMember = pageMembers.find(m => m.linked_contact_uuid === uuid);
-      const recipient = fromGift || (fromMember ? {
-        uuid,
-        first_name: fromMember.first_name,
-        last_name: fromMember.last_name || '',
-        avatar: fromMember.avatar || null,
-      } : { uuid, first_name: btn.dataset.name, last_name: '' });
-      showGiftModalForRecipient(eventUuid, recipient);
+      const recipients = JSON.parse(decodeURIComponent(btn.dataset.recipients));
+      showGiftModal(eventUuid, pageEventCache, 'incoming', recipients);
     });
   });
 
