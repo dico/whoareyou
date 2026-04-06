@@ -110,6 +110,13 @@
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
+  position: relative;
+}
+
+/* Raise the card above its neighbours while its dropdown is open so the
+   menu doesn't get clipped by the next card's stacking context. */
+.contact-card:has(.dropdown-menu.show) {
+  z-index: 10;
 }
 
 .contact-card a {
