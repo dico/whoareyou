@@ -375,8 +375,8 @@ details[open] > .gift-ideas-label::before {
 }
 
 .gift-card-title {
-  font-weight: 500;
-  font-size: 0.875rem;
+  font-weight: 600;
+  font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -386,6 +386,20 @@ details[open] > .gift-ideas-label::before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.gift-card-desc {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  margin-top: 1px;
+}
+
+.gift-card-desc.expanded {
+  white-space: normal;
 }
 
 .gift-card-end {

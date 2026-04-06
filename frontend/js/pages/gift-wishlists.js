@@ -1,6 +1,6 @@
 import { api } from '../api/client.js';
 import { confirmDialog } from '../components/dialogs.js';
-import { t } from '../utils/i18n.js';
+import { t, formatPrice } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { giftSubNav } from './gifts.js';
 import { createProductPicker } from '../components/product-picker.js';
@@ -108,7 +108,7 @@ async function loadWishlists() {
         const itemsEl = el.querySelector(`.wishlist-items[data-contact-uuid="${contactUuid}"]`);
         let wishlistUuid = itemsEl?.dataset.wishlistUuid;
 
-        createProductPicker(pickerWrap, async (product) => {
+        const picker = createProductPicker(pickerWrap, async (product) => {
           if (!product) return;
           try {
             if (!wishlistUuid) {
@@ -124,6 +124,8 @@ async function loadWishlists() {
               product_uuid: product.uuid || null,
             });
             await loadWishlistItems(wishlistUuid, contactUuid);
+            picker.clear();
+            pickerWrap.querySelector('input')?.focus();
           } catch (err) {
             confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
           }
@@ -149,7 +151,10 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
       return;
     }
 
-    container.innerHTML = items.map(item => `
+    const activeItems = items.filter(i => !i.is_fulfilled);
+    const fulfilledItems = items.filter(i => i.is_fulfilled);
+
+    const renderItem = (item) => `
       <div class="gift-card ${item.is_fulfilled ? 'gift-card-fulfilled' : ''} ${item.product_uuid ? 'gift-card-clickable' : ''}" data-item-id="${item.id}" data-product-uuid="${item.product_uuid || ''}">
         <div class="gift-card-image">
           ${item.product_image_url
@@ -159,10 +164,13 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
         </div>
         <div class="gift-card-body">
           <div class="gift-card-title">${esc(item.title)}</div>
-          ${item.notes ? `<div class="gift-card-sub text-muted small">${esc(item.notes)}</div>` : ''}
+          ${(() => {
+            const desc = item.notes || item.product_description;
+            return desc ? `<div class="gift-card-desc text-muted" title="${esc(desc)}">${esc(desc)}</div>` : '';
+          })()}
         </div>
         <div class="gift-card-end">
-          ${item.default_price ? `<span class="gift-card-price">${Math.round(item.default_price)} kr</span>` : ''}
+          ${item.default_price ? `<span class="gift-card-price">${formatPrice(item.default_price)}</span>` : ''}
         </div>
         <div class="dropdown">
           <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
@@ -170,6 +178,12 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
             <li><a class="dropdown-item wishlist-toggle-fulfilled" href="#" data-wl="${wishlistUuid}" data-id="${item.id}" data-fulfilled="${item.is_fulfilled ? '1' : '0'}">
               <i class="bi bi-${item.is_fulfilled ? 'arrow-counterclockwise' : 'check-lg'} me-2"></i>${item.is_fulfilled ? t('gifts.markUnfulfilled') : t('gifts.markFulfilled')}
             </a></li>
+            <li><a class="dropdown-item wishlist-edit-item" href="#" data-wl="${wishlistUuid}" data-id="${item.id}" data-notes="${esc(item.notes || '')}" data-title="${esc(item.title)}">
+              <i class="bi bi-pencil me-2"></i>${t('gifts.editWish')}
+            </a></li>
+            ${item.product_uuid ? `<li><a class="dropdown-item wishlist-edit-product" href="#" data-product-uuid="${item.product_uuid}">
+              <i class="bi bi-box me-2"></i>${t('gifts.editProduct')}
+            </a></li>` : ''}
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger wishlist-delete-item" href="#" data-wl="${wishlistUuid}" data-id="${item.id}">
               <i class="bi bi-trash me-2"></i>${t('common.delete')}
@@ -177,7 +191,36 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
           </ul>
         </div>
       </div>
-    `).join('');
+    `;
+
+    container.innerHTML = `
+      ${activeItems.length
+        ? activeItems.map(renderItem).join('')
+        : `<p class="text-muted small">${t('gifts.noWishes')}</p>`}
+      ${fulfilledItems.length ? `
+        <button type="button" class="btn btn-link btn-sm wishlist-fulfilled-toggle mt-1" data-expanded="0">
+          <i class="bi bi-chevron-right me-1"></i>${t('gifts.showFulfilled', { count: fulfilledItems.length })}
+        </button>
+        <div class="wishlist-fulfilled-list d-none">
+          ${fulfilledItems.map(renderItem).join('')}
+        </div>
+      ` : ''}
+    `;
+
+    const toggleBtn = container.querySelector('.wishlist-fulfilled-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const expanded = toggleBtn.dataset.expanded === '1';
+        toggleBtn.dataset.expanded = expanded ? '0' : '1';
+        container.querySelector('.wishlist-fulfilled-list').classList.toggle('d-none', expanded);
+        toggleBtn.innerHTML = `<i class="bi bi-chevron-${expanded ? 'right' : 'down'} me-1"></i>${
+          expanded
+            ? t('gifts.showFulfilled', { count: fulfilledItems.length })
+            : t('gifts.hideFulfilled', { count: fulfilledItems.length })
+        }`;
+      });
+    }
 
     // Handlers
     container.querySelectorAll('.wishlist-toggle-fulfilled').forEach(btn => {
@@ -187,6 +230,27 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
           is_fulfilled: btn.dataset.fulfilled === '0',
         });
         await loadWishlistItems(wishlistUuid, contactUuid);
+      });
+    });
+
+    container.querySelectorAll('.wishlist-edit-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openWishlistItemEditModal({
+          wishlistUuid: btn.dataset.wl,
+          itemId: btn.dataset.id,
+          title: btn.dataset.title,
+          notes: btn.dataset.notes,
+          onSaved: () => loadWishlistItems(wishlistUuid, contactUuid),
+        });
+      });
+    });
+
+    container.querySelectorAll('.wishlist-edit-product').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const { showProductEditModal } = await import('./gift-products.js');
+        showProductEditModal(btn.dataset.productUuid);
       });
     });
 
@@ -201,9 +265,17 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
     // Click on card opens product detail
     container.querySelectorAll('.gift-card-clickable').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.dropdown') || e.target.closest('a')) return;
+        if (e.target.closest('.dropdown') || e.target.closest('a') || e.target.closest('.gift-card-desc')) return;
         const productUuid = card.dataset.productUuid;
         if (productUuid) showProductDetailModal(productUuid);
+      });
+    });
+
+    // Click on description toggles expand/collapse in place
+    container.querySelectorAll('.gift-card-desc').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        el.classList.toggle('expanded');
       });
     });
   } catch (err) {
@@ -227,6 +299,53 @@ function groupHeader(contact, count, actionsHtml = '') {
       <span class="gift-group-header-actions">${actionsHtml}</span>
     </div>
   `;
+}
+
+function openWishlistItemEditModal({ wishlistUuid, itemId, title, notes, onSaved }) {
+  const mid = 'wl-item-edit-' + Date.now();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">${esc(title)}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="${mid}-form">
+            <div class="modal-body">
+              <div class="mb-2">
+                <label class="form-label small">${t('gifts.wishNotes')}</label>
+                <textarea class="form-control form-control-sm" id="${mid}-notes" rows="4"
+                  placeholder="${t('gifts.wishNotesPlaceholder')}">${esc(notes || '')}</textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="submit" class="btn btn-primary btn-sm">${t('common.save')}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `);
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+  document.getElementById(`${mid}-notes`).focus();
+
+  document.getElementById(`${mid}-form`).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/gifts/wishlists/${wishlistUuid}/items/${itemId}`, {
+        notes: document.getElementById(`${mid}-notes`).value.trim() || null,
+      });
+      modal.hide();
+      onSaved?.();
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+    }
+  });
 }
 
 function esc(str) {

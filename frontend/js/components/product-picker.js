@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { t } from '../utils/i18n.js';
+import { t, formatPrice } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 
 /**
@@ -42,7 +42,7 @@ export function createProductPicker(container, onSelect) {
       <div class="product-picker-item${item.isCreate ? ' product-picker-create' : ''}" data-index="${i}">
         ${img}
         <span class="product-picker-name">${escapeHtml(item.label)}</span>
-        ${item.price ? `<span class="product-picker-price">${item.price} kr</span>` : ''}
+        ${item.price ? `<span class="product-picker-price">${formatPrice(item.price)}</span>` : ''}
       </div>
     `;}).join('');
     dropdown.classList.remove('d-none');

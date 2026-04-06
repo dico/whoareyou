@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { t, formatDate } from '../utils/i18n.js';
+import { t, formatDate, formatPrice } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 
 /**
@@ -148,7 +148,7 @@ function renderOrderCard(o) {
         ${titleHtml}
         <div class="text-muted small">
           <span class="badge bg-${statusColor(o.status)} me-1">${t('gifts.statuses.' + o.status)}</span>
-          ${eventHtml}${formatDate(o.created_at)}${o.price ? ` · ${Math.round(o.price)} kr` : ''}
+          ${eventHtml}${formatDate(o.created_at)}${o.price ? ` · ${formatPrice(o.price)}` : ''}
         </div>
         ${o.givers?.length ? `<div class="contact-gift-order-people small"><span class="text-muted">${t('gifts.from')}:</span> ${chipNames(o.givers)}</div>` : ''}
         ${o.recipients?.length ? `<div class="contact-gift-order-people small"><span class="text-muted">${t('gifts.to')}:</span> ${chipNames(o.recipients)}</div>` : ''}

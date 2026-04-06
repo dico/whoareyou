@@ -1,7 +1,8 @@
 import { api } from '../api/client.js';
 import { state, navigate } from '../app.js';
 import { confirmDialog } from '../components/dialogs.js';
-import { t, formatDate } from '../utils/i18n.js';
+import { t, formatDate, formatPrice } from '../utils/i18n.js';
+import { attachPriceInput, readPriceInput } from '../utils/price-input.js';
 import { createProductPicker } from '../components/product-picker.js';
 import { showEventModal, giftSubNav } from './gifts.js';
 import { authUrl } from '../utils/auth-url.js';
@@ -338,7 +339,7 @@ function renderGiftCard(g, isIncoming) {
         ${subHtml ? `<div class="gift-card-sub text-muted small">${subHtml}</div>` : ''}
       </div>
       <div class="gift-card-end">
-        ${g.price ? `<span class="gift-card-price">${Math.round(g.price)} kr</span>` : ''}
+        ${g.price ? `<span class="gift-card-price">${formatPrice(g.price)}</span>` : ''}
         <button class="gift-status-badge badge bg-${statusColor} gift-status-cycle" data-uuid="${g.uuid}" data-status="${g.status}">
           ${t('gifts.statuses.' + g.status)}
         </button>
@@ -398,7 +399,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
             <div id="${mid}-added" class="mb-2"></div>
             <div class="gift-add-row">
               <div class="gift-add-row-product" id="${mid}-product"></div>
-              <input type="number" class="form-control form-control-sm gift-add-row-price" id="${mid}-price" placeholder="${t('gifts.price')}" step="1">
+              <input type="text" inputmode="numeric" class="form-control form-control-sm gift-add-row-price" id="${mid}-price" placeholder="${t('gifts.price')}">
               <button type="button" class="btn btn-primary btn-sm" id="${mid}-add-btn">
                 <i class="bi bi-plus-lg"></i>
               </button>
@@ -440,6 +441,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
 
   // Product picker
   const picker = createProductPicker(document.getElementById(`${mid}-product`), () => {});
+  attachPriceInput(document.getElementById(`${mid}-price`));
 
   // Participant management
   const givers = [];
@@ -476,7 +478,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
           }
         </div>
         <span>${esc(g.title)}</span>
-        ${g.price ? `<span class="text-muted small ms-auto">${Math.round(g.price)} kr</span>` : ''}
+        ${g.price ? `<span class="text-muted small ms-auto">${formatPrice(g.price)}</span>` : ''}
       </div>
     `).join('');
     if (countEl) countEl.textContent = addedGifts.length ? `${addedGifts.length} ${t('gifts.added')}` : '';
@@ -486,7 +488,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   async function addGift() {
     const product = picker.getSelected();
     if (!product) return;
-    const price = parseFloat(document.getElementById(`${mid}-price`).value) || null;
+    const price = readPriceInput(document.getElementById(`${mid}-price`));
 
     try {
       await api.post('/gifts/orders', {
@@ -685,7 +687,7 @@ function showGiftsDetailModal(gifts) {
                     ? `<a href="#" class="gift-open-product" data-product-uuid="${g.product_uuid}"><strong>${esc(g.title)}</strong></a>`
                     : `<strong>${esc(g.title)}</strong>`
                   }
-                  ${g.price ? `<span class="text-muted small">${Math.round(g.price)} kr</span>` : ''}
+                  ${g.price ? `<span class="text-muted small">${formatPrice(g.price)}</span>` : ''}
                   ${g.notes ? `<span class="text-muted small">${esc(g.notes)}</span>` : ''}
                 </div>
               </div>

@@ -89,6 +89,31 @@ export function formatDate(dateStr, options) {
 }
 
 /**
+ * Format a number with locale-aware thousands separator.
+ * @param {number|string} value
+ * @returns {string}
+ */
+export function formatNumber(value) {
+  if (value == null || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  const localeMap = { nb: 'nb-NO', en: 'en-GB' };
+  const intlLocale = localeMap[currentLocale] || currentLocale;
+  return n.toLocaleString(intlLocale);
+}
+
+/**
+ * Format a price with thousands separator and currency suffix.
+ * @param {number|string} value
+ * @param {string} [currency='kr']
+ * @returns {string}
+ */
+export function formatPrice(value, currency = 'kr') {
+  const formatted = formatNumber(Math.round(Number(value)));
+  return formatted ? `${formatted} ${currency}` : '';
+}
+
+/**
  * Format a date with full month name.
  * @param {string} dateStr
  * @returns {string}

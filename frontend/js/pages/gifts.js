@@ -1,7 +1,7 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { confirmDialog } from '../components/dialogs.js';
-import { t, formatDate } from '../utils/i18n.js';
+import { t, formatDate, formatPrice } from '../utils/i18n.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
@@ -92,7 +92,7 @@ export async function renderGifts() {
             <span class="gift-recent-title">${escapeHtml(g.title)}</span>
             ${meta ? `<span class="text-muted small">${meta}</span>` : ''}
           </div>
-          ${g.price ? `<span class="text-muted small">${Math.round(g.price)} kr</span>` : ''}
+          ${g.price ? `<span class="text-muted small">${formatPrice(g.price)}</span>` : ''}
         </div>
       `;
     }).join('');

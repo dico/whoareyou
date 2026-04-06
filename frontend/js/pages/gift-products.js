@@ -1,6 +1,7 @@
 import { api } from '../api/client.js';
 import { confirmDialog } from '../components/dialogs.js';
-import { t } from '../utils/i18n.js';
+import { t, formatPrice, formatNumber } from '../utils/i18n.js';
+import { attachPriceInput, readPriceInput } from '../utils/price-input.js';
 import { authUrl } from '../utils/auth-url.js';
 import { giftSubNav } from './gifts.js';
 import { showProductDetailModal } from '../components/product-detail-modal.js';
@@ -80,7 +81,7 @@ async function loadProducts(search) {
             <div class="gift-product-body gift-product-clickable">
               <strong class="gift-product-name">${escapeHtml(p.name)}</strong>
               <span class="gift-product-meta text-muted small">
-                ${p.default_price ? `${Math.round(p.default_price)} kr` : ''}
+                ${p.default_price ? formatPrice(p.default_price) : ''}
                 ${p.default_price && p.url ? ' · ' : ''}
                 ${p.url ? getDomain(p.url) : ''}
               </span>
@@ -184,7 +185,7 @@ export async function showProductEditModal(productUuid) {
             </div>
             <div class="mb-3">
               <label class="form-label">${t('gifts.price')}</label>
-              <input type="number" class="form-control form-control-sm" id="${mid}-price" value="${product.default_price || ''}" step="1">
+              <input type="text" inputmode="numeric" class="form-control form-control-sm" id="${mid}-price" value="${product.default_price ? formatNumber(Math.round(product.default_price)) : ''}">
             </div>
 
             <label class="form-label">${t('gifts.storeLinks')}</label>
@@ -207,6 +208,7 @@ export async function showProductEditModal(productUuid) {
 
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
+  attachPriceInput(document.getElementById(`${mid}-price`));
   const dropzone = document.getElementById(`${mid}-dropzone`);
   const fileInput = document.getElementById(`${mid}-file-input`);
 
@@ -322,7 +324,7 @@ export async function showProductEditModal(productUuid) {
         onApply: (selected) => {
           if (selected.title) document.getElementById(`${mid}-name`).value = meta.title;
           if (selected.description) document.getElementById(`${mid}-desc`).value = meta.description;
-          if (selected.price) document.getElementById(`${mid}-price`).value = meta.price;
+          if (selected.price) document.getElementById(`${mid}-price`).value = formatNumber(Math.round(meta.price));
           if (selected.image_url) {
             api.put(`/gifts/products/${productUuid}`, { image_url: meta.image_url });
             const preview = document.getElementById(`${mid}-preview`);
@@ -347,7 +349,7 @@ export async function showProductEditModal(productUuid) {
       await api.put(`/gifts/products/${productUuid}`, {
         name: document.getElementById(`${mid}-name`).value.trim(),
         description: document.getElementById(`${mid}-desc`).value.trim() || null,
-        default_price: parseFloat(document.getElementById(`${mid}-price`).value) || null,
+        default_price: readPriceInput(document.getElementById(`${mid}-price`)),
         url: firstLink?.href || null,
       });
       modal.hide();
@@ -449,7 +451,7 @@ function showScrapePreviewModal(meta, { onApply }) {
               <div class="form-check mb-2">
                 <input type="checkbox" class="form-check-input" id="${sid}-price">
                 <label class="form-check-label" for="${sid}-price">
-                  <strong>${t('gifts.price')}</strong>: ${Math.round(meta.price)} kr
+                  <strong>${t('gifts.price')}</strong>: ${formatPrice(meta.price)}
                 </label>
               </div>
             ` : ''}
@@ -484,7 +486,7 @@ function renderLinkRow(l) {
   return `
     <div class="product-link-row" data-link-id="${l.id}">
       <a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" class="subtle-link small flex-grow-1">${escapeHtml(l.store_name || getDomain(l.url))} <i class="bi bi-box-arrow-up-right"></i></a>
-      ${l.price ? `<span class="text-muted small">${Math.round(l.price)} kr</span>` : ''}
+      ${l.price ? `<span class="text-muted small">${formatPrice(l.price)}</span>` : ''}
       <button class="btn btn-outline-secondary btn-sm product-link-scrape" data-url="${escapeHtml(l.url)}" title="${t('gifts.fetchMetadata')}"><i class="bi bi-cloud-download"></i></button>
       <button class="btn btn-outline-danger btn-sm product-link-delete" data-link-id="${l.id}"><i class="bi bi-x-lg"></i></button>
     </div>

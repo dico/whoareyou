@@ -3,7 +3,8 @@ import { confirmDialog } from '../components/dialogs.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
-import { t } from '../utils/i18n.js';
+import { t, formatPrice, formatNumber } from '../utils/i18n.js';
+import { attachPriceInput, readPriceInput } from '../utils/price-input.js';
 import { createProductPicker } from '../components/product-picker.js';
 import { giftContactLinkAttrs } from '../components/contact-gift-modal.js';
 import { giftSubNav } from './gifts.js';
@@ -96,7 +97,7 @@ function renderIdeaCard(g) {
         </div>
       </div>
       <div class="gift-card-end">
-        ${g.price ? `<span class="gift-card-price">${Math.round(g.price)} kr</span>` : ''}
+        ${g.price ? `<span class="gift-card-price">${formatPrice(g.price)}</span>` : ''}
         <span class="badge bg-${statusColor}">${t('gifts.statuses.' + g.status)}</span>
       </div>
       <div class="dropdown">
@@ -159,7 +160,7 @@ function attachPlanningHandlers() {
                   <div class="row g-2 mb-3">
                     <div class="col">
                       <label class="form-label">${t('gifts.price')}</label>
-                      <input type="number" class="form-control form-control-sm" id="${mid}-price" value="${btn.dataset.price}" step="1">
+                      <input type="text" inputmode="numeric" class="form-control form-control-sm" id="${mid}-price" value="${btn.dataset.price}">
                     </div>
                     <div class="col">
                       <label class="form-label">${t('gifts.status')}</label>
@@ -202,8 +203,9 @@ function attachPlanningHandlers() {
       // Product picker
       const productWrap = document.getElementById(`${mid}-product-wrap`);
       const picker = createProductPicker(productWrap, (product) => {
-        if (product.default_price) document.getElementById(`${mid}-price`).value = product.default_price;
+        if (product.default_price) document.getElementById(`${mid}-price`).value = formatNumber(Math.round(product.default_price));
       });
+      attachPriceInput(document.getElementById(`${mid}-price`));
       // Pre-fill with existing title
       const pickerInput = productWrap.querySelector('.product-picker-input');
       if (pickerInput) pickerInput.value = btn.dataset.title || '';
@@ -237,7 +239,7 @@ function attachPlanningHandlers() {
         const recipientUuids = [...document.getElementById(`${mid}-recipients`).querySelectorAll('.contact-chip')].map(c => c.dataset.uuid);
         await api.put(`/gifts/orders/${btn.dataset.uuid}`, {
           title: (productWrap.querySelector('.product-picker-input')?.value || '').trim(),
-          price: parseFloat(document.getElementById(`${mid}-price`).value) || null,
+          price: readPriceInput(document.getElementById(`${mid}-price`)),
           status: document.getElementById(`${mid}-status`).value,
           notes: document.getElementById(`${mid}-notes`).value.trim() || null,
           recipient_uuids: recipientUuids,
@@ -340,7 +342,7 @@ function showIdeaModal() {
               </div>
               <div class="mb-3">
                 <label class="form-label">${t('gifts.price')}</label>
-                <input type="number" class="form-control form-control-sm" id="${mid}-price" step="1">
+                <input type="text" inputmode="numeric" class="form-control form-control-sm" id="${mid}-price">
               </div>
               <div class="mb-3">
                 <label class="form-label">${t('gifts.notes')}</label>
@@ -360,6 +362,7 @@ function showIdeaModal() {
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
   const picker = createProductPicker(document.getElementById(`${mid}-product`), () => {});
+  attachPriceInput(document.getElementById(`${mid}-price`));
   const recipients = [];
 
   // Inline contact search for recipients
@@ -381,7 +384,7 @@ function showIdeaModal() {
         product_uuid: product.uuid || null,
         status: 'idea',
         order_type: 'outgoing',
-        price: parseFloat(document.getElementById(`${mid}-price`).value) || null,
+        price: readPriceInput(document.getElementById(`${mid}-price`)),
         notes: document.getElementById(`${mid}-notes`).value || null,
         recipient_uuids: recipients.map(r => r.uuid),
       });

@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { t, formatDate } from '../utils/i18n.js';
+import { t, formatDate, formatPrice } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { giftContactLinkAttrs } from './contact-gift-modal.js';
 
@@ -54,7 +54,7 @@ export async function showProductDetailModal(productUuid) {
           </div>
           <div class="product-detail-info">
             <h4 class="mb-2">${esc(product.name)}</h4>
-            ${product.default_price ? `<div class="product-detail-price">${Math.round(product.default_price)} kr</div>` : ''}
+            ${product.default_price ? `<div class="product-detail-price">${formatPrice(product.default_price)}</div>` : ''}
             ${product.description ? `<p class="text-muted small mb-0">${esc(product.description)}</p>` : ''}
             ${allLinks.length ? `
               <div class="mt-3">
@@ -62,7 +62,7 @@ export async function showProductDetailModal(productUuid) {
                 ${allLinks.map(l => `
                   <a href="${esc(l.url)}" target="_blank" rel="noopener" class="product-detail-link">
                     <i class="bi bi-shop me-1"></i>${esc(l.store_name || getDomain(l.url))}
-                    ${l.price ? `<span class="text-muted ms-1">${Math.round(l.price)} kr</span>` : ''}
+                    ${l.price ? `<span class="text-muted ms-1">${formatPrice(l.price)}</span>` : ''}
                     <i class="bi bi-box-arrow-up-right ms-auto small"></i>
                   </a>
                 `).join('')}
@@ -80,7 +80,7 @@ export async function showProductDetailModal(productUuid) {
             <div class="product-history-card">
               <div class="product-history-card-header">
                 <span class="badge bg-${statusColor(o.status)}">${t('gifts.statuses.' + o.status)}</span>
-                <span class="text-muted small">${o.event_name ? `${esc(o.event_name)} · ` : ''}${formatDate(o.created_at)}${o.price ? ` · ${Math.round(o.price)} kr` : ''}</span>
+                <span class="text-muted small">${o.event_name ? `${esc(o.event_name)} · ` : ''}${formatDate(o.created_at)}${o.price ? ` · ${formatPrice(o.price)}` : ''}</span>
               </div>
               ${o.givers?.length ? `<div class="product-history-card-row"><span class="product-history-label">${t('gifts.from')}</span>${chipNames(o.givers)}</div>` : ''}
               ${o.recipients?.length ? `<div class="product-history-card-row"><span class="product-history-label">${t('gifts.to')}</span>${chipNames(o.recipients)}</div>` : ''}

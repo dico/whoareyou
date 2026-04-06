@@ -833,7 +833,8 @@ router.get('/wishlists/:uuid', async (req, res, next) => {
         'gift_wishlist_items.id', 'gift_wishlist_items.title', 'gift_wishlist_items.priority',
         'gift_wishlist_items.notes', 'gift_wishlist_items.is_fulfilled',
         'gift_products.uuid as product_uuid', 'gift_products.url as product_url',
-        'gift_products.image_url as product_image_url', 'gift_products.default_price'
+        'gift_products.image_url as product_image_url', 'gift_products.default_price',
+        'gift_products.description as product_description'
       )
       .orderBy([{ column: 'gift_wishlist_items.is_fulfilled' }, { column: 'gift_wishlist_items.priority', order: 'desc' }, { column: 'gift_wishlist_items.id' }]);
 
