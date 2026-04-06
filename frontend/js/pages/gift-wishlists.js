@@ -5,6 +5,7 @@ import { authUrl } from '../utils/auth-url.js';
 import { giftSubNav } from './gifts.js';
 import { createProductPicker } from '../components/product-picker.js';
 import { showProductDetailModal } from '../components/product-detail-modal.js';
+import { giftContactLinkAttrs } from '../components/contact-gift-modal.js';
 
 export async function renderGiftWishlists() {
   const content = document.getElementById('app-content');
@@ -213,7 +214,7 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
 function groupHeader(contact, count, actionsHtml = '') {
   return `
     <div class="gift-group-header">
-      <a href="/contacts/${contact.uuid}" data-link class="gift-group-header-link">
+      <a href="#" class="gift-group-header-link" ${giftContactLinkAttrs(contact)}>
         <span class="gift-group-avatar">
           ${contact.avatar
             ? `<img src="${authUrl(contact.avatar)}" alt="">`

@@ -1,6 +1,7 @@
 import { api } from '../api/client.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
+import { giftContactLinkAttrs } from './contact-gift-modal.js';
 
 /**
  * Show product detail modal — shop-style layout with image left, info right.
@@ -180,7 +181,7 @@ export async function showProductDetailModal(productUuid) {
 function chipNames(contacts) {
   return contacts.map(c => {
     const initials = (c.first_name?.[0] || '') + (c.last_name?.[0] || '');
-    return `<a href="/contacts/${c.uuid}" data-link class="contact-chip">` +
+    return `<a href="#" class="contact-chip" ${giftContactLinkAttrs(c)}>` +
       `<span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${initials}</span>`}</span>` +
       `${esc(c.first_name)}</a>`;
   }).join(' ');

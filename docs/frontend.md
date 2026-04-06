@@ -15,8 +15,9 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `showPhotoViewer()` | `photo-viewer.js` | Lightbox for contact photos. Navigate, set primary, delete, drag-and-drop upload. |
 | `showCropper()` | `image-cropper.js` | Pan+zoom image cropper for profile photos. Square viewport, "Upload original" option. |
 | `attachMention()` | `mention.js` | @-mention autocomplete for textareas. |
-| `createProductPicker()` | `product-picker.js` | Inline product search/create for gift forms. URL-paste auto-fetch. |
+| `createProductPicker()` | `product-picker.js` | Inline product search/create for gift forms. Dropdown shows 32px thumbnail + name + price. URL-paste auto-fetch. |
 | `showProductDetailModal()` | `product-detail-modal.js` | Product detail modal with links, image, gift history. |
+| `openContactGiftModal()` / `giftContactLinkAttrs()` | `contact-gift-modal.js` | Modal shown when clicking a contact name anywhere in the gift app. Shows avatar, name, "open profile" button, and the contact's received/given gift history. Pages mark contact links with `giftContactLinkAttrs(contact)` — a global click delegate handles every link. |
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 

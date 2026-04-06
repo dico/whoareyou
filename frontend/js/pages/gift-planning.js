@@ -5,6 +5,7 @@ import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
 import { t } from '../utils/i18n.js';
 import { createProductPicker } from '../components/product-picker.js';
+import { giftContactLinkAttrs } from '../components/contact-gift-modal.js';
 import { giftSubNav } from './gifts.js';
 
 let allGifts = [];
@@ -425,7 +426,7 @@ function renderChips(containerId, contacts) {
 function groupHeader(contacts, count) {
   if (!contacts?.length) return '';
   const links = contacts.map(c => `
-    <a href="/contacts/${c.uuid}" data-link class="gift-group-header-link">
+    <a href="#" class="gift-group-header-link" ${giftContactLinkAttrs(c)}>
       <span class="gift-group-avatar">
         ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
       </span>

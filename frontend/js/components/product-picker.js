@@ -1,5 +1,6 @@
 import { api } from '../api/client.js';
 import { t } from '../utils/i18n.js';
+import { authUrl } from '../utils/auth-url.js';
 
 /**
  * Product picker — search existing products or create new ones inline.
@@ -12,6 +13,7 @@ import { t } from '../utils/i18n.js';
 export function createProductPicker(container, onSelect) {
   let debounceTimer = null;
   let selectedProduct = null;
+  let activeIndex = -1;
 
   container.innerHTML = `
     <div class="product-picker">
@@ -29,17 +31,35 @@ export function createProductPicker(container, onSelect) {
       dropdown.classList.add('d-none');
       return;
     }
-    dropdown.innerHTML = items.map((item, i) => `
+    dropdown.innerHTML = items.map((item, i) => {
+      const imgSrc = item.image_url
+        ? (/^https?:\/\//i.test(item.image_url) ? item.image_url : authUrl(item.image_url))
+        : null;
+      const img = imgSrc
+        ? `<img src="${escapeHtml(imgSrc)}" alt="" class="product-picker-thumb" onerror="this.outerHTML='<span class=\\'product-picker-thumb product-picker-thumb-placeholder\\'><i class=\\'bi bi-box\\'></i></span>'">`
+        : `<span class="product-picker-thumb product-picker-thumb-placeholder"><i class="bi bi-${item.isCreate ? 'plus' : 'box'}"></i></span>`;
+      return `
       <div class="product-picker-item${item.isCreate ? ' product-picker-create' : ''}" data-index="${i}">
+        ${img}
         <span class="product-picker-name">${escapeHtml(item.label)}</span>
         ${item.price ? `<span class="product-picker-price">${item.price} kr</span>` : ''}
       </div>
-    `).join('');
+    `;}).join('');
     dropdown.classList.remove('d-none');
+    activeIndex = -1;
 
     dropdown.querySelectorAll('.product-picker-item').forEach(el => {
       el.addEventListener('click', () => selectItem(items[parseInt(el.dataset.index)]));
+      el.addEventListener('mouseenter', () => setActive(parseInt(el.dataset.index)));
     });
+  }
+
+  function setActive(i) {
+    const els = dropdown.querySelectorAll('.product-picker-item');
+    if (!els.length) return;
+    activeIndex = (i + els.length) % els.length;
+    els.forEach((el, idx) => el.classList.toggle('active', idx === activeIndex));
+    els[activeIndex].scrollIntoView({ block: 'nearest' });
   }
 
   async function selectItem(item) {
@@ -154,11 +174,16 @@ export function createProductPicker(container, onSelect) {
   });
 
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') dropdown.classList.add('d-none');
-    if (e.key === 'Enter' && !dropdown.classList.contains('d-none')) {
+    const open = !dropdown.classList.contains('d-none');
+    if (e.key === 'Escape') { dropdown.classList.add('d-none'); return; }
+    if (!open) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIndex + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIndex - 1); }
+    else if (e.key === 'Enter') {
       e.preventDefault();
-      const first = dropdown.querySelector('.product-picker-item');
-      if (first) first.click();
+      const els = dropdown.querySelectorAll('.product-picker-item');
+      const target = activeIndex >= 0 ? els[activeIndex] : els[0];
+      if (target) target.click();
     }
   });
 

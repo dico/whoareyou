@@ -8,6 +8,7 @@ import { authUrl } from '../utils/auth-url.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { showProductDetailModal } from '../components/product-detail-modal.js';
+import { giftContactLinkAttrs } from '../components/contact-gift-modal.js';
 
 const EVENT_ICONS = {
   christmas: 'tree', birthday: 'balloon', wedding: 'heart', other: 'calendar-event',
@@ -141,7 +142,7 @@ function updateEventMeta(event, gifts, direction) {
   const count = gifts.filter(g => g.order_type === direction).length;
   const parts = [
     event.event_date ? formatDate(event.event_date) : '',
-    event.honoree ? `<a href="/contacts/${event.honoree.uuid}" data-link class="text-muted">${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}</a>` : '',
+    event.honoree ? `<a href="#" class="text-muted" ${giftContactLinkAttrs(event.honoree)}>${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}</a>` : '',
     t('gifts.giftsCount', { count }),
   ].filter(Boolean);
   const el = document.getElementById('event-meta');
@@ -286,7 +287,7 @@ function renderIncomingList(gifts, members) {
 function contactChips(contacts, prefix = '') {
   if (!contacts?.length) return '';
   return `${prefix}${contacts.map(c =>
-    `<a href="/contacts/${c.uuid}" data-link class="contact-chip">` +
+    `<a href="#" class="contact-chip" ${giftContactLinkAttrs(c)}>` +
     `<span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}</span>` +
     `${esc(c.first_name)}</a>`
   ).join(' ')}`;
@@ -299,7 +300,7 @@ function contactChips(contacts, prefix = '') {
 function renderGroupHeader(contacts, { count, actionsHtml } = {}) {
   if (!contacts?.length) return '';
   const links = contacts.map(c => `
-    <a href="/contacts/${c.uuid}" data-link class="gift-group-header-link">
+    <a href="#" class="gift-group-header-link" ${giftContactLinkAttrs(c)}>
       <span class="gift-group-avatar">
         ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
       </span>

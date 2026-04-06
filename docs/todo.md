@@ -47,6 +47,10 @@
    - Planning dropdown should use `glass-dropdown` class (currently transparent)
    - ~~Visibility~~: already implemented — `applyVisibilityFilter` hides shared gifts from recipients who are logged-in users
 
+### admin-tenant.js misuses `.product-picker-dropdown` class
+**Status:** Not started
+**Why:** `admin-tenant.js` reuses `.product-picker-dropdown` CSS class for contact search dropdowns (member invite, MG mapping, etc.). Should use `.contact-search-dropdown` / `attachContactSearch()` from `components/contact-search.js` for consistency. See [admin-tenant.js:879,893,1000,1084](../frontend/js/pages/admin-tenant.js).
+
 ### Standardize company search component
 **Status:** Not started
 **Why:** Company search in `contact-detail.js` has its own implementation. Should follow the same pattern as contact search.
