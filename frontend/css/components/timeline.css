@@ -334,6 +334,66 @@
   color: var(--color-danger);
 }
 
+/* Product chip — same visual family as contact-chip, but with a square
+   (slightly rounded) product thumbnail instead of a round avatar. */
+.product-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+  max-width: 100%;
+}
+
+.product-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.product-chip-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt, rgba(0, 0, 0, 0.06));
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-size: 11px;
+}
+
+.product-chip-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.product-chip-remove:hover {
+  color: var(--color-danger);
+}
+
 .post-media {
   display: grid;
   gap: var(--space-xs);

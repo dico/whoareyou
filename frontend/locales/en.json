@@ -915,6 +915,7 @@
     "price": "Price",
     "status": "Status",
     "notes": "Notes",
+    "notesPlaceholder": "Note (optional)",
     "statuses": {
       "idea": "Idea",
       "reserved": "Reserved",
@@ -993,5 +994,31 @@
     "productLinks": "Product links",
     "productImage": "Product image",
     "applySelected": "Apply selected"
+  },
+  "book": {
+    "settingsCardLabel": "Generate book",
+    "settingsCardDesc": "Create a printable photo book from timeline posts",
+    "wizardTitle": "Generate book",
+    "wizardIntro": "Create a photo book from timeline posts. You can preview it, flip through pages, and save as PDF from your browser.",
+    "fieldTitle": "Title",
+    "fieldTitleHint": "Shown on the cover. Defaults to the contact's name.",
+    "fieldSubtitle": "Subtitle (optional)",
+    "fieldContact": "Contact",
+    "fieldContactPlaceholder": "Search for a contact...",
+    "fieldDateFrom": "From date",
+    "fieldDateTo": "To date",
+    "fieldLanguage": "Language",
+    "fieldChapterGrouping": "Chapter dividers",
+    "chapterPerYear": "One per year",
+    "chapterNone": "None",
+    "includeComments": "Include comments",
+    "includeReactions": "Include likes/reactions",
+    "createAndPreview": "Create and preview",
+    "errNoContact": "Please select a contact",
+    "printPdf": "Print / Save as PDF",
+    "delete": "Delete book",
+    "confirmDelete": "Delete this book? This cannot be undone.",
+    "emptyState": "No posts match the selected contact, date range, and visibility.",
+    "backPageText": "Generated with WhoareYou"
   }
 }

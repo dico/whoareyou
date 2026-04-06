@@ -16,6 +16,7 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `showCropper()` | `image-cropper.js` | Pan+zoom image cropper for profile photos. Square viewport, "Upload original" option. |
 | `attachMention()` | `mention.js` | @-mention autocomplete for textareas. |
 | `createProductPicker()` | `product-picker.js` | Inline product search/create for gift forms. Dropdown shows 32px thumbnail + name + price. URL-paste auto-fetch. |
+| `productChipHtml()` | `product-chip.js` | Visual mirror of `contactRowHtml` / `.contact-chip` for products: rounded thumbnail + title in a pill. Global click delegate opens the product detail modal when `product_uuid` is set. Used in gift list rows and gift add modal drafts. |
 | `showProductDetailModal()` | `product-detail-modal.js` | Product detail modal with links, image, gift history. |
 | `openContactGiftModal()` / `giftContactLinkAttrs()` | `contact-gift-modal.js` | Modal shown when clicking a contact name anywhere in the gift app. Shows avatar, name, "open profile" button, and the contact's received/given gift history. Pages mark contact links with `giftContactLinkAttrs(contact)` — a global click delegate handles every link. |
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |

@@ -1,23 +1,18 @@
 import { api } from '../api/client.js';
 import { state, navigate } from '../app.js';
 import { confirmDialog } from '../components/dialogs.js';
-import { t, formatDate, formatPrice } from '../utils/i18n.js';
+import { t, formatDate, formatNumber } from '../utils/i18n.js';
 import { attachPriceInput, readPriceInput } from '../utils/price-input.js';
 import { createProductPicker } from '../components/product-picker.js';
 import { showEventModal, giftSubNav } from './gifts.js';
 import { authUrl } from '../utils/auth-url.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { attachContactSearch } from '../components/contact-search.js';
-import { showProductDetailModal } from '../components/product-detail-modal.js';
 import { giftContactLinkAttrs } from '../components/contact-gift-modal.js';
+import { productChipHtml } from '../components/product-chip.js';
 
 const EVENT_ICONS = {
   christmas: 'tree', birthday: 'balloon', wedding: 'heart', other: 'calendar-event',
-};
-const STATUS_ORDER = ['idea', 'purchased', 'given'];
-const STATUS_COLORS = {
-  idea: 'secondary', reserved: 'info', purchased: 'warning',
-  wrapped: 'purple', given: 'success', cancelled: 'danger',
 };
 const PLANNING_STATUSES = ['idea', 'reserved'];
 const DONE_STATUSES = ['purchased', 'wrapped', 'given'];
@@ -26,6 +21,7 @@ const DONE_STATUSES = ['purchased', 'wrapped', 'given'];
 let pageEventUuid = null;
 let pageMembers = [];
 let pageGiftsCache = [];
+let pageEventCache = null;
 
 export async function renderGiftEventDetail(uuid) {
   pageEventUuid = uuid;
@@ -50,6 +46,7 @@ async function loadEventDetail(uuid) {
     ]);
     const { event, gifts } = data;
     pageGiftsCache = gifts;
+    pageEventCache = event;
     pageMembers = membersData.members || [];
 
     el.innerHTML = `
@@ -177,27 +174,67 @@ function renderOutgoingList(gifts) {
     groups.get(key).gifts.push(g);
   }
 
-  return [...groups.values()].map(group => {
-    const ideas = group.gifts.filter(g => PLANNING_STATUSES.includes(g.status));
-    const done = group.gifts.filter(g => DONE_STATUSES.includes(g.status));
-    const cancelled = group.gifts.filter(g => g.status === 'cancelled');
-    const recipientData = encodeURIComponent(JSON.stringify(group.recipients.map(r => ({ uuid: r.uuid, first_name: r.first_name, last_name: r.last_name || '' }))));
-    const addBtn = `<button class="btn btn-link btn-sm gift-add-for-recipient" data-recipients="${recipientData}"><i class="bi bi-plus-lg"></i></button>`;
+  // Outgoing only shows non-idea gifts — ideas live in the /gifts/planning tab.
+  return [...groups.values()]
+    .map(group => {
+      const mainGifts = group.gifts.filter(g => !PLANNING_STATUSES.includes(g.status));
+      const uuids = mainGifts.map(g => g.uuid).join(',');
+      const recipientData = encodeURIComponent(JSON.stringify(group.recipients.map(r => ({ uuid: r.uuid, first_name: r.first_name, last_name: r.last_name || '' }))));
+      if (!mainGifts.length) return '';
+      return giftChipRow({
+        contacts: group.recipients,
+        contactsLabel: 'to',
+        gifts: mainGifts,
+        uuids,
+        actionsHtml: `
+          <button class="btn btn-link btn-sm gift-add-for-recipient" data-recipients="${recipientData}" title="${t('gifts.newGift')}">
+            <i class="bi bi-plus-lg"></i>
+          </button>
+          <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+          <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+            <li><a class="dropdown-item gift-edit-group" href="#" data-uuids="${uuids}">
+              <i class="bi bi-pencil me-2"></i>${t('common.edit')}
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger gift-delete-group" href="#" data-uuids="${uuids}">
+              <i class="bi bi-trash me-2"></i>${t('common.delete')}
+            </a></li>
+          </ul>
+        `,
+      });
+    })
+    .filter(Boolean)
+    .join('') || `<div class="empty-state"><i class="bi bi-gift"></i><p>${t('gifts.noGifts')}</p></div>`;
+}
 
-    return `
-      <div class="gift-group">
-        ${group.recipients.length ? renderGroupHeader(group.recipients, { count: done.length, actionsHtml: addBtn }) : ''}
-        ${done.map(g => renderGiftCard(g, false)).join('')}
-        ${cancelled.map(g => renderGiftCard(g, false)).join('')}
-        ${ideas.length ? `
-          <details class="gift-ideas-section">
-            <summary class="gift-ideas-label">${t('gifts.ideas')} (${ideas.length})</summary>
-            ${ideas.map(g => renderGiftCard(g, false)).join('')}
-          </details>
-        ` : ''}
+/**
+ * Shared two-column gift row used by both incoming and outgoing lists.
+ * Each row renders a muted inline label ("From" / "To", "Gifts") above
+ * its content so users can tell the columns apart without a separate header.
+ */
+function giftChipRow({ contacts, contactsLabel, gifts, uuids, actionsHtml }) {
+  return `
+    <div class="gift-received-row" data-uuids="${uuids}">
+      <div class="gift-received-givers">
+        <div class="gift-row-label">${t('gifts.' + contactsLabel)}</div>
+        <div class="gift-row-content">${contactChips(contacts)}</div>
       </div>
-    `;
-  }).join('');
+      <div class="gift-received-products">
+        <div class="gift-row-label">${t('gifts.gifts')}</div>
+        <div class="gift-row-content">
+          ${gifts.map(g => productChipHtml({
+            title: g.title,
+            image_url: g.product_image_url,
+            product_uuid: g.product_uuid,
+            dataAttrs: `data-gift-uuid="${g.uuid}"`,
+          })).join('')}
+        </div>
+      </div>
+      <div class="dropdown gift-received-actions">
+        ${actionsHtml}
+      </div>
+    </div>
+  `;
 }
 
 function renderIncomingList(gifts, members) {
@@ -268,16 +305,25 @@ function renderIncomingList(gifts, members) {
         ${group.gifts.length
           ? giverGroups.map(gg => {
             const uuids = gg.gifts.map(g => g.uuid).join(',');
-            return `
-            <div class="gift-received-row gift-show-details" data-uuids="${uuids}">
-              <div class="gift-received-items">
-                ${gg.gifts.map(g => `<span class="gift-received-item">${esc(g.title)}</span>`).join(', ')}
-              </div>
-              <div class="gift-received-from">
-                ${t('gifts.from').toLowerCase()} ${contactChips(gg.givers)}
-              </div>
-            </div>
-          `}).join('')
+            return giftChipRow({
+              contacts: gg.givers,
+              contactsLabel: 'from',
+              gifts: gg.gifts,
+              uuids,
+              actionsHtml: `
+                <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+                  <li><a class="dropdown-item gift-edit-group" href="#" data-uuids="${uuids}">
+                    <i class="bi bi-pencil me-2"></i>${t('common.edit')}
+                  </a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item text-danger gift-delete-group" href="#" data-uuids="${uuids}">
+                    <i class="bi bi-trash me-2"></i>${t('common.delete')}
+                  </a></li>
+                </ul>
+              `,
+            });
+          }).join('')
           : `<p class="text-muted small ps-2">${t('gifts.noGifts')}</p>`
         }
       </div>
@@ -318,63 +364,26 @@ function renderGroupHeader(contacts, { count, actionsHtml } = {}) {
   `;
 }
 
-function renderGiftCard(g, isIncoming) {
-  const statusColor = STATUS_COLORS[g.status] || 'secondary';
-  const isIdea = PLANNING_STATUSES.includes(g.status);
-
-  const subHtml = isIncoming
-    ? contactChips(g.givers, `${t('gifts.from').toLowerCase()} `)
-    : contactChips(g.recipients, '→ ');
-
-  return `
-    <div class="gift-card ${isIdea ? 'gift-card-idea' : ''}" data-uuid="${g.uuid}">
-      <div class="gift-card-image">
-        ${g.product_image_url
-          ? `<img src="${g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : esc(g.product_image_url)}" alt="">`
-          : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
-        }
-      </div>
-      <div class="gift-card-body">
-        <div class="gift-card-title">${esc(g.title)}</div>
-        ${subHtml ? `<div class="gift-card-sub text-muted small">${subHtml}</div>` : ''}
-      </div>
-      <div class="gift-card-end">
-        ${g.price ? `<span class="gift-card-price">${formatPrice(g.price)}</span>` : ''}
-        <button class="gift-status-badge badge bg-${statusColor} gift-status-cycle" data-uuid="${g.uuid}" data-status="${g.status}">
-          ${t('gifts.statuses.' + g.status)}
-        </button>
-      </div>
-      <div class="dropdown">
-        <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-        <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-          ${['idea', 'reserved', 'purchased', 'wrapped', 'given', 'cancelled'].map(s => `
-            <li><a class="dropdown-item gift-set-status" href="#" data-uuid="${g.uuid}" data-status="${s}">
-              <span class="gift-status-dot gift-status-${s}"></span> ${t('gifts.statuses.' + s)}
-              ${s === g.status ? ' <i class="bi bi-check"></i>' : ''}
-            </a></li>
-          `).join('')}
-          <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item text-danger gift-delete" href="#" data-uuid="${g.uuid}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
-        </ul>
-      </div>
-    </div>
-  `;
-}
 
 // ═══════════════════════════════════════
 // Gift modal (add/edit)
 // ═══════════════════════════════════════
 
-function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipients = null) {
+function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipients = null, editGroup = null) {
   const mid = 'gift-modal-' + Date.now();
-  const addedGifts = []; // track gifts added in this session
+  const isEdit = !!editGroup?.length;
+  // Track original uuids so we can diff on save: existing → update,
+  // missing → delete, new (no uuid) → create.
+  const originalUuids = isEdit ? editGroup.map(g => g.uuid) : [];
+  // In edit mode, status should default to the shared status of the edited group.
+  const editStatus = isEdit ? editGroup[0].status : null;
 
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${mid}" tabindex="-1">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">${t('gifts.newGift')}</h5>
+            <h5 class="modal-title">${isEdit ? t('gifts.editGift') : t('gifts.newGift')}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
@@ -396,13 +405,13 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
             </div>
 
             <label class="form-label">${t('gifts.gifts')}</label>
-            <div id="${mid}-added" class="mb-2"></div>
-            <div class="gift-add-row">
-              <div class="gift-add-row-product" id="${mid}-product"></div>
-              <input type="text" inputmode="numeric" class="form-control form-control-sm gift-add-row-price" id="${mid}-price" placeholder="${t('gifts.price')}">
-              <button type="button" class="btn btn-primary btn-sm" id="${mid}-add-btn">
-                <i class="bi bi-plus-lg"></i>
-              </button>
+            <div id="${mid}-added" class="gift-added-list mb-2"></div>
+            <div id="${mid}-product"></div>
+
+            <div class="mt-3">
+              <label class="form-label small">${t('gifts.notes')}</label>
+              <textarea class="form-control form-control-sm" id="${mid}-group-notes" rows="2"
+                placeholder="${t('gifts.notesPlaceholder')}"></textarea>
             </div>
 
             <details class="mt-3">
@@ -410,8 +419,8 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
               <div class="mt-2">
                 <label class="form-label small">${t('gifts.status')}</label>
                 <select class="form-select form-select-sm" id="${mid}-status">
-                  ${['idea', 'reserved', 'purchased', 'wrapped', 'given'].map(s => {
-                    const defaultStatus = direction === 'incoming' ? 'given' : 'idea';
+                  ${['idea', 'reserved', 'purchased', 'wrapped', 'given', 'cancelled'].map(s => {
+                    const defaultStatus = editStatus || (direction === 'incoming' ? 'given' : 'idea');
                     return `<option value="${s}" ${s === defaultStatus ? 'selected' : ''}>${t('gifts.statuses.' + s)}</option>`;
                   }).join('')}
                 </select>
@@ -430,15 +439,52 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
 
-  // Product picker
-  const picker = createProductPicker(document.getElementById(`${mid}-product`), () => {});
-  attachPriceInput(document.getElementById(`${mid}-price`));
+  // Drafts: gifts being composed or edited in this modal session.
+  // Each entry: {uuid?, title, product_uuid, image_url, price, notes}
+  // Existing gifts (edit mode) have `uuid`; new ones don't.
+  const drafts = [];
+  let savedCount = 0;
+
+  // Product picker — each selection auto-adds a draft row
+  const picker = createProductPicker(document.getElementById(`${mid}-product`), (product) => {
+    if (!product || !product.title?.trim()) return;
+    drafts.push({
+      title: product.title,
+      product_uuid: product.uuid || null,
+      image_url: product.image_url || null,
+      price: product.price != null ? Number(product.price) : null,
+      notes: '',
+    });
+    renderDrafts();
+    picker.clear();
+    setTimeout(() => document.querySelector(`#${mid}-product input`)?.focus(), 0);
+  });
 
   // Participant management
   const givers = [];
   const recipients = [];
 
-  if (prefilledRecipients?.length) {
+  if (isEdit) {
+    // Pre-populate givers/recipients from the first gift in the group
+    // (all gifts in a group share the same participants by construction).
+    givers.push(...(editGroup[0].givers || []));
+    recipients.push(...(editGroup[0].recipients || []));
+    renderModalChips(`${mid}-givers`, givers);
+    renderModalChips(`${mid}-recipients`, recipients);
+    // Pre-populate drafts with original uuids so save can update in place
+    editGroup.forEach(g => drafts.push({
+      uuid: g.uuid,
+      title: g.title,
+      product_uuid: g.product_uuid || null,
+      image_url: g.product_image_url || null,
+      price: g.price != null ? Number(g.price) : null,
+    }));
+    renderDrafts();
+    // Group notes — stored per order but shared across the group.
+    // Pre-fill from the first gift that has a note.
+    const groupNote = editGroup.find(g => g.notes)?.notes || '';
+    document.getElementById(`${mid}-group-notes`).value = groupNote;
+  } else if (prefilledRecipients?.length) {
     recipients.push(...prefilledRecipients);
     renderModalChips(`${mid}-recipients`, recipients);
   } else if (event?.honoree) {
@@ -459,76 +505,118 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     if (!recipients.some(r => r.uuid === c.uuid)) { recipients.push(c); renderModalChips(`${mid}-recipients`, recipients); }
   });
 
-  function updateAddedList() {
+  function renderDrafts() {
     const el = document.getElementById(`${mid}-added`);
     const countEl = document.getElementById(`${mid}-count`);
     if (!el) return;
-    el.innerHTML = addedGifts.map(g => `
-      <div class="gift-added-item">
-        <div class="gift-card-image">
-          ${g.image_url
-            ? `<img src="${g.image_url.startsWith('/uploads/') ? authUrl(g.image_url) : esc(g.image_url)}" alt="">`
-            : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
-          }
+    el.innerHTML = drafts.map((d, i) => `
+      <div class="gift-draft-row" data-index="${i}">
+        <div class="gift-draft-main">
+          ${productChipHtml({ title: d.title, image_url: d.image_url, product_uuid: d.product_uuid })}
+          <input type="text" inputmode="numeric" class="form-control form-control-sm gift-draft-price"
+            placeholder="${t('gifts.price')}" value="${d.price != null ? formatNumber(d.price) : ''}">
+          <button type="button" class="btn btn-link btn-sm text-danger gift-draft-remove" title="${t('common.delete')}">
+            <i class="bi bi-x-lg"></i>
+          </button>
         </div>
-        <span>${esc(g.title)}</span>
-        ${g.price ? `<span class="text-muted small ms-auto">${formatPrice(g.price)}</span>` : ''}
       </div>
     `).join('');
-    if (countEl) countEl.textContent = addedGifts.length ? `${addedGifts.length} ${t('gifts.added')}` : '';
-  }
 
-  // Add gift (per row). Returns true on success, false if nothing to add,
-  // throws on API failure.
-  async function addGift() {
-    const product = picker.getSelected();
-    if (!product || !product.title?.trim()) return false;
-    const price = readPriceInput(document.getElementById(`${mid}-price`));
-
-    await api.post('/gifts/orders', {
-      title: product.title,
-      product_uuid: product.uuid || null,
-      event_uuid: eventUuid,
-      status: document.getElementById(`${mid}-status`).value,
-      order_type: direction,
-      price,
-      giver_uuids: givers.map(g => g.uuid),
-      recipient_uuids: recipients.map(r => r.uuid),
+    el.querySelectorAll('.gift-draft-price').forEach((input, i) => {
+      attachPriceInput(input);
+      input.addEventListener('blur', () => { drafts[i].price = readPriceInput(input); });
     });
-    addedGifts.push({ title: product.title, price, image_url: product.image_url || null });
-    updateAddedList();
-    picker.clear();
-    document.getElementById(`${mid}-price`).value = '';
-    document.querySelector(`#${mid}-product input`)?.focus();
-    return true;
-  }
+    el.querySelectorAll('.gift-draft-remove').forEach((btn, i) => {
+      btn.addEventListener('click', () => { drafts.splice(i, 1); renderDrafts(); });
+    });
 
-  async function addGiftSafe() {
-    try {
-      return await addGift();
-    } catch (err) {
-      console.error('Add gift failed', err);
-      confirmDialog(err.message || String(err), { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
-      return false;
+    if (countEl) {
+      const n = drafts.length;
+      countEl.textContent = n ? `${n} ${n === 1 ? t('gifts.gift').toLowerCase() : t('gifts.gifts').toLowerCase()}` : '';
     }
   }
 
-  document.getElementById(`${mid}-add-btn`).addEventListener('click', addGiftSafe);
+  // Flush any text the user typed into the picker but forgot to select
+  // from the dropdown — treat it as a free-text gift.
+  function flushPendingPickerText() {
+    const selected = picker.getSelected();
+    if (selected && selected.title?.trim() && !drafts.some(d => d.title === selected.title)) {
+      drafts.push({
+        title: selected.title.trim(),
+        product_uuid: selected.uuid || null,
+        image_url: selected.image_url || null,
+        price: selected.price != null ? Number(selected.price) : null,
+        notes: '',
+      });
+      picker.clear();
+      renderDrafts();
+    }
+  }
 
-  // Enter in price field adds gift
-  document.getElementById(`${mid}-price`).addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); addGiftSafe(); }
-  });
+  async function saveAllDrafts() {
+    flushPendingPickerText();
+    const status = document.getElementById(`${mid}-status`).value;
+    const notes = document.getElementById(`${mid}-group-notes`).value.trim() || null;
+    const giver_uuids = givers.map(g => g.uuid);
+    const recipient_uuids = recipients.map(r => r.uuid);
 
-  // Done — flush any pending row (user may forget to click +), then close.
+    // Delete original gifts that were removed from the drafts list
+    if (isEdit) {
+      const keptUuids = new Set(drafts.filter(d => d.uuid).map(d => d.uuid));
+      for (const uuid of originalUuids) {
+        if (!keptUuids.has(uuid)) {
+          await api.delete(`/gifts/orders/${uuid}`);
+          savedCount++;
+        }
+      }
+    }
+
+    for (const d of drafts) {
+      if (d.uuid) {
+        // Existing gift — update in place
+        await api.put(`/gifts/orders/${d.uuid}`, {
+          title: d.title,
+          product_uuid: d.product_uuid || null,
+          status,
+          order_type: direction,
+          price: d.price,
+          notes,
+          giver_uuids,
+          recipient_uuids,
+        });
+      } else {
+        // New gift — create
+        await api.post('/gifts/orders', {
+          title: d.title,
+          product_uuid: d.product_uuid || null,
+          event_uuid: eventUuid,
+          status,
+          order_type: direction,
+          price: d.price,
+          notes,
+          giver_uuids,
+          recipient_uuids,
+        });
+      }
+      savedCount++;
+    }
+    drafts.length = 0;
+  }
+
+  // Done — save all drafts, then close.
   document.getElementById(`${mid}-done`).addEventListener('click', async () => {
-    await addGiftSafe();
-    modal.hide();
+    try {
+      await saveAllDrafts();
+      modal.hide();
+    } catch (err) {
+      console.error('Save gifts failed', err);
+      confirmDialog(err.message || String(err), { title: t('common.error'), confirmText: 'OK', confirmClass: 'btn-primary' });
+    }
   });
 
   modalEl.addEventListener('hidden.bs.modal', async () => {
     modalEl.remove();
-    if (addedGifts.length) await reloadGifts(eventUuid);
+    if (savedCount > 0) await reloadGifts(eventUuid);
   }, { once: true });
 
   modal.show();
@@ -569,33 +657,6 @@ function attachGiftListHandlers(eventUuid) {
   const el = document.getElementById('gift-list');
   if (!el) return;
 
-  el.querySelectorAll('.gift-status-cycle').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const idx = STATUS_ORDER.indexOf(btn.dataset.status);
-      const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
-      await api.patch(`/gifts/orders/${btn.dataset.uuid}/status`, { status: next });
-      await reloadGifts(eventUuid);
-    });
-  });
-
-  el.querySelectorAll('.gift-set-status').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await api.patch(`/gifts/orders/${btn.dataset.uuid}/status`, { status: btn.dataset.status });
-      await reloadGifts(eventUuid);
-    });
-  });
-
-  el.querySelectorAll('.gift-delete').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (await confirmDialog(t('gifts.deleteGiftConfirm'), { title: t('gifts.deleteGift'), confirmText: t('common.delete') })) {
-        await api.delete(`/gifts/orders/${btn.dataset.uuid}`);
-        await reloadGifts(eventUuid);
-      }
-    });
-  });
-
   // "Add gift for member" in incoming view
   el.querySelectorAll('.gift-add-for-member').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -612,13 +673,27 @@ function attachGiftListHandlers(eventUuid) {
     });
   });
 
-  // Show gift details for a received group (click on card)
-  el.querySelectorAll('.gift-show-details').forEach(row => {
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('a[data-link]')) return; // don't intercept contact-chip links
-      const uuids = row.dataset.uuids.split(',');
+  // Edit an entire gift group (from row dropdown)
+  el.querySelectorAll('.gift-edit-group').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const uuids = link.dataset.uuids.split(',');
       const gifts = uuids.map(uuid => pageGiftsCache.find(g => g.uuid === uuid)).filter(Boolean);
-      if (gifts.length) showGiftsDetailModal(gifts);
+      if (!gifts.length) return;
+      showGiftModal(eventUuid, pageEventCache, gifts[0].order_type, null, gifts);
+    });
+  });
+
+  // Delete all gifts in a received group (from row dropdown)
+  el.querySelectorAll('.gift-delete-group').forEach(link => {
+    link.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const uuids = link.dataset.uuids.split(',');
+      if (!await confirmDialog(t('gifts.deleteGiftConfirm'), { title: t('gifts.deleteGift'), confirmText: t('common.delete') })) return;
+      for (const uuid of uuids) {
+        await api.delete(`/gifts/orders/${uuid}`);
+      }
+      await reloadGifts(eventUuid);
     });
   });
 }
@@ -633,6 +708,7 @@ async function reloadGifts(eventUuid) {
 
   pageMembers = membersData.members || [];
   pageGiftsCache = data.gifts;
+  pageEventCache = data.event;
   const dir = document.querySelector('#gift-direction-tabs .filter-tab.active')?.dataset.direction || 'outgoing';
   el.innerHTML = renderGiftList(data.gifts, pageMembers, dir);
   attachGiftListHandlers(eventUuid);
@@ -661,60 +737,6 @@ function setupContactSearch(inputId, resultsId, onSelect) {
   });
 }
 
-function showGiftsDetailModal(gifts) {
-  const mid = 'gift-detail-' + Date.now();
-  const g0 = gifts[0];
-  const giversHtml = contactChips(g0.givers);
-  const recipientsHtml = contactChips(g0.recipients);
-
-  document.body.insertAdjacentHTML('beforeend', `
-    <div class="modal fade" id="${mid}" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">${giversHtml ? `${t('gifts.from')} ${giversHtml}` : t('gifts.gifts')}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            ${gifts.map(g => `
-              <div class="gift-detail-item">
-                <div class="gift-card-image">
-                  ${g.product_image_url
-                    ? `<img src="${g.product_image_url.startsWith('/uploads/') ? authUrl(g.product_image_url) : esc(g.product_image_url)}" alt="">`
-                    : `<div class="gift-card-placeholder"><i class="bi bi-gift"></i></div>`
-                  }
-                </div>
-                <div class="gift-detail-item-body">
-                  ${g.product_uuid
-                    ? `<a href="#" class="gift-open-product" data-product-uuid="${g.product_uuid}"><strong>${esc(g.title)}</strong></a>`
-                    : `<strong>${esc(g.title)}</strong>`
-                  }
-                  ${g.price ? `<span class="text-muted small">${formatPrice(g.price)}</span>` : ''}
-                  ${g.notes ? `<span class="text-muted small">${esc(g.notes)}</span>` : ''}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-    </div>
-  `);
-
-  const modalEl = document.getElementById(mid);
-  const modal = new bootstrap.Modal(modalEl);
-
-  // Product links in detail modal
-  modalEl.querySelectorAll('.gift-open-product').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      modal.hide();
-      showProductDetailModal(link.dataset.productUuid);
-    });
-  });
-
-  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
-  modal.show();
-}
 
 function getDomain(url) {
   try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }

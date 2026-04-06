@@ -417,8 +417,29 @@ details[open] > .gift-ideas-label::before {
 
 /* Contact chips in gift cards use standard .contact-chip from timeline.css */
 
-/* ── Received gifts (incoming) — compact grouped view ── */
+/* ── Received gifts (incoming) — two-column layout: givers left, gifts right ── */
+.gift-row-label {
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+}
+
+.gift-row-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
 .gift-received-row {
+  display: grid;
+  grid-template-columns: minmax(0, 30%) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-xs);
   background: var(--color-surface);
@@ -426,29 +447,25 @@ details[open] > .gift-ideas-label::before {
   border: 1px solid var(--color-border);
 }
 
-.gift-received-from {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-xs);
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
+.gift-received-givers,
+.gift-received-products {
+  min-width: 0;
 }
 
-.gift-received-items {
-  font-size: 0.9rem;
-  line-height: 1.6;
+.gift-received-actions {
+  flex-shrink: 0;
 }
 
-.gift-received-row.gift-show-details {
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.gift-received-row.gift-show-details:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--color-primary);
+@media (max-width: 640px) {
+  .gift-received-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "givers actions"
+      "products products";
+  }
+  .gift-received-givers { grid-area: givers; }
+  .gift-received-products { grid-area: products; }
+  .gift-received-actions { grid-area: actions; }
 }
 
 /* ── Gift detail modal items ── */
@@ -676,30 +693,39 @@ details[open] > .gift-ideas-label::before {
 
 .bg-purple { background-color: #9b59b6 !important; }
 
-/* ── Gift add row (modal) ── */
-.gift-add-row {
+/* ── Gift draft rows (add modal) ── */
+.gift-added-list {
   display: flex;
+  flex-direction: column;
   gap: var(--space-xs);
-  align-items: flex-start;
 }
 
-.gift-add-row-product {
+.gift-draft-row {
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-surface-alt, rgba(0, 0, 0, 0.03));
+  border-radius: var(--radius-sm);
+}
+
+.gift-draft-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.gift-draft-main .product-chip {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
-.gift-add-row-price {
+.gift-draft-price {
   width: 90px;
   flex-shrink: 0;
 }
 
-.gift-added-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) 0;
-  font-size: 0.875rem;
-  border-bottom: 1px solid var(--color-border);
+.gift-draft-remove {
+  flex-shrink: 0;
+  padding: 2px 6px;
 }
 
 /* ── Gift modal chips ── */

@@ -915,6 +915,7 @@
     "price": "Pris",
     "status": "Status",
     "notes": "Notater",
+    "notesPlaceholder": "Notat (valgfritt)",
     "statuses": {
       "idea": "Idé",
       "reserved": "Reservert",
@@ -993,5 +994,31 @@
     "productLinks": "Produktlenker",
     "productImage": "Produktbilde",
     "applySelected": "Bruk valgte"
+  },
+  "book": {
+    "settingsCardLabel": "Lag bok",
+    "settingsCardDesc": "Lag en trykkeklar fotobok fra tidslinjeinnlegg",
+    "wizardTitle": "Lag bok",
+    "wizardIntro": "Lag en fotobok basert på innlegg fra tidslinjen. Du kan forhåndsvise og bla gjennom sidene, og lagre som PDF fra nettleseren.",
+    "fieldTitle": "Tittel",
+    "fieldTitleHint": "Vises på forsiden. Default er kontaktens navn.",
+    "fieldSubtitle": "Undertittel (valgfri)",
+    "fieldContact": "Kontakt",
+    "fieldContactPlaceholder": "Søk etter en kontakt...",
+    "fieldDateFrom": "Fra dato",
+    "fieldDateTo": "Til dato",
+    "fieldLanguage": "Språk",
+    "fieldChapterGrouping": "Kapittelinndeling",
+    "chapterPerYear": "Ett per år",
+    "chapterNone": "Ingen",
+    "includeComments": "Ta med kommentarer",
+    "includeReactions": "Ta med likes/reaksjoner",
+    "createAndPreview": "Lag og forhåndsvis",
+    "errNoContact": "Velg en kontakt først",
+    "printPdf": "Skriv ut / Lagre som PDF",
+    "delete": "Slett bok",
+    "confirmDelete": "Slette denne boken? Dette kan ikke angres.",
+    "emptyState": "Ingen innlegg matcher valgt kontakt, datointervall og synlighet.",
+    "backPageText": "Laget med WhoareYou"
   }
 }
