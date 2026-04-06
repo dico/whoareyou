@@ -25,10 +25,12 @@ function escapeHtml(s) {
   }[c]));
 }
 
-function wizardFormHtml(mode) {
+// Create-book wizard. Metadata editing of existing books goes through the
+// showEditInfoModal modal in book-preview.js, not this form.
+function wizardFormHtml() {
   return `
     <div class="glass-card p-4 mb-3" id="book-wizard">
-      <h4 class="mb-3">${mode === 'edit' ? t('book.editTitle') : t('book.wizardTitle')}</h4>
+      <h4 class="mb-3">${t('book.wizardTitle')}</h4>
       <p class="text-muted small">${t('book.wizardIntro')}</p>
 
       <form id="book-form">
@@ -43,7 +45,6 @@ function wizardFormHtml(mode) {
           <input type="text" class="form-control" id="book-subtitle" maxlength="255">
         </div>
 
-        ${mode === 'create' ? `
         <div class="mb-3">
           <label class="form-label">${t('book.fieldContact')}</label>
           <div id="book-contact-chip-wrap"></div>
@@ -60,7 +61,6 @@ function wizardFormHtml(mode) {
             <input type="date" class="form-control" id="book-date-to">
           </div>
         </div>
-        ` : ''}
 
         <div class="mb-3">
           <label class="form-label">${t('book.fieldLanguage')}</label>
@@ -90,7 +90,7 @@ function wizardFormHtml(mode) {
         <div class="d-flex gap-2 justify-content-end">
           <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-cancel">${t('common.cancel')}</button>
           <button type="submit" class="btn btn-primary btn-sm" id="btn-save">
-            <i class="bi bi-${mode === 'edit' ? 'check-lg' : 'eye'} me-1"></i>${mode === 'edit' ? t('common.save') : t('book.createAndPreview')}
+            <i class="bi bi-eye me-1"></i>${t('book.createAndPreview')}
           </button>
         </div>
       </form>
@@ -177,7 +177,7 @@ async function loadAndRenderList() {
   }
 }
 
-function attachWizardHandlers({ mode, book }) {
+function attachWizardHandlers() {
   const titleInput = document.getElementById('book-title');
   const subtitleInput = document.getElementById('book-subtitle');
   const langSelect = document.getElementById('book-language');
@@ -185,72 +185,56 @@ function attachWizardHandlers({ mode, book }) {
   const commentsCheck = document.getElementById('book-include-comments');
   const reactionsCheck = document.getElementById('book-include-reactions');
 
-  // Pre-fill from existing book in edit mode.
-  if (mode === 'edit' && book) {
-    titleInput.value = book.title || '';
-    subtitleInput.value = book.subtitle || '';
-    langSelect.value = book.layout_options?.language || getLocale() || 'nb';
-    chapterSelect.value = book.layout_options?.chapterGrouping || 'year';
-    commentsCheck.checked = book.layout_options?.includeComments !== false;
-    reactionsCheck.checked = book.layout_options?.includeReactions !== false;
-  } else {
-    langSelect.value = getLocale() || 'nb';
-  }
+  langSelect.value = getLocale() || 'nb';
 
-  // Contact search only exists in create mode.
   let selectedContact = null;
-  if (mode === 'create') {
-    const searchInput = document.getElementById('book-contact-search');
-    const chipWrap = document.getElementById('book-contact-chip-wrap');
+  const searchInput = document.getElementById('book-contact-search');
+  const chipWrap = document.getElementById('book-contact-chip-wrap');
 
-    const renderChip = () => {
-      if (!selectedContact) {
-        chipWrap.innerHTML = '';
-        searchInput.style.display = '';
-        return;
-      }
-      const name = [selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(' ');
-      const initials = [selectedContact.first_name, selectedContact.last_name]
-        .filter(Boolean).map(s => s[0]).join('').toUpperCase();
-      // Design guideline #7: always show profile photo in the avatar slot
-      // when available; fall back to initials.
-      const avatarHtml = selectedContact.avatar
-        ? `<img src="${authUrl(selectedContact.avatar)}" alt="">`
-        : `<span>${escapeHtml(initials)}</span>`;
-      chipWrap.innerHTML = `
-        <span class="contact-chip">
-          <span class="contact-chip-avatar">${avatarHtml}</span>
-          ${escapeHtml(name)}
-          <button type="button" class="contact-chip-remove" id="chip-remove" aria-label="remove">×</button>
-        </span>
-      `;
-      searchInput.style.display = 'none';
-      document.getElementById('chip-remove').onclick = () => {
-        selectedContact = null;
-        renderChip();
-        searchInput.focus();
-      };
+  const renderChip = () => {
+    if (!selectedContact) {
+      chipWrap.innerHTML = '';
+      searchInput.style.display = '';
+      return;
+    }
+    const name = [selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(' ');
+    const initials = [selectedContact.first_name, selectedContact.last_name]
+      .filter(Boolean).map(s => s[0]).join('').toUpperCase();
+    // Design guideline #7: always show profile photo in the avatar slot
+    // when available; fall back to initials.
+    const avatarHtml = selectedContact.avatar
+      ? `<img src="${authUrl(selectedContact.avatar)}" alt="">`
+      : `<span>${escapeHtml(initials)}</span>`;
+    chipWrap.innerHTML = `
+      <span class="contact-chip">
+        <span class="contact-chip-avatar">${avatarHtml}</span>
+        ${escapeHtml(name)}
+        <button type="button" class="contact-chip-remove" id="chip-remove" aria-label="remove">×</button>
+      </span>
+    `;
+    searchInput.style.display = 'none';
+    document.getElementById('chip-remove').onclick = () => {
+      selectedContact = null;
+      renderChip();
+      searchInput.focus();
     };
-
-    attachContactSearch(searchInput, {
-      onSelect: (c) => {
-        selectedContact = c;
-        if (!titleInput.value.trim()) {
-          titleInput.value = [c.first_name, c.last_name].filter(Boolean).join(' ');
-        }
-        renderChip();
-      },
-    });
-  }
-
-  document.getElementById('btn-cancel').onclick = () => {
-    if (mode === 'edit') navigate('/settings/generate-book');
-    else hideWizard();
   };
+
+  attachContactSearch(searchInput, {
+    onSelect: (c) => {
+      selectedContact = c;
+      if (!titleInput.value.trim()) {
+        titleInput.value = [c.first_name, c.last_name].filter(Boolean).join(' ');
+      }
+      renderChip();
+    },
+  });
+
+  document.getElementById('btn-cancel').onclick = hideWizard;
 
   document.getElementById('book-form').onsubmit = async (e) => {
     e.preventDefault();
-    if (mode === 'create' && !selectedContact) {
+    if (!selectedContact) {
       showError(t('book.errNoContact'));
       return;
     }
@@ -259,34 +243,23 @@ function attachWizardHandlers({ mode, book }) {
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
-    const layoutOptions = {
-      language: langSelect.value,
-      chapterGrouping: chapterSelect.value,
-      includeComments: commentsCheck.checked,
-      includeReactions: reactionsCheck.checked,
-    };
-
     try {
-      if (mode === 'create') {
-        const payload = {
-          title: titleInput.value.trim(),
-          subtitle: subtitleInput.value.trim() || null,
-          contact_uuids: [selectedContact.uuid],
-          date_from: document.getElementById('book-date-from').value || null,
-          date_to: document.getElementById('book-date-to').value || null,
-          visibility_filter: 'shared_family',
-          layout_options: layoutOptions,
-        };
-        const res = await api.post('/books', payload);
-        navigate(`/books/${res.book.uuid}/preview`);
-      } else {
-        await api.patch(`/books/${book.uuid}`, {
-          title: titleInput.value.trim(),
-          subtitle: subtitleInput.value.trim() || null,
-          layout_options: layoutOptions,
-        });
-        navigate(`/books/${book.uuid}/preview`);
-      }
+      const payload = {
+        title: titleInput.value.trim(),
+        subtitle: subtitleInput.value.trim() || null,
+        contact_uuids: [selectedContact.uuid],
+        date_from: document.getElementById('book-date-from').value || null,
+        date_to: document.getElementById('book-date-to').value || null,
+        visibility_filter: 'shared_family',
+        layout_options: {
+          language: langSelect.value,
+          chapterGrouping: chapterSelect.value,
+          includeComments: commentsCheck.checked,
+          includeReactions: reactionsCheck.checked,
+        },
+      };
+      const res = await api.post('/books', payload);
+      navigate(`/books/${res.book.uuid}/preview`);
     } catch (err) {
       btn.disabled = false;
       btn.innerHTML = originalHtml;
@@ -297,9 +270,9 @@ function attachWizardHandlers({ mode, book }) {
 
 function showWizard() {
   const slot = document.getElementById('book-wizard-slot');
-  slot.innerHTML = wizardFormHtml('create');
+  slot.innerHTML = wizardFormHtml();
   document.getElementById('btn-new-book').style.display = 'none';
-  attachWizardHandlers({ mode: 'create' });
+  attachWizardHandlers();
   slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -334,30 +307,3 @@ export async function renderGenerateBook() {
   await loadAndRenderList();
 }
 
-export async function renderEditBook(bookUuid) {
-  const content = document.getElementById('app-content');
-  content.innerHTML = `<div class="page-container"><p class="text-muted">${t('common.loading')}</p></div>`;
-
-  let book;
-  try {
-    const res = await api.get(`/books/${bookUuid}`);
-    book = res.book;
-  } catch (err) {
-    content.innerHTML = `<div class="page-container"><div class="alert alert-danger">${escapeHtml(err.message || 'Failed to load')}</div></div>`;
-    return;
-  }
-
-  content.innerHTML = `
-    <div class="page-container" style="max-width:720px">
-      <div class="page-header">
-        <button class="btn btn-link btn-back" id="btn-back"><i class="bi bi-arrow-left"></i></button>
-        <h2><i class="bi bi-pencil"></i> ${t('book.editTitle')}</h2>
-        <div></div>
-      </div>
-      <div id="book-wizard-slot">${wizardFormHtml('edit')}</div>
-    </div>
-  `;
-
-  document.getElementById('btn-back').onclick = () => navigate(`/books/${bookUuid}/preview`);
-  attachWizardHandlers({ mode: 'edit', book });
-}

@@ -50,8 +50,19 @@ Each page exports a `render*()` function called by the router in `app.js`.
 ### Book Pages
 | Page | Route | Function |
 |------|-------|----------|
-| Generate Book | `/settings/generate-book` | `renderGenerateBook()` — wizard to create a book (title, contact, date range, language, chapter grouping) |
-| Book Preview | `/books/:uuid/preview` | `renderBookPreview(uuid)` — flippable HTML book reader. Keyboard arrows navigate pages. "Print / Save as PDF" triggers `window.print()` which uses `@media print` rules in [book.css](../frontend/css/components/book.css) to lay out one physical page per `.book-page`. No server-side PDF in Phase 1. |
+| Book list + wizard | `/settings/generate-book` | `renderGenerateBook()` — list of existing books with inline create wizard. Per-row ellipsis menu (edit info, delete) reuses `showEditInfoModal` from [book-preview.js](../frontend/js/pages/book-preview.js). |
+| Book Preview | `/books/:uuid/preview` | `renderBookPreview(uuid)` — HTML book reader with three view modes, printable via browser (`window.print()` + `@media print` rules in [book.css](../frontend/css/components/book.css)). |
+
+**Book preview view modes:**
+- **Flip** (default) — one page at a time, keyboard arrow navigation, URL hash `#p=N` preserves current page across refresh. Optional "spread" sub-mode shows two pages side by side like a real book opening. Pencil-on-hover per page toggles curate mode (focal point picker + per-image exclusion).
+- **Grid** — thumbnail grid of every packed page. Hidden posts surfaced in a separate section at the bottom for recovery.
+- **Editor** — vertical list of every post with a 302×302px scaled preview on the left and a side panel on the right. Primary control is a 4-button weight selector: Big / Normal / Small / Hidden. Auto-weight is scored from `likes × 3 + comments × 4 + bodyLen/20 + mediaCount × 2` and shown as a hint. Live page-count total at the top.
+
+**Weight-based packing:** posts have an importance weight (`big | normal | small | hidden`). The `buildPages()` layout engine in [book-preview.js](../frontend/js/pages/book-preview.js) packs `small` posts into shared 4-up batch pages to reduce total page count. `big`/`normal` posts each get their own page with an auto-selected template (hero-top, full-bleed, grid-2/3/4, or text-heavy) based on image count + body length. `hidden` posts are excluded from the book but remain visible in editor/grid for recovery.
+
+**Overrides** (stored in `book.layout_options.overrides`, auto-saved via debounced PATCH on every change) include: `postWeight`, `excludedMedia`, `mediaFocal` (CSS `object-position`), and `templates` (manual template override). All override values are validated against allow-lists/regex before rendering to prevent injection from saved JSON.
+
+**Metadata edit** uses `showEditInfoModal()` (exported from [book-preview.js](../frontend/js/pages/book-preview.js)) — a bootstrap modal with fields for title, subtitle, language, chapter grouping, and comments/reactions toggles. Used both from the preview toolbar ellipsis and the book list row ellipsis.
 
 ### Admin Pages
 | Page | Route | Function |
