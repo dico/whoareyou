@@ -377,6 +377,15 @@
   object-fit: cover;
 }
 
+.product-chip-price {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+  font-size: 0.75rem;
+  margin-left: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--color-border);
+}
+
 .product-chip-remove {
   display: inline-flex;
   align-items: center;

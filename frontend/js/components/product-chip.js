@@ -1,4 +1,5 @@
 import { authUrl } from '../utils/auth-url.js';
+import { formatPrice } from '../utils/i18n.js';
 
 /**
  * Product chip — visual mirror of `contact-chip`: round 24px thumbnail + title.
@@ -11,11 +12,14 @@ import { authUrl } from '../utils/auth-url.js';
  * @param {string} opts.title - Visible chip label
  * @param {string} [opts.image_url] - Full or /uploads/-relative URL
  * @param {string} [opts.product_uuid] - When set, clicking opens product detail
+ * @param {number} [opts.price] - Optional price suffix. Pass the per-order price
+ *   (e.g. `gift_orders.price`), never the generic product default price, since
+ *   product prices are dynamic and rarely reflect what was actually paid.
  * @param {boolean} [opts.removable=false] - Show an X button; caller wires the listener
  * @param {string} [opts.dataAttrs=''] - Extra raw data-attributes to add on the element
  * @returns {string} HTML string
  */
-export function productChipHtml({ title, image_url, product_uuid, removable = false, dataAttrs = '' }) {
+export function productChipHtml({ title, image_url, product_uuid, price, removable = false, dataAttrs = '' }) {
   const imgSrc = image_url
     ? (/^https?:\/\//i.test(image_url) ? image_url : authUrl(image_url))
     : null;
@@ -28,9 +32,11 @@ export function productChipHtml({ title, image_url, product_uuid, removable = fa
   const removeBtn = removable
     ? `<button type="button" class="product-chip-remove"><i class="bi bi-x"></i></button>`
     : '';
+  const priceLabel = price != null && price !== '' ? `<span class="product-chip-price">${esc(formatPrice(price))}</span>` : '';
   return `<${tag}${href} class="product-chip"${clickAttr}${dataAttrs ? ` ${dataAttrs}` : ''}>` +
     `<span class="product-chip-avatar">${thumb}</span>` +
     `${esc(title || '')}` +
+    `${priceLabel}` +
     `${removeBtn}` +
     `</${tag}>`;
 }

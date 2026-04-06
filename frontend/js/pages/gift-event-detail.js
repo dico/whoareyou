@@ -226,6 +226,7 @@ function giftChipRow({ contacts, contactsLabel, gifts, uuids, actionsHtml }) {
             title: g.title,
             image_url: g.product_image_url,
             product_uuid: g.product_uuid,
+            price: g.price,
             dataAttrs: `data-gift-uuid="${g.uuid}"`,
           })).join('')}
         </div>
@@ -657,10 +658,21 @@ function attachGiftListHandlers(eventUuid) {
   const el = document.getElementById('gift-list');
   if (!el) return;
 
-  // "Add gift for member" in incoming view
+  // "Add gift for member" in incoming view. Look up the full contact
+  // (including avatar) so the prefilled chip renders correctly.
   el.querySelectorAll('.gift-add-for-member').forEach(btn => {
     btn.addEventListener('click', () => {
-      const recipient = { uuid: btn.dataset.uuid, first_name: btn.dataset.name, last_name: '' };
+      const uuid = btn.dataset.uuid;
+      const fromGift = pageGiftsCache
+        .flatMap(g => g.recipients || [])
+        .find(r => r.uuid === uuid);
+      const fromMember = pageMembers.find(m => m.linked_contact_uuid === uuid);
+      const recipient = fromGift || (fromMember ? {
+        uuid,
+        first_name: fromMember.first_name,
+        last_name: fromMember.last_name || '',
+        avatar: fromMember.avatar || null,
+      } : { uuid, first_name: btn.dataset.name, last_name: '' });
       showGiftModalForRecipient(eventUuid, recipient);
     });
   });
