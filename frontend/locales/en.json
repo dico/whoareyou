@@ -921,6 +921,8 @@
     "notesPlaceholder": "Note (optional)",
     "errorRecipientRequired": "Please select at least one recipient",
     "errorGiverRequired": "Please select at least one giver",
+    "addHousehold": "Add household",
+    "addMyFamily": "Add my family",
     "statuses": {
       "idea": "Idea",
       "reserved": "Reserved",
@@ -1029,6 +1031,8 @@
     "fontSize_small": "Small",
     "fontSize_normal": "Normal",
     "fontSize_large": "Large",
+    "fieldPageSize": "Page size",
+    "fieldPageSizeHint": "Pick a format that matches your print service. Bokfabrikken (Norway) is significantly cheaper than Blurb for Norwegian customers.",
     "createAndPreview": "Create and preview",
     "errNoContact": "Please select a contact",
     "printPdf": "Print / Save as PDF",

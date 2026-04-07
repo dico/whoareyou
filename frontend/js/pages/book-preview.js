@@ -242,6 +242,57 @@ function renderBackPage(book) {
 // adding an entry to TEMPLATES and an auto-select rule.
 
 const TEMPLATES = ['hero-top', 'full-bleed', 'grid-2', 'grid-3', 'grid-4', 'text-heavy', 'image-side'];
+
+// Available physical page sizes. Width and height in millimeters. Each
+// entry tags which print service it matches so the wizard can group them
+// in the dropdown. Templates are designed around a square aspect ratio
+// so portrait formats work but may look slightly different.
+const PAGE_SIZES = {
+  // Bokfabrikken (Norwegian — much cheaper for Norwegian customers)
+  'bf-130x210': { label: '130×210 mm', w: 130, h: 210, group: 'bokfabrikken' },
+  'bf-a5':      { label: 'A5 (148×210 mm)', w: 148, h: 210, group: 'bokfabrikken' },
+  'bf-170x240': { label: '170×240 mm', w: 170, h: 240, group: 'bokfabrikken' },
+  'bf-a4':      { label: 'A4 (210×297 mm)', w: 210, h: 297, group: 'bokfabrikken' },
+  // Blurb ImageWrap Hardcover
+  'mini-square':        { label: '5×5" — Mini Square (13×13 cm)',          w: 130, h: 130, group: 'blurb' },
+  'small-square':       { label: '7×7" — Small Square (18×18 cm)',         w: 180, h: 180, group: 'blurb' },
+  'large-square':       { label: '12×12" — Large Square (30×30 cm)',       w: 300, h: 300, group: 'blurb' },
+  'standard-portrait':  { label: '8×10" — Standard Portrait (20×25 cm)',   w: 200, h: 250, group: 'blurb' },
+  'standard-landscape': { label: '10×8" — Standard Landscape (25×20 cm)',  w: 250, h: 200, group: 'blurb' },
+  'large-landscape':    { label: '13×11" — Large Landscape (33×28 cm)',    w: 330, h: 280, group: 'blurb' },
+  // Legacy
+  'square-200':         { label: '200 mm (legacy)', w: 200, h: 200, group: 'legacy' },
+};
+const DEFAULT_PAGE_SIZE = 'bf-170x240';
+function safePageSize(value) {
+  return PAGE_SIZES[value] ? value : 'square-200';
+}
+
+// Build a grouped <select> options HTML string for the page size dropdown.
+// Used by both the create wizard and the edit-info modal so the option
+// list is defined in one place.
+export function pageSizeOptionsHtml(currentValue) {
+  const groups = {
+    bokfabrikken: 'Bokfabrikken (Norway)',
+    blurb: 'Blurb ImageWrap Hardcover',
+    legacy: 'Legacy',
+  };
+  const grouped = {};
+  for (const [id, ps] of Object.entries(PAGE_SIZES)) {
+    if (!grouped[ps.group]) grouped[ps.group] = [];
+    grouped[ps.group].push({ id, label: ps.label });
+  }
+  return Object.entries(groups).map(([key, label]) => {
+    if (!grouped[key]) return '';
+    return `
+      <optgroup label="${label}">
+        ${grouped[key].map(o => `
+          <option value="${o.id}"${currentValue === o.id ? ' selected' : ''}>${o.label}</option>
+        `).join('')}
+      </optgroup>
+    `;
+  }).join('');
+}
 // Three-state weight model: a post either gets its own page, shares a
 // batch page with other small posts, or is hidden. The visual style of a
 // full page is decided by template selection (auto-picked from content +
@@ -607,6 +658,12 @@ export function showEditInfoModal(book, onSave) {
                 <option value="none"${layout.chapterGrouping === 'none' ? ' selected' : ''}>${t('book.chapterNone')}</option>
               </select>
             </div>
+            <div class="mb-3">
+              <label class="form-label">${t('book.fieldPageSize')}</label>
+              <select class="form-select" id="edit-page-size">
+                ${pageSizeOptionsHtml(layout.pageSize || 'bf-170x240')}
+              </select>
+            </div>
             <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="edit-comments" ${layout.includeComments !== false ? 'checked' : ''}>
               <label class="form-check-label" for="edit-comments">${t('book.includeComments')}</label>
@@ -643,6 +700,7 @@ export function showEditInfoModal(book, onSave) {
         includeComments: wrap.querySelector('#edit-comments').checked,
         includeReactions: wrap.querySelector('#edit-reactions').checked,
         showPageNumbers: wrap.querySelector('#edit-page-numbers').checked,
+        pageSize: wrap.querySelector('#edit-page-size').value,
       },
     };
     if (!payload.title) return;
@@ -753,15 +811,17 @@ export async function renderBookPreview(bookUuid) {
   // on layout_options.theme. Applied via CSS custom properties on the
   // .book-viewer element, scoped to the book only.
   const themeVarsStyle = () => {
-    const theme = data.book.layout_options?.theme || {};
+    const layout = data.book.layout_options || {};
+    const theme = layout.theme || {};
     const parts = [];
     if (theme.accent) parts.push(`--book-accent: ${theme.accent}`);
     if (theme.fontFamily) parts.push(`--book-font: ${theme.fontFamily}`);
-    // Body font size scale: small/normal/large maps to a multiplier on
-    // the base 12pt body font.
     const sizeScale = { small: 0.88, normal: 1, large: 1.12 };
-    const scale = sizeScale[theme.fontSize] || 1;
-    parts.push(`--book-text-scale: ${scale}`);
+    parts.push(`--book-text-scale: ${sizeScale[theme.fontSize] || 1}`);
+    // Page dimensions from the chosen page size.
+    const ps = PAGE_SIZES[safePageSize(layout.pageSize)];
+    parts.push(`--book-page-width: ${ps.w}mm`);
+    parts.push(`--book-page-height: ${ps.h}mm`);
     return parts.join('; ');
   };
 
@@ -1514,15 +1574,16 @@ export async function renderBookPreview(bookUuid) {
   };
 
   // Compute how much the book-pages need to shrink to fit the stage.
-  // 200mm ≈ 755.9px at 96dpi. For spread, content width is 2 * 200mm + 2mm.
+  // Uses the active page size from layout_options.
   const computeScale = () => {
     const stage = document.getElementById('book-stage');
     if (!stage) return;
     const MM_PER_INCH = 25.4;
     const DPI = 96;
     const PX_PER_MM = DPI / MM_PER_INCH; // ≈ 3.7795
-    const pageW = 200 * PX_PER_MM;
-    const pageH = 200 * PX_PER_MM;
+    const ps = PAGE_SIZES[safePageSize(data.book.layout_options?.pageSize)];
+    const pageW = ps.w * PX_PER_MM;
+    const pageH = ps.h * PX_PER_MM;
     const contentW = spreadMode ? (pageW * 2 + 2 * PX_PER_MM) : pageW;
     const contentH = pageH;
 
@@ -1622,10 +1683,23 @@ export async function renderBookPreview(bookUuid) {
       // Always print the full (non-excluded) flip view, so disable grid mode first.
       const wasGrid = gridMode;
       if (wasGrid) { gridMode = false; renderShell(); }
+
+      // Inject an @page rule with the correct dimensions for this book.
+      // CSS @page can't read CSS variables, so we set the size at print
+      // time via a temporary <style> element.
+      const ps = PAGE_SIZES[safePageSize(data.book.layout_options?.pageSize)];
+      const styleEl = document.createElement('style');
+      styleEl.id = 'book-print-page-size';
+      styleEl.textContent = `@page { size: ${ps.w}mm ${ps.h}mm; margin: 0; } @media print { .book-page { width: ${ps.w}mm !important; height: ${ps.h}mm !important; } }`;
+      document.head.appendChild(styleEl);
+
       document.body.classList.add('book-printing');
       setTimeout(() => {
         window.print();
-        setTimeout(() => document.body.classList.remove('book-printing'), 500);
+        setTimeout(() => {
+          document.body.classList.remove('book-printing');
+          styleEl.remove();
+        }, 500);
       }, 50);
     };
     document.getElementById('book-btn-delete').onclick = async () => {

@@ -1377,10 +1377,8 @@
  * One .book-page per physical page. Hides the viewer chrome and
  * shows every page sequentially, full-size. */
 @media print {
-  @page {
-    size: 200mm 200mm;
-    margin: 0;
-  }
+  /* @page rule with the actual dimensions is injected by JS at print time
+   * (it depends on the user's chosen page size). */
 
   body { background: #fff !important; }
 
@@ -1425,8 +1423,7 @@
   .book-page {
     box-shadow: none !important;
     border-radius: 0 !important;
-    width: 200mm !important;
-    height: 200mm !important;
     transform: none !important;
+    /* width/height come from the JS-injected @page rule */
   }
 }

@@ -140,28 +140,51 @@ Photo book generation. Books are definitions stored in `book_jobs`; the HTML pre
 |--------|----------|-------------|
 | GET | `/` | List current user's books |
 | POST | `/` | Create a book (title, contact_uuids, date_from/to, layout_options) |
+| POST | `/preview` | Estimate post + page count for a set of params without creating a book. Returns `{ postCount, estimatedPages }`. Used by the wizard for live page-count feedback. |
 | GET | `/:uuid` | Book metadata |
-| PATCH | `/:uuid` | Update title/subtitle/layout_options (including `layout_options.overrides` for per-post weight, template, focal point, media/post exclusion) |
+| PATCH | `/:uuid` | Update title/subtitle/layout_options (including `layout_options.overrides` for per-post weight, template, focal point, media/post exclusion, custom text, comment visibility, batch order/variant) |
 | DELETE | `/:uuid` | Delete book |
-| GET | `/:uuid/data` | Full rendered content: contacts + posts (with media, comments, reactions) filtered by contact, date range, and visibility. **Never includes `private` posts from any user** — enforces `WHERE visibility IN ('shared','family')`. |
+| GET | `/:uuid/data` | Full rendered content: contacts + posts (with media, comments, reactions) filtered by contact, date range, and visibility. **Never includes `private` posts from any user** — enforces `WHERE visibility IN ('shared','family')`. Comment rows include `author_avatar` (thumbnail_path) for bubble rendering. |
+| POST | `/:uuid/cover` | Upload a custom cover image (multipart `cover` field, image only). Processed via sharp, stored under `/uploads/books/{uuid}/cover_*.webp`, replaces previous cover file. Updates `layout_options.theme.coverImage`. |
+| DELETE | `/:uuid/cover` | Remove the custom cover image, reverting to the default gradient or theme color. |
 
 **`layout_options` shape:**
 ```
 {
   language: 'nb' | 'en',
-  chapterGrouping: 'year' | 'none',
+  chapterGrouping: 'year' | 'contact' | 'none',
   includeComments: boolean,
   includeReactions: boolean,
-  pageSize: 'square-200',
+  showPageNumbers: boolean,
+  pageSize: 'bf-170x240' | 'bf-a5' | 'bf-a4' | 'small-square' | 'large-square' | ...,
+  theme: {
+    coverImage: '/uploads/books/{uuid}/cover_*.webp' | null,
+    coverBg: '#hexcolor' | null,
+    titlePosition: 'center' | 'top' | 'bottom' | 'bottom-left',
+    accent: '#hexcolor',
+    fontFamily: 'CSS font-family value',
+    fontSize: 'small' | 'normal' | 'large',
+    backText: 'custom back cover text' | null,
+  },
   overrides: {
-    postWeight: { [postUuid]: 'big'|'normal'|'small'|'hidden' },
+    postWeight:    { [postUuid]: 'full' | 'small' | 'hidden' },
     excludedMedia: [file_path, ...],
-    mediaFocal: { [file_path]: 'X% Y%' },
-    templates: { [postUuid]: 'hero-top'|'full-bleed'|'grid-2'|'grid-3'|'grid-4'|'text-heavy' },
+    mediaFocal:    { [file_path]: 'X% Y%' },
+    templates:     { [postUuid]: 'hero-top'|'full-bleed'|'grid-2'|'grid-3'|'grid-4'|'text-heavy'|'image-side' },
+    customText:    { [postUuid]: 'overrides post.body in book' },
+    hideComments:  { [postUuid]: true },
+    batchOrder:    { [batchKey]: [postUuid, ...] },
+    batchVariant:  { [batchKey]: 'horizontal'|'vertical'|'big-left'|'big-top'|'grid'|'rows'|'columns' },
   }
 }
 ```
-All override values are validated frontend-side against allow-lists/regex before rendering to prevent CSS or class injection from saved JSON.
+
+`pageSize` selects the physical book dimensions in mm. Two groups: Bokfabrikken (Norwegian, much cheaper for Norwegian customers — 130×210, A5, 170×240, A4) and Blurb ImageWrap Hardcover (mini/small/large square + standard portrait/landscape + large landscape).
+
+**Security notes:**
+- All override values are validated frontend-side against allow-lists/regex before rendering to prevent CSS or class injection from saved JSON.
+- Cover files at `/uploads/books/{uuid}/` are scoped to the book owner only (never readable by other tenant members or portal guests). Validated in the `/uploads/` route handler in `index.js`.
+- `/preview` enforces tenant isolation and visibility filtering (same rules as `/data`).
 
 ### Export (`/api/export`)
 Data export with two modes: instant JSON ZIP (`GET /data`) and full backup with media (`POST /full`, `GET /status/:jobId`, `GET /download/:jobId`). See [export.md](export.md) for field documentation.

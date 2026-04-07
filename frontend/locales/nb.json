@@ -921,6 +921,8 @@
     "notesPlaceholder": "Notat (valgfritt)",
     "errorRecipientRequired": "Velg minst én mottaker",
     "errorGiverRequired": "Velg minst én giver",
+    "addHousehold": "Legg til husstand",
+    "addMyFamily": "Legg til min familie",
     "statuses": {
       "idea": "Idé",
       "reserved": "Reservert",
@@ -1029,6 +1031,8 @@
     "fontSize_small": "Liten",
     "fontSize_normal": "Normal",
     "fontSize_large": "Stor",
+    "fieldPageSize": "Sidestørrelse",
+    "fieldPageSizeHint": "Velg et format som matcher trykkeriet ditt. Bokfabrikken er betydelig billigere enn Blurb for norske kunder.",
     "createAndPreview": "Lag og forhåndsvis",
     "errNoContact": "Velg en kontakt først",
     "printPdf": "Skriv ut / Lagre som PDF",

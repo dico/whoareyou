@@ -9,6 +9,7 @@ import { t, getLocale, formatDateLong } from '../utils/i18n.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
+import { pageSizeOptionsHtml } from './book-preview.js';
 
 function showError(message) {
   return confirmDialog(message, {
@@ -69,6 +70,14 @@ function wizardFormHtml() {
             <option value="nb">Norsk</option>
             <option value="en">English</option>
           </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">${t('book.fieldPageSize')}</label>
+          <select class="form-select" id="book-page-size">
+            ${pageSizeOptionsHtml('bf-170x240')}
+          </select>
+          <div class="form-text">${t('book.fieldPageSizeHint')}</div>
         </div>
 
         <div class="mb-3">
@@ -298,6 +307,7 @@ function attachWizardHandlers() {
           chapterGrouping: chapterSelect.value,
           includeComments: commentsCheck.checked,
           includeReactions: reactionsCheck.checked,
+          pageSize: document.getElementById('book-page-size').value,
         },
       };
       const res = await api.post('/books', payload);

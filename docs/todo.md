@@ -84,49 +84,31 @@ Flippable HTML book preview, single-contact, one template per post, browser-base
 - i18n `book.*` in en/nb, docs updated
 - **No Puppeteer, no Chromium, no Dockerfile changes.**
 
-#### Phase 2 — Curation + more layouts — PARTIAL
-**Scope:** Improve layout quality and give deeper control over the output.
+#### Phase 2 — Curation + more layouts — DONE ✅
 
-**Done:**
-- 7 layout templates (hero-top, full-bleed, grid-2, grid-3, grid-4, text-heavy, image-side)
-- Auto template selection from image count, body length, comment count, engagement score
-- Grouped view modes (Flip / Grid / Editor segmented control)
-- Pencil-on-hover per page opens a dedicated page editor (big preview + side panel)
-- Dedicated batch editor for shared pages: variant picker (2/3/4-post layouts), reorder, per-post caption modal, focal point
-- 3-state weight model: `full | small | hidden`. Legacy `big`/`normal` mapped to `full` for backward compat
-- Adaptive batch layouts by post count; 1-post batches promoted to full pages
-- Auto-weight scoring based on likes × 3 + comments × 4 + bodyLen/20 + mediaCount × 2
-- Per-page custom text override (`overrides.customText`)
-- Per-page comment visibility toggle (`overrides.hideComments`)
+All Phase 2 functionality is complete and pushed to production. See [docs/frontend.md](frontend.md) and [docs/api.md](api.md) for the full feature set. Highlights:
+
+- 7 layout templates with auto-selection by content + engagement score
+- Three view modes (Flip / Grid / Editor) + dedicated sub-editors (page / batch / cover)
+- 3-state weight model (full / small / hidden) with adaptive batch layouts
+- Multi-contact books with per-contact chapter grouping
+- Custom cover (upload + media picker + position + colors + font)
+- Per-book theming via CSS variables
+- Page-size picker (Bokfabrikken + Blurb formats)
+- Wizard live page-count preview
+- Page numbers, custom back-cover text, body text size
+- Loading skeleton, slide animation, swipe gestures
 - Comment bubbles with author avatars
-- Image-side template with comment sidebar (auto-picks when comments ≥ 4)
-- Inline metadata edit modal (replaces navigate-to-wizard pattern)
-- Ellipsis dropdowns for book-level actions (edit info / print / delete)
-- Per-row ellipsis in book list
-- Per-image exclusion within posts
-- Focal-point picker (click image in page/batch editor)
-- URL hash preserves view mode + current page across refresh
-- Editor view optimized: partial updates on weight change instead of full re-render
-- Grid view is pure navigation (click to jump, pencil on hover to edit)
-- Overrides sanitized to prevent CSS/class injection
 
-**Still missing (Phase 2 continued):**
-- **Custom cover** — upload own cover image, editable title placement, optional back-cover text/photo
-- **Theming per book** — color scheme (cover bg, accent), font family, cover layout. Store in `layout_options.theme`. Scoped to `.book-viewer` so main app theme isn't affected
-- **Multi-contact books** ("family year book") — wizard accepts multiple contacts, show author name on posts, per-contact chapter grouping
-- **Timeline gap dividers** — long periods without posts should show a "X months later" divider rather than jumping silently
-- **Page count in wizard** — show estimated page count + optional Blurb price estimate before creating the book
-- **Collage template + landscape/portrait crop variants**
-- **Back-cover custom text** (currently hardcoded)
-
-#### Phase 2.5 — Small polish (nice-to-have, not blocking)
-- Back-cover custom text (currently hardcoded "Laget med WhoareYou")
-- Swipe gestures on mobile for page turn
-- Loading skeleton while `/data` fetches (large books can be slow)
+#### Phase 2.5 — Nice-to-have polish (not blocking)
 - Pagination/lazy loading of media in the grid view for very large books
 - Better empty-state messaging when filters yield zero posts
 - Keyboard shortcut hints (arrow keys, G for grid, etc.)
-- Undo last exclusion in curate mode
+- Undo last action in editor (e.g. accidental "Hide page")
+- Custom dimensions option (numeric mm input) for printers not in our preset list
+- Copy cover image to `/uploads/books/{uuid}/` when picked from media-picker (currently a reference; would survive source post deletion)
+- Collage template + landscape-aware crop variants for portrait/landscape page sizes
+- Timeline gap dividers ("3 months later") between posts with long gaps
 
 #### Phase 3 — Server-side PDF
 **Scope:** Automated, high-quality PDF generation.
