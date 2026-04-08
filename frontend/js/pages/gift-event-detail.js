@@ -72,8 +72,8 @@ async function loadEventDetail(uuid) {
         </div>
         <div class="detail-header-toolbar">
           <div class="filter-tabs" id="gift-direction-tabs">
-            <button class="filter-tab active" data-direction="outgoing">${t('gifts.outgoing')}</button>
-            <button class="filter-tab" data-direction="incoming">${t('gifts.incoming')}</button>
+            ${event.directions !== 'incoming' ? `<button class="filter-tab" data-direction="outgoing">${t('gifts.outgoing')}</button>` : ''}
+            ${event.directions !== 'outgoing' ? `<button class="filter-tab" data-direction="incoming">${t('gifts.incoming')}</button>` : ''}
           </div>
           <button class="btn btn-primary btn-sm" id="btn-new-gift">
             <i class="bi bi-plus-lg me-1"></i>${t('gifts.newGift')}
@@ -81,9 +81,7 @@ async function loadEventDetail(uuid) {
         </div>
       </div>
 
-      <div id="gift-list">
-        ${renderGiftList(gifts, pageMembers, 'outgoing')}
-      </div>
+      <div id="gift-list"></div>
     `;
 
     // Back
@@ -102,15 +100,17 @@ async function loadEventDetail(uuid) {
       }
     });
 
-    // Direction tabs — remember selection
-    const defaultDir = ['birthday', 'wedding'].includes(event.event_type) ? 'incoming' : 'outgoing';
-    const savedDir = localStorage.getItem('giftDirection') || defaultDir;
-    if (savedDir !== 'outgoing') {
-      document.querySelectorAll('#gift-direction-tabs .filter-tab').forEach(b => b.classList.remove('active'));
-      document.querySelector(`#gift-direction-tabs [data-direction="${savedDir}"]`)?.classList.add('active');
-      document.getElementById('gift-list').innerHTML = renderGiftList(gifts, pageMembers, savedDir);
-    }
-    updateEventMeta(event, gifts, savedDir);
+    // Direction tabs — pick the active one based on the event's
+    // allowed directions plus a remembered preference where applicable.
+    const allowedDirs = event.directions === 'both'
+      ? ['outgoing', 'incoming']
+      : [event.directions];
+    const savedDir = localStorage.getItem('giftDirection');
+    const initialDir = allowedDirs.includes(savedDir) ? savedDir : allowedDirs[0];
+    document.querySelectorAll('#gift-direction-tabs .filter-tab').forEach(b => b.classList.remove('active'));
+    document.querySelector(`#gift-direction-tabs [data-direction="${initialDir}"]`)?.classList.add('active');
+    document.getElementById('gift-list').innerHTML = renderGiftList(gifts, pageMembers, initialDir);
+    updateEventMeta(event, gifts, initialDir);
     document.getElementById('gift-direction-tabs').addEventListener('click', (e) => {
       const btn = e.target.closest('.filter-tab');
       if (!btn) return;
@@ -125,7 +125,7 @@ async function loadEventDetail(uuid) {
 
     // New gift modal
     document.getElementById('btn-new-gift').addEventListener('click', () => {
-      const dir = document.querySelector('#gift-direction-tabs .filter-tab.active')?.dataset.direction || 'outgoing';
+      const dir = document.querySelector('#gift-direction-tabs .filter-tab.active')?.dataset.direction || allowedDirs[0];
       showGiftModal(uuid, event, dir);
     });
 
@@ -140,7 +140,9 @@ function updateEventMeta(event, gifts, direction) {
   const count = gifts.filter(g => g.order_type === direction).length;
   const parts = [
     event.event_date ? formatDate(event.event_date) : '',
-    event.honoree ? `<a href="#" class="text-muted" ${giftContactLinkAttrs(event.honoree)}>${esc(event.honoree.first_name)} ${esc(event.honoree.last_name || '')}</a>` : '',
+    event.honorees?.length
+      ? event.honorees.map(h => `<a href="#" class="text-muted" ${giftContactLinkAttrs(h)}>${esc(h.first_name)} ${esc(h.last_name || '')}</a>`).join(', ')
+      : '',
     t('gifts.giftsCount', { count }),
   ].filter(Boolean);
   const el = document.getElementById('event-meta');
@@ -242,32 +244,23 @@ function giftChipRow({ contacts, contactsLabel, gifts, uuids, actionsHtml }) {
 }
 
 function renderIncomingList(gifts, members) {
-  // Build contact lookup from gifts (has avatars) and members
-  const contactLookup = new Map();
-  for (const g of gifts) {
-    for (const r of (g.recipients || [])) {
-      if (!contactLookup.has(r.uuid)) contactLookup.set(r.uuid, r);
-    }
-  }
-
-  // Family members (may not have avatar from members API — enrich from gifts if possible)
-  const familyMembers = (members || [])
-    .filter(m => m.linked_contact_uuid)
-    .map(m => {
-      const fromGift = contactLookup.get(m.linked_contact_uuid);
-      return {
-        uuid: m.linked_contact_uuid,
-        first_name: m.first_name, last_name: m.last_name || '',
-        avatar: fromGift?.avatar || m.avatar || null,
-      };
-    });
+  // If the event has honorees (birthday, wedding, etc.) we treat them as
+  // the implicit recipient(s) when a gift was saved with no explicit
+  // recipients — the user shouldn't have to type "to Vigdis" on her own
+  // birthday. Without honorees we fall back to a generic "?" group.
+  const eventHonorees = pageEventCache?.honorees?.length
+    ? pageEventCache.honorees
+    : (pageEventCache?.honoree ? [pageEventCache.honoree] : []);
 
   // Group gifts by the full recipient set (sorted UUID list) so a joint
   // gift to "Kari + Ola" stays in one group with both names in the header,
   // rather than being duplicated under each recipient individually.
   const byRecipientSet = new Map();
   for (const g of gifts) {
-    const recs = g.recipients?.length ? g.recipients : [];
+    let recs = g.recipients?.length ? g.recipients : [];
+    if (!recs.length && eventHonorees.length) {
+      recs = eventHonorees.map(h => ({ ...h, type: 'contact' }));
+    }
     const key = recs.length ? recs.map(r => r.uuid).sort().join(',') : '_unknown';
     if (!byRecipientSet.has(key)) {
       byRecipientSet.set(key, { recipients: recs, gifts: [] });
@@ -275,24 +268,15 @@ function renderIncomingList(gifts, members) {
     byRecipientSet.get(key).gifts.push(g);
   }
 
-  // Ensure every family member has a section, even when they have no gifts
-  // yet. A member's solo section may already exist if they received
-  // individual gifts; otherwise we add an empty one.
-  for (const m of familyMembers) {
-    if (!byRecipientSet.has(m.uuid)) {
-      byRecipientSet.set(m.uuid, { recipients: [m], gifts: [] });
-    }
-  }
-
   const groups = [...byRecipientSet.values()];
   if (!groups.length) {
     return `<div class="empty-state"><i class="bi bi-gift"></i><p>${t('gifts.noGifts')}</p></div>`;
   }
 
-  // Sort: family-member-only groups first (matching the member order),
-  // then joint groups, then unknown.
-  const familyUuids = new Set(familyMembers.map(m => m.uuid));
-  const memberOrder = new Map(familyMembers.map((m, i) => [m.uuid, i]));
+  // Sort: solo family-member groups first (matching the member order),
+  // then everything else.
+  const familyUuids = new Set((members || []).filter(m => m.linked_contact_uuid).map(m => m.linked_contact_uuid));
+  const memberOrder = new Map((members || []).filter(m => m.linked_contact_uuid).map((m, i) => [m.linked_contact_uuid, i]));
   groups.sort((a, b) => {
     const aSolo = a.recipients.length === 1 && familyUuids.has(a.recipients[0].uuid);
     const bSolo = b.recipients.length === 1 && familyUuids.has(b.recipients[0].uuid);
@@ -325,8 +309,7 @@ function renderIncomingList(gifts, members) {
     return `
       <div class="gift-group">
         ${renderGroupHeader(headerContacts, { count: group.gifts.length, actionsHtml: addBtn })}
-        ${group.gifts.length
-          ? giverGroups.map(gg => {
+        ${giverGroups.map(gg => {
             const uuids = gg.gifts.map(g => g.uuid).join(',');
             return giftChipRow({
               contacts: gg.givers,
@@ -346,9 +329,7 @@ function renderIncomingList(gifts, members) {
                 </ul>
               `,
             });
-          }).join('')
-          : `<p class="text-muted small ps-2">${t('gifts.noGifts')}</p>`
-        }
+          }).join('')}
       </div>
     `;
   }).join('');
@@ -430,6 +411,16 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   const originalUuids = isEdit ? editGroup.map(g => g.uuid) : [];
   // In edit mode, status should default to the shared status of the edited group.
   const editStatus = isEdit ? editGroup[0].status : null;
+  // For events with honorees (birthday, wedding) the recipient is
+  // implicit and the To field is hidden — gifts are always for/from
+  // the honoree(s), no need to type "to Vigdis" on her own birthday.
+  // Applies to both directions: incoming = honorees receive from others,
+  // outgoing = we give to honoree(s).
+  const eventHonoreesList = event?.honorees?.length
+    ? event.honorees
+    : (event?.honoree ? [event.honoree] : []);
+  const hasHonoree = eventHonoreesList.length > 0;
+  const hideRecipients = hasHonoree;
 
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${mid}" tabindex="-1">
@@ -452,7 +443,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
                 <button type="button" class="btn btn-link btn-sm p-0 d-none" id="${mid}-add-household-giver"><i class="bi bi-people me-1"></i>${t('gifts.addHousehold')}</button>
               </div>
             </div>
-            <div class="mb-3">
+            <div class="mb-3${hideRecipients ? ' d-none' : ''}">
               <label class="form-label">${t('gifts.to')}</label>
               <div class="gift-chips-wrap" id="${mid}-recipients"></div>
               <div class="position-relative mt-1">
@@ -566,11 +557,11 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   } else if (prefilledRecipients?.length) {
     recipients.push(...prefilledRecipients);
     renderModalChips(`${mid}-recipients`, recipients);
-  } else if (event?.honoree) {
-    // Honoree is the default recipient for both directions:
-    //   outgoing = we give to honoree
-    //   incoming = honoree receives from others
-    recipients.push({ ...event.honoree, type: 'contact' });
+  } else if (eventHonoreesList.length) {
+    // Honorees are the default recipients for both directions:
+    //   outgoing = we give to honoree(s)
+    //   incoming = honoree(s) receive from others
+    eventHonoreesList.forEach(h => recipients.push({ ...h, type: 'contact' }));
     renderModalChips(`${mid}-recipients`, recipients);
   }
 
@@ -723,11 +714,18 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     const notes = document.getElementById(`${mid}-group-notes`).value.trim() || null;
     const giver_uuids = givers.filter(g => (g.type || 'contact') === 'contact').map(g => g.uuid);
     const giver_company_uuids = givers.filter(g => g.type === 'company').map(g => g.uuid);
-    const recipient_uuids = recipients.filter(r => (r.type || 'contact') === 'contact').map(r => r.uuid);
+    let recipient_uuids = recipients.filter(r => (r.type || 'contact') === 'contact').map(r => r.uuid);
     const recipient_company_uuids = recipients.filter(r => r.type === 'company').map(r => r.uuid);
 
     // Nothing to save
     if (!drafts.length) return;
+
+    // For events with honorees, a gift with no explicit recipient is
+    // implicitly for the honoree(s) — auto-fill so the row never renders
+    // as an orphan with an empty To column. Applies to both directions.
+    if (hasHonoree && !recipient_uuids.length && !recipient_company_uuids.length) {
+      recipient_uuids = eventHonoreesList.map(h => h.uuid);
+    }
 
     // Require at least one recipient (outgoing: who's it for?)
     // and one giver (incoming: who gave it?). Otherwise the row renders

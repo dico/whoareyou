@@ -227,16 +227,18 @@ async function showEventModal(existing = null, onSaved = null) {
               </div>
               <div class="mb-3 ${showHonoree ? '' : 'd-none'}" id="${modalId}-honoree-section">
                 <label class="form-label">${t('gifts.honoree')}</label>
-                <div class="position-relative" id="${modalId}-honoree-search-wrap" ${existing?.honoree ? 'style="display:none"' : ''}>
+                <div class="gift-chips-wrap" id="${modalId}-honoree-chips"></div>
+                <div class="position-relative mt-1">
                   <input type="text" class="form-control" id="${modalId}-honoree-search" placeholder="${t('nav.searchPlaceholder')}" autocomplete="off">
-                  <input type="hidden" id="${modalId}-honoree-uuid" value="${existing?.honoree?.uuid || ''}">
                 </div>
-                <div id="${modalId}-honoree-chip">${existing?.honoree ? `
-                  <span class="contact-chip">
-                    <span class="contact-chip-avatar">${existing.honoree.avatar ? `<img src="${authUrl(existing.honoree.avatar)}" alt="">` : `<span>${existing.honoree.first_name[0]}</span>`}</span>
-                    ${existing.honoree.first_name} ${existing.honoree.last_name || ''}
-                    <button type="button" class="contact-chip-remove" id="${modalId}-honoree-clear"><i class="bi bi-x"></i></button>
-                  </span>` : ''}</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">${t('gifts.directions')}</label>
+                <select class="form-select form-select-sm" id="${modalId}-directions">
+                  <option value="both">${t('gifts.directionsBoth')}</option>
+                  <option value="incoming">${t('gifts.directionsIncoming')}</option>
+                  <option value="outgoing">${t('gifts.directionsOutgoing')}</option>
+                </select>
               </div>
             </div>
             <div class="modal-footer">
@@ -256,10 +258,37 @@ async function showEventModal(existing = null, onSaved = null) {
   const nameInput = document.getElementById(`${modalId}-name`);
   const honoreeSection = document.getElementById(`${modalId}-honoree-section`);
   const honoreeSearch = document.getElementById(`${modalId}-honoree-search`);
-  const honoreeResults = document.getElementById(`${modalId}-honoree-results`);
-  const honoreeUuid = document.getElementById(`${modalId}-honoree-uuid`);
-  const honoreeSearchWrap = document.getElementById(`${modalId}-honoree-search-wrap`);
-  const honoreeChip = document.getElementById(`${modalId}-honoree-chip`);
+  const honoreeChips = document.getElementById(`${modalId}-honoree-chips`);
+  const directionsSelect = document.getElementById(`${modalId}-directions`);
+
+  // Pre-fill directions: edit mode uses the saved value, new events
+  // get a sensible default from the type below.
+  if (existing?.directions) directionsSelect.value = existing.directions;
+  // Track whether the user has manually changed directions, so we don't
+  // overwrite their choice when they later change the event type.
+  let directionsTouched = !!existing;
+  directionsSelect.addEventListener('change', () => { directionsTouched = true; });
+
+  // Honoree list — supports multiple (e.g. wedding bride+groom, joint birthday).
+  // Initialised from `existing.honorees` (new array) with fallback to `existing.honoree`.
+  const honorees = (existing?.honorees?.length ? existing.honorees : (existing?.honoree ? [existing.honoree] : [])).slice();
+
+  function renderHonoreeChips() {
+    honoreeChips.innerHTML = honorees.map((h, i) => `
+      <span class="contact-chip">
+        <span class="contact-chip-avatar">${h.avatar ? `<img src="${authUrl(h.avatar)}" alt="">` : `<span>${escapeHtml(h.first_name?.[0] || '')}</span>`}</span>
+        ${escapeHtml(h.first_name)} ${escapeHtml(h.last_name || '')}
+        <button type="button" class="contact-chip-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+      </span>
+    `).join('');
+    honoreeChips.querySelectorAll('.contact-chip-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        honorees.splice(parseInt(btn.dataset.index), 1);
+        renderHonoreeChips();
+      });
+    });
+  }
+  renderHonoreeChips();
 
   // Auto-fill on type change
   typeSelect.addEventListener('change', () => {
@@ -279,45 +308,29 @@ async function showEventModal(existing = null, onSaved = null) {
     // Show/hide honoree
     if (tp === 'christmas') {
       honoreeSection.classList.add('d-none');
-      honoreeUuid.value = '';
+      honorees.length = 0;
+      renderHonoreeChips();
       honoreeSearch.value = '';
-      if (honoreeChip) honoreeChip.innerHTML = '';
-      if (honoreeSearchWrap) honoreeSearchWrap.style.display = '';
     } else {
       honoreeSection.classList.remove('d-none');
     }
+
+    // Auto-default directions by type unless user has set it manually
+    if (!directionsTouched) {
+      directionsSelect.value = ['wedding', 'birthday'].includes(tp) ? 'incoming' : 'both';
+    }
   });
-
-  // No auto-trigger — user must select type explicitly
-
-  // Inline honoree search (no modal-in-modal)
-  let honoreeDebounce = null;
-  function showHonoreeChip(c) {
-    honoreeUuid.value = c.uuid;
-    honoreeSearchWrap.style.display = 'none';
-    honoreeChip.innerHTML = `
-      <span class="contact-chip">
-        <span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${c.first_name[0]}</span>`}</span>
-        ${c.first_name} ${c.last_name || ''}
-        <button type="button" class="contact-chip-remove" id="${modalId}-honoree-clear"><i class="bi bi-x"></i></button>
-      </span>`;
-    honoreeChip.querySelector(`#${modalId}-honoree-clear`).addEventListener('click', clearHonoree);
-  }
-
-  function clearHonoree() {
-    honoreeUuid.value = '';
-    honoreeChip.innerHTML = '';
-    honoreeSearchWrap.style.display = '';
-    honoreeSearch.value = '';
-    honoreeSearch.focus();
-  }
-
-  // Wire up existing chip clear button (for edit mode)
-  document.getElementById(`${modalId}-honoree-clear`)?.addEventListener('click', clearHonoree);
 
   attachContactSearch(honoreeSearch, {
     limit: 6,
-    onSelect: (c) => showHonoreeChip(c),
+    onSelect: (c) => {
+      if (!honorees.some(h => h.uuid === c.uuid)) {
+        honorees.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
+        renderHonoreeChips();
+      }
+      honoreeSearch.value = '';
+      honoreeSearch.focus();
+    },
   });
 
   // Submit
@@ -327,7 +340,8 @@ async function showEventModal(existing = null, onSaved = null) {
       name: nameInput.value.trim(),
       event_type: typeSelect.value,
       event_date: dateInput.value || null,
-      honoree_contact_uuid: honoreeUuid.value || null,
+      directions: directionsSelect.value,
+      honoree_contact_uuids: honorees.map(h => h.uuid),
     };
 
     try {

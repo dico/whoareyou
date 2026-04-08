@@ -99,6 +99,57 @@ async function fetchOrderParticipants(orderIds, idMap) {
 }
 
 /**
+ * Fetch honorees for a set of gift events. Returns a map keyed by
+ * event_id, where each entry is an array of honoree objects ordered
+ * by `position`.
+ */
+async function fetchEventHonorees(eventIds) {
+  if (!eventIds.length) return {};
+  const rows = await db('gift_event_honorees')
+    .whereIn('event_id', eventIds)
+    .join('contacts', 'gift_event_honorees.contact_id', 'contacts.id')
+    .leftJoin('contact_photos', function () {
+      this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('true'));
+    })
+    .select(
+      'gift_event_honorees.event_id', 'gift_event_honorees.position',
+      'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+      'contact_photos.thumbnail_path as avatar'
+    )
+    .orderBy(['gift_event_honorees.event_id', 'gift_event_honorees.position', 'contacts.first_name']);
+  const map = {};
+  for (const r of rows) {
+    if (!map[r.event_id]) map[r.event_id] = [];
+    map[r.event_id].push({
+      uuid: r.uuid,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      avatar: r.avatar,
+    });
+  }
+  return map;
+}
+
+/**
+ * Replace the honoree set on an event with the provided contact UUIDs.
+ * Used by POST and PUT /events. Tenant-scoped.
+ */
+async function setEventHonorees(tenantId, eventId, contactUuids) {
+  await db('gift_event_honorees').where({ event_id: eventId }).del();
+  if (!contactUuids?.length) return;
+  const contacts = await db('contacts')
+    .whereIn('uuid', contactUuids)
+    .where({ tenant_id: tenantId })
+    .select('id', 'uuid');
+  // Preserve the order of incoming UUIDs.
+  const idByUuid = new Map(contacts.map(c => [c.uuid, c.id]));
+  const rows = contactUuids
+    .map((u, i) => idByUuid.get(u) ? { event_id: eventId, contact_id: idByUuid.get(u), position: i } : null)
+    .filter(Boolean);
+  if (rows.length) await db('gift_event_honorees').insert(rows);
+}
+
+/**
  * Resolve contact/company UUIDs from the request into participant rows
  * for gift_order_participants. Each row has either `contact_id` OR
  * `company_id` set (never both). Tenant-scoped.
@@ -429,13 +480,9 @@ router.get('/events', async (req, res, next) => {
 
     let query = db('gift_events')
       .where({ 'gift_events.tenant_id': req.tenantId })
-      .leftJoin('contacts', 'gift_events.honoree_contact_id', 'contacts.id')
       .select(
-        'gift_events.uuid', 'gift_events.name', 'gift_events.event_type',
-        'gift_events.event_date', 'gift_events.notes', 'gift_events.created_at',
-        'contacts.uuid as honoree_uuid', 'contacts.first_name as honoree_first_name',
-        'contacts.last_name as honoree_last_name',
-        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as honoree_avatar`)
+        'gift_events.id', 'gift_events.uuid', 'gift_events.name', 'gift_events.event_type',
+        'gift_events.event_date', 'gift_events.notes', 'gift_events.directions', 'gift_events.created_at'
       )
       .orderBy('gift_events.event_date', 'desc');
 
@@ -449,6 +496,7 @@ router.get('/events', async (req, res, next) => {
     const events = await query;
 
     // Add gift counts per event
+    const eventIds = events.map(e => e.id);
     const eventUuids = events.map(e => e.uuid);
     if (eventUuids.length) {
       const counts = await db('gift_orders')
@@ -462,6 +510,22 @@ router.get('/events', async (req, res, next) => {
       events.forEach(e => { e.gift_count = countMap[e.uuid] || 0; });
     }
 
+    // Honorees per event
+    const honoreeMap = await fetchEventHonorees(eventIds);
+    events.forEach(e => {
+      e.honorees = honoreeMap[e.id] || [];
+      // Backwards-compat: keep `honoree_*` fields used by older code paths
+      // that haven't migrated to the array yet (e.g. list templates).
+      const first = e.honorees[0];
+      if (first) {
+        e.honoree_uuid = first.uuid;
+        e.honoree_first_name = first.first_name;
+        e.honoree_last_name = first.last_name;
+        e.honoree_avatar = first.avatar;
+      }
+      delete e.id;
+    });
+
     res.json({ events });
   } catch (err) {
     next(err);
@@ -473,16 +537,12 @@ router.get('/events/:uuid', async (req, res, next) => {
   try {
     const event = await db('gift_events')
       .where({ 'gift_events.uuid': req.params.uuid, 'gift_events.tenant_id': req.tenantId })
-      .leftJoin('contacts', 'gift_events.honoree_contact_id', 'contacts.id')
-      .select(
-        'gift_events.*',
-        'contacts.uuid as honoree_uuid', 'contacts.first_name as honoree_first_name',
-        'contacts.last_name as honoree_last_name',
-        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as honoree_avatar`)
-      )
       .first();
 
     if (!event) throw new AppError('Event not found', 404);
+
+    const honoreeMap = await fetchEventHonorees([event.id]);
+    const honorees = honoreeMap[event.id] || [];
 
     // Get gifts for this event with visibility filter
     const linkedContactId = await getUserLinkedContactId(req.user.id, req.tenantId);
@@ -519,7 +579,10 @@ router.get('/events/:uuid', async (req, res, next) => {
       event: {
         uuid: event.uuid, name: event.name, event_type: event.event_type,
         event_date: event.event_date, notes: event.notes,
-        honoree: event.honoree_uuid ? { uuid: event.honoree_uuid, first_name: event.honoree_first_name, last_name: event.honoree_last_name, avatar: event.honoree_avatar || null } : null,
+        directions: event.directions || 'both',
+        honorees,
+        // Backwards-compat: legacy `honoree` field (first honoree only)
+        honoree: honorees[0] || null,
       },
       gifts,
     });
@@ -531,26 +594,43 @@ router.get('/events/:uuid', async (req, res, next) => {
 // POST /api/gifts/events — create event
 router.post('/events', async (req, res, next) => {
   try {
-    const { name, event_type, event_date, honoree_contact_uuid, notes } = req.body;
+    const { name, event_type, event_date, honoree_contact_uuid, honoree_contact_uuids, notes, directions } = req.body;
     if (!name?.trim()) throw new AppError('Event name is required', 400);
+    const ALLOWED_DIRECTIONS = ['both', 'incoming', 'outgoing'];
+    // Default by event type when not explicitly set: honoree-centric
+    // events are gifts received by the honoree(s).
+    const effectiveDirections = ALLOWED_DIRECTIONS.includes(directions)
+      ? directions
+      : (['wedding', 'birthday'].includes(event_type) ? 'incoming' : 'both');
 
-    let honoreeId = null;
-    if (honoree_contact_uuid) {
-      const contact = await db('contacts').where({ uuid: honoree_contact_uuid, tenant_id: req.tenantId }).first();
-      if (contact) honoreeId = contact.id;
+    // Resolve honorees: prefer the new array, fall back to the legacy
+    // single field for backwards compatibility.
+    const uuids = honoree_contact_uuids?.length
+      ? honoree_contact_uuids
+      : (honoree_contact_uuid ? [honoree_contact_uuid] : []);
+
+    // Keep the legacy column in sync with the first honoree until it's
+    // removed in a follow-up migration — older code paths still read it.
+    let legacyHonoreeId = null;
+    if (uuids[0]) {
+      const contact = await db('contacts').where({ uuid: uuids[0], tenant_id: req.tenantId }).first();
+      if (contact) legacyHonoreeId = contact.id;
     }
 
     const uuid = uuidv4();
-    await db('gift_events').insert({
+    const [eventId] = await db('gift_events').insert({
       uuid,
       tenant_id: req.tenantId,
       name: name.trim(),
       event_type: event_type || 'other',
       event_date: event_date || null,
-      honoree_contact_id: honoreeId,
+      directions: effectiveDirections,
+      honoree_contact_id: legacyHonoreeId,
       notes: notes || null,
       created_by: req.user.id,
     });
+
+    await setEventHonorees(req.tenantId, eventId, uuids);
 
     res.status(201).json({ uuid });
   } catch (err) {
@@ -569,18 +649,35 @@ router.put('/events/:uuid', async (req, res, next) => {
     if (req.body.event_type !== undefined) updates.event_type = req.body.event_type;
     if (req.body.event_date !== undefined) updates.event_date = req.body.event_date || null;
     if (req.body.notes !== undefined) updates.notes = req.body.notes || null;
-
-    if (req.body.honoree_contact_uuid !== undefined) {
-      if (req.body.honoree_contact_uuid) {
-        const contact = await db('contacts').where({ uuid: req.body.honoree_contact_uuid, tenant_id: req.tenantId }).first();
-        updates.honoree_contact_id = contact ? contact.id : null;
-      } else {
-        updates.honoree_contact_id = null;
+    if (req.body.directions !== undefined) {
+      const ALLOWED_DIRECTIONS = ['both', 'incoming', 'outgoing'];
+      if (ALLOWED_DIRECTIONS.includes(req.body.directions)) {
+        updates.directions = req.body.directions;
       }
+    }
+
+    // Honorees: prefer new array, fall back to legacy single field.
+    let newHonoreeUuids = null;
+    if (req.body.honoree_contact_uuids !== undefined) {
+      newHonoreeUuids = req.body.honoree_contact_uuids || [];
+    } else if (req.body.honoree_contact_uuid !== undefined) {
+      newHonoreeUuids = req.body.honoree_contact_uuid ? [req.body.honoree_contact_uuid] : [];
+    }
+    if (newHonoreeUuids !== null) {
+      // Keep the legacy column synced with the first honoree.
+      let legacyHonoreeId = null;
+      if (newHonoreeUuids[0]) {
+        const contact = await db('contacts').where({ uuid: newHonoreeUuids[0], tenant_id: req.tenantId }).first();
+        if (contact) legacyHonoreeId = contact.id;
+      }
+      updates.honoree_contact_id = legacyHonoreeId;
     }
 
     if (Object.keys(updates).length) {
       await db('gift_events').where({ id: event.id }).update(updates);
+    }
+    if (newHonoreeUuids !== null) {
+      await setEventHonorees(req.tenantId, event.id, newHonoreeUuids);
     }
 
     res.json({ message: 'Event updated' });

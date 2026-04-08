@@ -2,6 +2,14 @@
 
 > Open tasks only. Completed work is documented in the relevant docs.
 
+## Migrations awaiting production deploy
+
+Once these migrations have run in production, the lines below can be removed.
+
+- `068_add_company_id_to_gift_order_participants.js` — nullable `company_id` FK on gift_order_participants, contact_id made nullable. Allows gifts from/to groups. (Dev batch 47.)
+- `069_create_gift_event_honorees.js` — junction table for multi-honoree events (wedding bride+groom, joint birthdays). Backfills from legacy `gift_events.honoree_contact_id`, which stays in place for backwards compatibility until a follow-up migration removes it. (Dev batch 48.)
+- `070_add_directions_to_gift_events.js` — adds `directions` enum (`both`/`incoming`/`outgoing`) to control which gift tabs an event shows. Backfills wedding/birthday rows to `incoming`. (Dev batch 49.)
+
 ## High Priority
 
 ### Standardize contact search component

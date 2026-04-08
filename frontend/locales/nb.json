@@ -923,6 +923,10 @@
     "errorGiverRequired": "Velg minst én giver",
     "addHousehold": "Legg til husstand",
     "addMyFamily": "Legg til min familie",
+    "directions": "Retning",
+    "directionsBoth": "Både gi og motta",
+    "directionsIncoming": "Kun mottatte gaver",
+    "directionsOutgoing": "Kun gitte gaver",
     "statuses": {
       "idea": "Idé",
       "reserved": "Reservert",

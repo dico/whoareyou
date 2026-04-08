@@ -60,7 +60,7 @@ async function initInput(input) {
   input.setAttribute('autocomplete', 'off');
 
   const fp = window.flatpickr(input, {
-    locale: fpLocale,
+    locale: { ...(window.flatpickr.l10ns[fpLocale] || {}), firstDayOfWeek: 1 },
     dateFormat: 'Y-m-d',
     altInput: true,
     altFormat: locale === 'nb' ? 'd.m.Y' : 'd/m/Y',

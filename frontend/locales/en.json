@@ -923,6 +923,10 @@
     "errorGiverRequired": "Please select at least one giver",
     "addHousehold": "Add household",
     "addMyFamily": "Add my family",
+    "directions": "Direction",
+    "directionsBoth": "Both giving and receiving",
+    "directionsIncoming": "Receiving only",
+    "directionsOutgoing": "Giving only",
     "statuses": {
       "idea": "Idea",
       "reserved": "Reserved",

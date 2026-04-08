@@ -97,7 +97,8 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 
 | Table | Purpose |
 |-------|---------|
-| `gift_events` | Events (Christmas, birthday, etc.) with auto-fill |
+| `gift_events` | Events (Christmas, birthday, etc.) with auto-fill. `directions` enum (`both`/`incoming`/`outgoing`) controls which gift tabs the event shows — defaults to `incoming` for wedding/birthday and `both` for christmas/other. Legacy `honoree_contact_id` is kept in sync with the first row from `gift_event_honorees` for backwards compatibility. |
+| `gift_event_honorees` | Junction table mapping events to one or more honoree contacts. Used for weddings (bride+groom), joint birthdays, anniversaries. `position` controls display order. |
 | `gift_products` | Reusable product catalog with URL scraping |
 | `gift_product_links` | Store links per product |
 | `gift_orders` | Gift registrations (from → to, status lifecycle) |
