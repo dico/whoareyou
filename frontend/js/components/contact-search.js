@@ -1,5 +1,6 @@
 import { api } from '../api/client.js';
 import { contactRowHtml } from './contact-row.js';
+import { authUrl } from '../utils/auth-url.js';
 import { t } from '../utils/i18n.js';
 
 /**
@@ -22,6 +23,7 @@ export function attachContactSearch(input, options = {}) {
     keyboard = true,
     onSelect,
     onClear,
+    includeCompanies = false,
   } = options;
 
   if (options.placeholder) input.placeholder = options.placeholder;
@@ -58,9 +60,27 @@ export function attachContactSearch(input, options = {}) {
       return;
     }
 
-    dropdown.innerHTML = contacts.map((c, i) =>
-      contactRowHtml(c, { tag: 'div', meta: c.meta || '', extraClass: `contact-search-item${i === activeIndex ? ' active' : ''}` })
-    ).join('');
+    dropdown.innerHTML = contacts.map((c, i) => {
+      const active = i === activeIndex ? ' active' : '';
+      if (c.type === 'company') {
+        // Inline company row — mirrors contactRowHtml structure so the
+        // dropdown keyboard navigation selector (`.contact-search-item`)
+        // still matches.
+        const initials = (c.name?.[0] || '?');
+        const logo = c.logo_path || c.avatar;
+        const avatar = logo
+          ? `<img src="${authUrl(logo)}" alt="">`
+          : `<span>${escapeHtml(initials)}</span>`;
+        return `<div class="contact-row contact-search-item${active}">
+          <span class="contact-row-avatar contact-row-avatar-square">${avatar}</span>
+          <span class="contact-row-info">
+            <span class="contact-row-name">${escapeHtml(c.name || '')}</span>
+            <span class="contact-row-meta text-muted small"><i class="bi bi-building me-1"></i>${escapeHtml(c.type_label || '')}</span>
+          </span>
+        </div>`;
+      }
+      return contactRowHtml(c, { tag: 'div', meta: c.meta || '', extraClass: `contact-search-item${active}` });
+    }).join('');
     dropdown.style.display = 'block';
 
     // Click handlers
@@ -72,6 +92,13 @@ export function attachContactSearch(input, options = {}) {
         hide();
       });
     });
+  }
+
+  function escapeHtml(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
   }
 
   function hide() {
@@ -90,8 +117,14 @@ export function attachContactSearch(input, options = {}) {
     }
     searchTimeout = setTimeout(async () => {
       try {
-        const data = await api.get(`/contacts?search=${encodeURIComponent(q)}&limit=${limit}`);
-        showResults(data.contacts);
+        const contactsPromise = api.get(`/contacts?search=${encodeURIComponent(q)}&limit=${limit}`);
+        const companiesPromise = includeCompanies
+          ? api.get(`/companies?search=${encodeURIComponent(q)}&limit=${limit}`).catch(() => ({ companies: [] }))
+          : Promise.resolve({ companies: [] });
+        const [{ contacts }, { companies }] = await Promise.all([contactsPromise, companiesPromise]);
+        const companyLabel = t('companies.title') || 'Groups';
+        const companyResults = (companies || []).map(c => ({ ...c, type: 'company', type_label: companyLabel }));
+        showResults([...contacts, ...companyResults].slice(0, limit));
       } catch {
         hide();
       }

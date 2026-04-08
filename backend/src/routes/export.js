@@ -283,7 +283,7 @@ async function queryAllData(tenantId) {
     .select('id', 'uuid', 'event_id', 'product_id', 'title', 'status', 'order_type', 'price', 'currency_code', 'notes', 'visibility');
   const giftParticipants = await db('gift_order_participants')
     .whereIn('order_id', giftOrders.map(o => o.id))
-    .select('order_id', 'contact_id', 'role');
+    .select('order_id', 'contact_id', 'company_id', 'role');
   const giftWishlists = await db('gift_wishlists').where({ tenant_id: tenantId })
     .select('id', 'uuid', 'contact_id', 'name', 'is_default', 'visibility');
   const giftWishlistItems = await db('gift_wishlist_items')
@@ -308,7 +308,11 @@ async function queryAllData(tenantId) {
       product_uuid: productUuidById.get(o.product_id) || null,
       title: o.title, status: o.status, order_type: o.order_type, price: o.price, currency_code: o.currency_code,
       notes: o.notes, visibility: o.visibility,
-      participants: giftParticipants.filter(p => p.order_id === o.id).map(p => ({ contact_uuid: idToUuid.get(p.contact_id), role: p.role })),
+      participants: giftParticipants.filter(p => p.order_id === o.id).map(p => ({
+        contact_uuid: p.contact_id ? idToUuid.get(p.contact_id) : null,
+        company_uuid: p.company_id ? companyIdToUuid.get(p.company_id) : null,
+        role: p.role,
+      })),
     })),
     wishlists: giftWishlists.map(w => ({
       uuid: w.uuid, contact_uuid: idToUuid.get(w.contact_id), name: w.name, is_default: w.is_default, visibility: w.visibility,

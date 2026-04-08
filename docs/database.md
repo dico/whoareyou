@@ -101,7 +101,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `gift_products` | Reusable product catalog with URL scraping |
 | `gift_product_links` | Store links per product |
 | `gift_orders` | Gift registrations (from → to, status lifecycle) |
-| `gift_order_participants` | Multi-sender/receiver per gift |
+| `gift_order_participants` | Multi-sender/receiver per gift. Each row has either `contact_id` OR `company_id` set (never both), so a gift can come from/go to a person or a group (e.g. "Fra jobben"). |
 | `gift_wishlists` | Wishlists per family member |
 | `gift_wishlist_items` | Items in wishlists |
 

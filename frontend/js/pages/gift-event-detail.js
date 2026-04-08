@@ -195,6 +195,9 @@ function renderOutgoingList(gifts) {
             <li><a class="dropdown-item gift-edit-group" href="#" data-uuids="${uuids}">
               <i class="bi bi-pencil me-2"></i>${t('common.edit')}
             </a></li>
+            <li><a class="dropdown-item gift-copy-group" href="#" data-uuids="${uuids}">
+              <i class="bi bi-files me-2"></i>${t('common.duplicate')}
+            </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger gift-delete-group" href="#" data-uuids="${uuids}">
               <i class="bi bi-trash me-2"></i>${t('common.delete')}
@@ -351,29 +354,59 @@ function renderIncomingList(gifts, members) {
   }).join('');
 }
 
-function contactChips(contacts, prefix = '') {
-  if (!contacts?.length) return '';
-  return `${prefix}${contacts.map(c =>
-    `<a href="#" class="contact-chip" ${giftContactLinkAttrs(c)}>` +
-    `<span class="contact-chip-avatar">${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}</span>` +
-    `${esc(c.first_name)}</a>`
-  ).join(' ')}`;
+/**
+ * Render a list of participants (contacts and/or companies) as chips.
+ * Contacts become contact-chip (opens contact-gift-modal via global delegate).
+ * Companies become a chip that navigates to /groups/:uuid.
+ */
+function participantChips(participants, prefix = '') {
+  if (!participants?.length) return '';
+  return `${prefix}${participants.map(p => {
+    if (p.type === 'company') {
+      const initials = (p.name?.[0] || '?');
+      const avatarHtml = p.avatar
+        ? `<img src="${authUrl(p.avatar)}" alt="">`
+        : `<span>${esc(initials)}</span>`;
+      return `<a href="/groups/${p.uuid}" data-link class="contact-chip">` +
+        `<span class="contact-chip-avatar">${avatarHtml}</span>` +
+        `${esc(p.name)}</a>`;
+    }
+    // Contact (default for rows created before the type field existed).
+    return `<a href="#" class="contact-chip" ${giftContactLinkAttrs(p)}>` +
+      `<span class="contact-chip-avatar">${p.avatar ? `<img src="${authUrl(p.avatar)}" alt="">` : `<span>${(p.first_name?.[0] || '') + (p.last_name?.[0] || '')}</span>`}</span>` +
+      `${esc(p.first_name)}</a>`;
+  }).join(' ')}`;
 }
+
+// Backwards-compatible alias — many call sites still use this name.
+const contactChips = participantChips;
 
 /**
  * Standardized group header with avatar, clickable name, count and action buttons.
  * Used across gift event detail (outgoing/incoming), wishlists, planning.
  */
-function renderGroupHeader(contacts, { count, actionsHtml } = {}) {
-  if (!contacts?.length) return '';
-  const links = contacts.map(c => `
-    <a href="#" class="gift-group-header-link" ${giftContactLinkAttrs(c)}>
-      <span class="gift-group-avatar">
-        ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
-      </span>
-      <span>${esc(c.first_name)} ${esc(c.last_name || '')}</span>
-    </a>
-  `).join('');
+function renderGroupHeader(participants, { count, actionsHtml } = {}) {
+  if (!participants?.length) return '';
+  const links = participants.map(p => {
+    if (p.type === 'company') {
+      const initials = (p.name?.[0] || '?');
+      const avatar = p.avatar ? `<img src="${authUrl(p.avatar)}" alt="">` : `<span>${esc(initials)}</span>`;
+      return `
+        <a href="/groups/${p.uuid}" data-link class="gift-group-header-link">
+          <span class="gift-group-avatar">${avatar}</span>
+          <span>${esc(p.name)}</span>
+        </a>
+      `;
+    }
+    return `
+      <a href="#" class="gift-group-header-link" ${giftContactLinkAttrs(p)}>
+        <span class="gift-group-avatar">
+          ${p.avatar ? `<img src="${authUrl(p.avatar)}" alt="">` : `<span>${(p.first_name?.[0] || '') + (p.last_name?.[0] || '')}</span>`}
+        </span>
+        <span>${esc(p.first_name)} ${esc(p.last_name || '')}</span>
+      </a>
+    `;
+  }).join('');
 
   return `
     <div class="gift-group-header">
@@ -389,7 +422,7 @@ function renderGroupHeader(contacts, { count, actionsHtml } = {}) {
 // Gift modal (add/edit)
 // ═══════════════════════════════════════
 
-function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipients = null, editGroup = null) {
+function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipients = null, editGroup = null, copyFrom = null) {
   const mid = 'gift-modal-' + Date.now();
   const isEdit = !!editGroup?.length;
   // Track original uuids so we can diff on save: existing → update,
@@ -414,6 +447,10 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
                 <input type="text" class="form-control form-control-sm" id="${mid}-giver-search" placeholder="${t('common.search')}" autocomplete="off">
                 <div class="product-picker-dropdown d-none" id="${mid}-giver-results"></div>
               </div>
+              <div class="gift-quick-add mt-1">
+                ${direction === 'outgoing' ? `<button type="button" class="btn btn-link btn-sm p-0 me-2" id="${mid}-add-my-family"><i class="bi bi-house-heart me-1"></i>${t('gifts.addMyFamily')}</button>` : ''}
+                <button type="button" class="btn btn-link btn-sm p-0 d-none" id="${mid}-add-household-giver"><i class="bi bi-people me-1"></i>${t('gifts.addHousehold')}</button>
+              </div>
             </div>
             <div class="mb-3">
               <label class="form-label">${t('gifts.to')}</label>
@@ -421,6 +458,9 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
               <div class="position-relative mt-1">
                 <input type="text" class="form-control form-control-sm" id="${mid}-recipient-search" placeholder="${t('common.search')}" autocomplete="off">
                 <div class="product-picker-dropdown d-none" id="${mid}-recipient-results"></div>
+              </div>
+              <div class="gift-quick-add mt-1">
+                <button type="button" class="btn btn-link btn-sm p-0 d-none" id="${mid}-add-household-recipient"><i class="bi bi-people me-1"></i>${t('gifts.addHousehold')}</button>
               </div>
             </div>
 
@@ -507,6 +547,22 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     // Pre-fill from the first gift that has a note.
     const groupNote = editGroup.find(g => g.notes)?.notes || '';
     document.getElementById(`${mid}-group-notes`).value = groupNote;
+  } else if (copyFrom?.length) {
+    // Duplicate flow: prefill givers/recipients and drafts (without uuids)
+    // so the user can tweak and save as new gifts.
+    givers.push(...(copyFrom[0].givers || []));
+    recipients.push(...(copyFrom[0].recipients || []));
+    renderModalChips(`${mid}-givers`, givers);
+    renderModalChips(`${mid}-recipients`, recipients);
+    copyFrom.forEach(g => drafts.push({
+      title: g.title,
+      product_uuid: g.product_uuid || null,
+      image_url: g.product_image_url || null,
+      price: g.price != null ? Number(g.price) : null,
+    }));
+    renderDrafts();
+    const copyNote = copyFrom.find(g => g.notes)?.notes || '';
+    document.getElementById(`${mid}-group-notes`).value = copyNote;
   } else if (prefilledRecipients?.length) {
     recipients.push(...prefilledRecipients);
     renderModalChips(`${mid}-recipients`, recipients);
@@ -514,19 +570,104 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     // Honoree is the default recipient for both directions:
     //   outgoing = we give to honoree
     //   incoming = honoree receives from others
-    recipients.push(event.honoree);
+    recipients.push({ ...event.honoree, type: 'contact' });
     renderModalChips(`${mid}-recipients`, recipients);
   }
 
-  // Inline contact search for givers
-  setupContactSearch(`${mid}-giver-search`, `${mid}-giver-results`, (c) => {
-    if (!givers.some(g => g.uuid === c.uuid)) { givers.push(c); renderModalChips(`${mid}-givers`, givers); }
+  // Inline participant search for givers — contacts AND companies
+  setupParticipantSearch(`${mid}-giver-search`, `${mid}-giver-results`, (p) => {
+    if (!givers.some(g => g.uuid === p.uuid && (g.type || 'contact') === (p.type || 'contact'))) {
+      givers.push(p);
+      renderModalChips(`${mid}-givers`, givers);
+      refreshHouseholdButton(givers, `${mid}-add-household-giver`);
+    }
   });
 
-  // Inline contact search for recipients
-  setupContactSearch(`${mid}-recipient-search`, `${mid}-recipient-results`, (c) => {
-    if (!recipients.some(r => r.uuid === c.uuid)) { recipients.push(c); renderModalChips(`${mid}-recipients`, recipients); }
+  // Inline participant search for recipients
+  setupParticipantSearch(`${mid}-recipient-search`, `${mid}-recipient-results`, (p) => {
+    if (!recipients.some(r => r.uuid === p.uuid && (r.type || 'contact') === (p.type || 'contact'))) {
+      recipients.push(p);
+      renderModalChips(`${mid}-recipients`, recipients);
+      refreshHouseholdButton(recipients, `${mid}-add-household-recipient`);
+    }
   });
+
+  // Household lookup cache (contact uuid → array of household members).
+  // Avoids re-fetching when the user re-renders chips.
+  const householdCache = new Map();
+  async function loadHousehold(contactUuid) {
+    if (householdCache.has(contactUuid)) return householdCache.get(contactUuid);
+    try {
+      const { contact } = await api.get(`/contacts/${contactUuid}`);
+      const household = contact?.household || [];
+      householdCache.set(contactUuid, household);
+      return household;
+    } catch {
+      householdCache.set(contactUuid, []);
+      return [];
+    }
+  }
+
+  // Show or hide the "Add household" button based on the first contact
+  // in the list — only visible when that contact actually has household
+  // members not already in the list.
+  async function refreshHouseholdButton(list, btnId) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const anchor = list.find(p => (p.type || 'contact') === 'contact');
+    if (!anchor) { btn.classList.add('d-none'); return; }
+    const household = await loadHousehold(anchor.uuid);
+    const existing = new Set(list.filter(p => (p.type || 'contact') === 'contact').map(p => p.uuid));
+    const toAdd = household.filter(h => !existing.has(h.uuid));
+    btn.classList.toggle('d-none', toAdd.length === 0);
+  }
+
+  async function addHouseholdTo(list, containerId, btnId) {
+    const anchor = list.find(p => (p.type || 'contact') === 'contact');
+    if (!anchor) return;
+    const household = await loadHousehold(anchor.uuid);
+    let added = 0;
+    for (const h of household) {
+      if (list.some(p => p.uuid === h.uuid && (p.type || 'contact') === 'contact')) continue;
+      list.push({ type: 'contact', uuid: h.uuid, first_name: h.first_name, last_name: h.last_name || '', avatar: h.avatar || null });
+      added++;
+    }
+    if (added > 0) {
+      renderModalChips(containerId, list);
+      refreshHouseholdButton(list, btnId);
+    }
+  }
+
+  document.getElementById(`${mid}-add-household-giver`)?.addEventListener('click', () => addHouseholdTo(givers, `${mid}-givers`, `${mid}-add-household-giver`));
+  document.getElementById(`${mid}-add-household-recipient`)?.addEventListener('click', () => addHouseholdTo(recipients, `${mid}-recipients`, `${mid}-add-household-recipient`));
+
+  // Initial refresh for prefilled participants (edit/copy/honoree flows)
+  refreshHouseholdButton(givers, `${mid}-add-household-giver`);
+  refreshHouseholdButton(recipients, `${mid}-add-household-recipient`);
+
+  // Quick-add: "my family" — all tenant members with a linked contact.
+  // Useful on Giving From, since gifts from this household are common.
+  const addMyFamilyBtn = document.getElementById(`${mid}-add-my-family`);
+  if (addMyFamilyBtn) {
+    addMyFamilyBtn.addEventListener('click', () => {
+      const family = (pageMembers || [])
+        .filter(m => m.linked_contact_uuid)
+        .map(m => ({
+          type: 'contact',
+          uuid: m.linked_contact_uuid,
+          first_name: m.first_name,
+          last_name: m.last_name || '',
+          avatar: m.avatar || null,
+        }));
+      let added = 0;
+      for (const f of family) {
+        if (givers.some(g => g.uuid === f.uuid && (g.type || 'contact') === 'contact')) continue;
+        givers.push(f);
+        added++;
+      }
+      if (added > 0) renderModalChips(`${mid}-givers`, givers);
+    });
+  }
 
   function renderDrafts() {
     const el = document.getElementById(`${mid}-added`);
@@ -580,8 +721,10 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     flushPendingPickerText();
     const status = document.getElementById(`${mid}-status`).value;
     const notes = document.getElementById(`${mid}-group-notes`).value.trim() || null;
-    const giver_uuids = givers.map(g => g.uuid);
-    const recipient_uuids = recipients.map(r => r.uuid);
+    const giver_uuids = givers.filter(g => (g.type || 'contact') === 'contact').map(g => g.uuid);
+    const giver_company_uuids = givers.filter(g => g.type === 'company').map(g => g.uuid);
+    const recipient_uuids = recipients.filter(r => (r.type || 'contact') === 'contact').map(r => r.uuid);
+    const recipient_company_uuids = recipients.filter(r => r.type === 'company').map(r => r.uuid);
 
     // Nothing to save
     if (!drafts.length) return;
@@ -589,10 +732,10 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
     // Require at least one recipient (outgoing: who's it for?)
     // and one giver (incoming: who gave it?). Otherwise the row renders
     // as an orphan with an empty From/To column.
-    if (direction === 'outgoing' && !recipient_uuids.length) {
+    if (direction === 'outgoing' && !recipient_uuids.length && !recipient_company_uuids.length) {
       throw new Error(t('gifts.errorRecipientRequired'));
     }
-    if (direction === 'incoming' && !giver_uuids.length) {
+    if (direction === 'incoming' && !giver_uuids.length && !giver_company_uuids.length) {
       throw new Error(t('gifts.errorGiverRequired'));
     }
 
@@ -607,6 +750,12 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
       }
     }
 
+    const participantPayload = {
+      giver_uuids,
+      recipient_uuids,
+      giver_company_uuids,
+      recipient_company_uuids,
+    };
     for (const d of drafts) {
       if (d.uuid) {
         // Existing gift — update in place
@@ -617,8 +766,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
           order_type: direction,
           price: d.price,
           notes,
-          giver_uuids,
-          recipient_uuids,
+          ...participantPayload,
         });
       } else {
         // New gift — create
@@ -630,8 +778,7 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
           order_type: direction,
           price: d.price,
           notes,
-          giver_uuids,
-          recipient_uuids,
+          ...participantPayload,
         });
       }
       savedCount++;
@@ -658,23 +805,34 @@ function showGiftModal(eventUuid, event, direction = 'outgoing', prefilledRecipi
   modal.show();
 }
 
-function renderModalChips(containerId, contacts) {
+function renderModalChips(containerId, participants) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.querySelectorAll('.contact-chip').forEach(c => c.remove());
-  contacts.forEach((c, i) => {
+  participants.forEach((p, i) => {
     const chip = document.createElement('span');
     chip.className = 'contact-chip';
-    chip.innerHTML = `
-      <span class="contact-chip-avatar">
-        ${c.avatar ? `<img src="${authUrl(c.avatar)}" alt="">` : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`}
-      </span>
-      ${esc(c.first_name)} ${esc(c.last_name || '')}
-      <button type="button" class="contact-chip-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-    `;
+    if (p.type === 'company') {
+      const initials = (p.name?.[0] || '?');
+      chip.innerHTML = `
+        <span class="contact-chip-avatar">
+          ${p.avatar ? `<img src="${authUrl(p.avatar)}" alt="">` : `<span>${esc(initials)}</span>`}
+        </span>
+        ${esc(p.name)}
+        <button type="button" class="contact-chip-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+      `;
+    } else {
+      chip.innerHTML = `
+        <span class="contact-chip-avatar">
+          ${p.avatar ? `<img src="${authUrl(p.avatar)}" alt="">` : `<span>${(p.first_name?.[0] || '') + (p.last_name?.[0] || '')}</span>`}
+        </span>
+        ${esc(p.first_name)} ${esc(p.last_name || '')}
+        <button type="button" class="contact-chip-remove" data-index="${i}"><i class="bi bi-x"></i></button>
+      `;
+    }
     chip.querySelector('.contact-chip-remove').addEventListener('click', () => {
-      contacts.splice(i, 1);
-      renderModalChips(containerId, contacts);
+      participants.splice(i, 1);
+      renderModalChips(containerId, participants);
     });
     container.prepend(chip);
   });
@@ -713,6 +871,19 @@ function attachGiftListHandlers(eventUuid) {
       const gifts = uuids.map(uuid => pageGiftsCache.find(g => g.uuid === uuid)).filter(Boolean);
       if (!gifts.length) return;
       showGiftModal(eventUuid, pageEventCache, gifts[0].order_type, null, gifts);
+    });
+  });
+
+  // Duplicate a gift group — open a fresh add modal prefilled with
+  // the same participants and gifts (no uuids), so the user can tweak
+  // e.g. the recipient(s) and save as a new gift.
+  el.querySelectorAll('.gift-copy-group').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const uuids = link.dataset.uuids.split(',');
+      const gifts = uuids.map(uuid => pageGiftsCache.find(g => g.uuid === uuid)).filter(Boolean);
+      if (!gifts.length) return;
+      showGiftModal(eventUuid, pageEventCache, gifts[0].order_type, null, null, gifts);
     });
   });
 
@@ -755,14 +926,19 @@ async function reloadGifts(eventUuid) {
  * Inline contact search with keyboard navigation.
  * Uses contactRowHtml, supports ArrowDown/Up + Enter + Escape + Tab.
  */
-function setupContactSearch(inputId, resultsId, onSelect) {
+function setupParticipantSearch(inputId, resultsId, onSelect) {
   const input = document.getElementById(inputId);
   if (!input) return;
   document.getElementById(resultsId)?.remove();
   attachContactSearch(input, {
     limit: 6,
-    onSelect: (c) => {
-      onSelect({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name || '', avatar: c.avatar || null });
+    includeCompanies: true,
+    onSelect: (p) => {
+      if (p.type === 'company') {
+        onSelect({ type: 'company', uuid: p.uuid, name: p.name, avatar: p.logo_path || p.avatar || null });
+      } else {
+        onSelect({ type: 'contact', uuid: p.uuid, first_name: p.first_name, last_name: p.last_name || '', avatar: p.avatar || null });
+      }
       input.value = '';
       input.focus();
     },

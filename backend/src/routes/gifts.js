@@ -37,6 +37,94 @@ async function getUserLinkedContactId(userId, tenantId) {
   return getLinkedContactId(userId, tenantId);
 }
 
+/**
+ * Fetch gift_order participants for a set of orders, returning a map
+ * keyed by the order's uuid. Each order entry has { givers, recipients }
+ * where every participant is either:
+ *   { type: 'contact', uuid, first_name, last_name, avatar }
+ *   { type: 'company', uuid, name, avatar }
+ *
+ * `idMap` maps order_id -> order_uuid so callers can share their own lookup.
+ */
+async function fetchOrderParticipants(orderIds, idMap) {
+  if (!orderIds.length) return {};
+
+  const contactRows = await db('gift_order_participants')
+    .whereIn('gift_order_participants.order_id', orderIds)
+    .whereNotNull('gift_order_participants.contact_id')
+    .join('contacts', 'gift_order_participants.contact_id', 'contacts.id')
+    .leftJoin('contact_photos', function () {
+      this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('true'));
+    })
+    .select(
+      'gift_order_participants.order_id', 'gift_order_participants.role',
+      'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+      'contact_photos.thumbnail_path as avatar'
+    );
+
+  const companyRows = await db('gift_order_participants')
+    .whereIn('gift_order_participants.order_id', orderIds)
+    .whereNotNull('gift_order_participants.company_id')
+    .join('companies', 'gift_order_participants.company_id', 'companies.id')
+    .select(
+      'gift_order_participants.order_id', 'gift_order_participants.role',
+      'companies.uuid', 'companies.name', 'companies.logo_path as avatar'
+    );
+
+  const partMap = {};
+  for (const p of contactRows) {
+    const uuid = idMap[p.order_id];
+    if (!partMap[uuid]) partMap[uuid] = { givers: [], recipients: [] };
+    const entry = {
+      type: 'contact',
+      uuid: p.uuid,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      avatar: p.avatar,
+    };
+    (p.role === 'giver' ? partMap[uuid].givers : partMap[uuid].recipients).push(entry);
+  }
+  for (const p of companyRows) {
+    const uuid = idMap[p.order_id];
+    if (!partMap[uuid]) partMap[uuid] = { givers: [], recipients: [] };
+    const entry = {
+      type: 'company',
+      uuid: p.uuid,
+      name: p.name,
+      avatar: p.avatar,
+    };
+    (p.role === 'giver' ? partMap[uuid].givers : partMap[uuid].recipients).push(entry);
+  }
+  return partMap;
+}
+
+/**
+ * Resolve contact/company UUIDs from the request into participant rows
+ * for gift_order_participants. Each row has either `contact_id` OR
+ * `company_id` set (never both). Tenant-scoped.
+ */
+async function buildParticipantRows(tenantId, orderId, body) {
+  const rows = [];
+  const { giver_uuids, recipient_uuids, giver_company_uuids, recipient_company_uuids } = body;
+
+  async function resolveContacts(uuids, role) {
+    if (!uuids?.length) return;
+    const contacts = await db('contacts').whereIn('uuid', uuids).where({ tenant_id: tenantId }).select('id');
+    contacts.forEach(c => rows.push({ order_id: orderId, contact_id: c.id, company_id: null, role }));
+  }
+  async function resolveCompanies(uuids, role) {
+    if (!uuids?.length) return;
+    const companies = await db('companies').whereIn('uuid', uuids).where({ tenant_id: tenantId }).select('id');
+    companies.forEach(c => rows.push({ order_id: orderId, contact_id: null, company_id: c.id, role }));
+  }
+
+  await resolveContacts(giver_uuids, 'giver');
+  await resolveContacts(recipient_uuids, 'recipient');
+  await resolveCompanies(giver_company_uuids, 'giver');
+  await resolveCompanies(recipient_company_uuids, 'recipient');
+  return rows;
+}
+
 // ════════════════════════════════════════════
 // PRODUCTS
 // ════════════════════════════════════════════
@@ -159,29 +247,15 @@ router.get('/products/:uuid', async (req, res, next) => {
     applyVisibilityFilter(ordersQuery, req.user.id, linkedContactId);
     const orders = await ordersQuery;
 
-    // Fetch participants
+    // Fetch participants (contacts + companies)
     if (orders.length) {
       const orderIds = await db('gift_orders').whereIn('uuid', orders.map(o => o.uuid)).select('id', 'uuid');
       const idMap = Object.fromEntries(orderIds.map(o => [o.id, o.uuid]));
-      const participants = await db('gift_order_participants')
-        .whereIn('order_id', orderIds.map(o => o.id))
-        .join('contacts', 'gift_order_participants.contact_id', 'contacts.id')
-        .leftJoin('contact_photos', function () {
-          this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('true'));
-        })
-        .select('gift_order_participants.order_id', 'gift_order_participants.role',
-          'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name',
-          'contact_photos.thumbnail_path as avatar');
-
-      const partMap = {};
-      for (const p of participants) {
-        const orderUuid = idMap[p.order_id];
-        if (!partMap[orderUuid]) partMap[orderUuid] = { givers: [], recipients: [] };
-        const entry = { uuid: p.contact_uuid, first_name: p.first_name, last_name: p.last_name, avatar: p.avatar };
-        if (p.role === 'giver') partMap[orderUuid].givers.push(entry);
-        else partMap[orderUuid].recipients.push(entry);
-      }
-      orders.forEach(o => { o.givers = partMap[o.uuid]?.givers || []; o.recipients = partMap[o.uuid]?.recipients || []; });
+      const partMap = await fetchOrderParticipants(orderIds.map(o => o.id), idMap);
+      orders.forEach(o => {
+        o.givers = partMap[o.uuid]?.givers || [];
+        o.recipients = partMap[o.uuid]?.recipients || [];
+      });
     }
 
     // Wishlist items using this product
@@ -428,34 +502,13 @@ router.get('/events/:uuid', async (req, res, next) => {
     applyVisibilityFilter(giftsQuery, req.user.id, linkedContactId);
     const gifts = await giftsQuery;
 
-    // Fetch participants for all gifts
+    // Fetch participants (contacts + companies) for all gifts
     if (gifts.length) {
       const giftIds = await db('gift_orders')
         .whereIn('uuid', gifts.map(g => g.uuid))
         .select('id', 'uuid');
       const idMap = Object.fromEntries(giftIds.map(g => [g.id, g.uuid]));
-
-      const participants = await db('gift_order_participants')
-        .whereIn('order_id', giftIds.map(g => g.id))
-        .join('contacts', 'gift_order_participants.contact_id', 'contacts.id')
-        .leftJoin('contact_photos', function () {
-          this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('true'));
-        })
-        .select(
-          'gift_order_participants.order_id', 'gift_order_participants.role',
-          'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name',
-          'contact_photos.thumbnail_path as avatar'
-        );
-
-      const partMap = {};
-      for (const p of participants) {
-        const giftUuid = idMap[p.order_id];
-        if (!partMap[giftUuid]) partMap[giftUuid] = { givers: [], recipients: [] };
-        const entry = { uuid: p.contact_uuid, first_name: p.first_name, last_name: p.last_name, avatar: p.avatar };
-        if (p.role === 'giver') partMap[giftUuid].givers.push(entry);
-        else partMap[giftUuid].recipients.push(entry);
-      }
-
+      const partMap = await fetchOrderParticipants(giftIds.map(g => g.id), idMap);
       gifts.forEach(g => {
         g.givers = partMap[g.uuid]?.givers || [];
         g.recipients = partMap[g.uuid]?.recipients || [];
@@ -603,25 +656,11 @@ router.get('/orders', async (req, res, next) => {
         .select('id', 'uuid');
       const idMap = Object.fromEntries(orderIds.map(o => [o.id, o.uuid]));
 
-      const participants = await db('gift_order_participants')
-        .whereIn('order_id', orderIds.map(o => o.id))
-        .join('contacts', 'gift_order_participants.contact_id', 'contacts.id')
-        .leftJoin('contact_photos', function () {
-          this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('true'));
-        })
-        .select('gift_order_participants.order_id', 'gift_order_participants.role',
-          'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name',
-          'contact_photos.thumbnail_path as avatar');
-
-      const partMap = {};
-      for (const p of participants) {
-        const orderUuid = idMap[p.order_id];
-        if (!partMap[orderUuid]) partMap[orderUuid] = { givers: [], recipients: [] };
-        const entry = { uuid: p.contact_uuid, first_name: p.first_name, last_name: p.last_name, avatar: p.avatar };
-        if (p.role === 'giver') partMap[orderUuid].givers.push(entry);
-        else partMap[orderUuid].recipients.push(entry);
-      }
-      orders.forEach(o => { o.givers = partMap[o.uuid]?.givers || []; o.recipients = partMap[o.uuid]?.recipients || []; });
+      const partMap = await fetchOrderParticipants(orderIds.map(o => o.id), idMap);
+      orders.forEach(o => {
+        o.givers = partMap[o.uuid]?.givers || [];
+        o.recipients = partMap[o.uuid]?.recipients || [];
+      });
     }
 
     res.json({ orders });
@@ -633,7 +672,11 @@ router.get('/orders', async (req, res, next) => {
 // POST /api/gifts/orders — create gift order
 router.post('/orders', async (req, res, next) => {
   try {
-    const { title, product_uuid, event_uuid, status, order_type, price, currency_code, notes, visibility, giver_uuids, recipient_uuids } = req.body;
+    const {
+      title, product_uuid, event_uuid, status, order_type, price, currency_code, notes, visibility,
+      giver_uuids, recipient_uuids,
+      giver_company_uuids, recipient_company_uuids,
+    } = req.body;
 
     if (!title?.trim() && !product_uuid) throw new AppError('Gift title or product is required', 400);
 
@@ -675,16 +718,11 @@ router.post('/orders', async (req, res, next) => {
       created_by: req.user.id,
     });
 
-    // Add participants
-    const participantRows = [];
-    if (giver_uuids?.length) {
-      const givers = await db('contacts').whereIn('uuid', giver_uuids).where({ tenant_id: req.tenantId }).select('id');
-      givers.forEach(c => participantRows.push({ order_id: orderId, contact_id: c.id, role: 'giver' }));
-    }
-    if (recipient_uuids?.length) {
-      const recipients = await db('contacts').whereIn('uuid', recipient_uuids).where({ tenant_id: req.tenantId }).select('id');
-      recipients.forEach(c => participantRows.push({ order_id: orderId, contact_id: c.id, role: 'recipient' }));
-    }
+    // Add participants (contacts and/or companies)
+    const participantRows = await buildParticipantRows(
+      req.tenantId, orderId,
+      { giver_uuids, recipient_uuids, giver_company_uuids, recipient_company_uuids }
+    );
     if (participantRows.length) {
       await db('gift_order_participants').insert(participantRows);
     }
@@ -737,18 +775,18 @@ router.put('/orders/:uuid', async (req, res, next) => {
       await db('gift_orders').where({ id: order.id }).update(updates);
     }
 
-    // Update participants if provided
-    if (req.body.giver_uuids !== undefined || req.body.recipient_uuids !== undefined) {
+    // Update participants if any participant field is provided
+    const hasAnyParticipants =
+      req.body.giver_uuids !== undefined || req.body.recipient_uuids !== undefined ||
+      req.body.giver_company_uuids !== undefined || req.body.recipient_company_uuids !== undefined;
+    if (hasAnyParticipants) {
       await db('gift_order_participants').where({ order_id: order.id }).del();
-      const rows = [];
-      if (req.body.giver_uuids?.length) {
-        const givers = await db('contacts').whereIn('uuid', req.body.giver_uuids).where({ tenant_id: req.tenantId }).select('id');
-        givers.forEach(c => rows.push({ order_id: order.id, contact_id: c.id, role: 'giver' }));
-      }
-      if (req.body.recipient_uuids?.length) {
-        const recipients = await db('contacts').whereIn('uuid', req.body.recipient_uuids).where({ tenant_id: req.tenantId }).select('id');
-        recipients.forEach(c => rows.push({ order_id: order.id, contact_id: c.id, role: 'recipient' }));
-      }
+      const rows = await buildParticipantRows(req.tenantId, order.id, {
+        giver_uuids: req.body.giver_uuids,
+        recipient_uuids: req.body.recipient_uuids,
+        giver_company_uuids: req.body.giver_company_uuids,
+        recipient_company_uuids: req.body.recipient_company_uuids,
+      });
       if (rows.length) await db('gift_order_participants').insert(rows);
     }
 
