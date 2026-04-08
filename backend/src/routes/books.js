@@ -77,6 +77,62 @@ async function resolveContacts(tenantId, contactUuids) {
   return { ids: rows.map(r => r.id), contacts: rows };
 }
 
+// Compute the chronologically-ordered list of post UUIDs that match a book's
+// filters (contact set + date range + visibility). Used both at creation
+// time (to seed the snapshot) and on regenerate.
+async function computePostUuids(tenantId, contactIds, dateFrom, dateTo, visibilityFilter) {
+  if (!contactIds.length) return [];
+  const allowedVisibilities = visibilityFilter === 'shared'
+    ? ['shared']
+    : ['shared', 'family'];
+
+  const subjectIds = await db('posts')
+    .where({ tenant_id: tenantId })
+    .whereNull('deleted_at')
+    .whereIn('contact_id', contactIds)
+    .whereIn('visibility', allowedVisibilities)
+    .modify((q) => {
+      if (dateFrom) q.where('post_date', '>=', dateFrom);
+      if (dateTo) q.where('post_date', '<=', dateTo);
+    })
+    .pluck('id');
+
+  const taggedIds = await db('post_contacts')
+    .join('posts', 'post_contacts.post_id', 'posts.id')
+    .where('posts.tenant_id', tenantId)
+    .whereNull('posts.deleted_at')
+    .whereIn('post_contacts.contact_id', contactIds)
+    .whereIn('posts.visibility', allowedVisibilities)
+    .modify((q) => {
+      if (dateFrom) q.where('posts.post_date', '>=', dateFrom);
+      if (dateTo) q.where('posts.post_date', '<=', dateTo);
+    })
+    .pluck('posts.id');
+
+  const allIds = [...new Set([...subjectIds, ...taggedIds])];
+  if (!allIds.length) return [];
+
+  const rows = await db('posts')
+    .whereIn('id', allIds)
+    .orderBy('post_date', 'asc')
+    .orderBy('id', 'asc')
+    .select('uuid');
+  return rows.map(r => r.uuid);
+}
+
+// Normalize a snapshot value from layout_options. Returns null if absent or
+// malformed. The snapshot freezes which posts are part of the book so that
+// new timeline activity does not silently change a finished book.
+function readSnapshot(layout) {
+  const snap = layout && layout.snapshot;
+  if (!snap || typeof snap !== 'object') return null;
+  if (!Array.isArray(snap.postUuids)) return null;
+  return {
+    generatedAt: snap.generatedAt || null,
+    postUuids: snap.postUuids.filter(u => typeof u === 'string'),
+  };
+}
+
 // ── GET /api/books — list the current user's books ──
 router.get('/', async (req, res, next) => {
   try {
@@ -108,6 +164,17 @@ router.post('/', async (req, res, next) => {
 
     const visibility = visibility_filter === 'shared' ? 'shared' : 'shared_family';
     const layout = parseLayout(layout_options);
+
+    // Seed the snapshot at creation time so the book has a frozen post list
+    // from the very first preview. Subsequent timeline activity won't show
+    // up until the user explicitly regenerates.
+    const snapshotUuids = await computePostUuids(
+      req.tenantId, ids, date_from || null, date_to || null, visibility,
+    );
+    layout.snapshot = {
+      generatedAt: new Date().toISOString(),
+      postUuids: snapshotUuids,
+    };
 
     const uuid = uuidv4();
     await db('book_jobs').insert({
@@ -182,9 +249,9 @@ router.delete('/:uuid', async (req, res, next) => {
 
 // ── GET /api/books/:uuid/data — full rendered content for the preview ──
 //
-// Returns the book's posts in chronological order with media, comments, and
-// reactions. Visibility is enforced server-side: private posts from other
-// users are never included. `shared` filter restricts to shared-only.
+// Returns the book's posts ordered by the snapshot (or chronologically if
+// no snapshot exists yet — legacy fallback). Visibility is enforced
+// server-side: private posts from other users are never included.
 router.get('/:uuid/data', async (req, res, next) => {
   try {
     const book = await db('book_jobs')
@@ -198,56 +265,53 @@ router.get('/:uuid/data', async (req, res, next) => {
       return res.json({ book: serializeBook(book), contacts: [], posts: [] });
     }
 
-    // Allowed visibilities: always include shared; include family when filter allows.
-    // Never include private posts from other users; include own private posts is
-    // intentionally skipped — a photo book should only use shared content.
     const allowedVisibilities = book.visibility_filter === 'shared'
       ? ['shared']
       : ['shared', 'family'];
 
-    // Collect post IDs where the book's contacts are either the subject or tagged.
-    const subjectPostIds = await db('posts')
-      .where({ tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .whereIn('contact_id', contactIds)
-      .whereIn('visibility', allowedVisibilities)
-      .modify((q) => {
-        if (book.date_from) q.where('post_date', '>=', book.date_from);
-        if (book.date_to) q.where('post_date', '<=', book.date_to);
-      })
-      .pluck('id');
+    // Resolve post UUIDs: prefer the saved snapshot, otherwise compute from
+    // current state (legacy books or freshly created without snapshot).
+    const layout = parseLayout(book.layout_options);
+    const snapshot = readSnapshot(layout);
+    let snapshotUuids = snapshot ? snapshot.postUuids : null;
+    if (!snapshotUuids) {
+      snapshotUuids = await computePostUuids(
+        req.tenantId, contactIds, book.date_from, book.date_to, book.visibility_filter,
+      );
+    }
 
-    const taggedPostIds = await db('post_contacts')
-      .join('posts', 'post_contacts.post_id', 'posts.id')
-      .where('posts.tenant_id', req.tenantId)
-      .whereNull('posts.deleted_at')
-      .whereIn('post_contacts.contact_id', contactIds)
-      .whereIn('posts.visibility', allowedVisibilities)
-      .modify((q) => {
-        if (book.date_from) q.where('posts.post_date', '>=', book.date_from);
-        if (book.date_to) q.where('posts.post_date', '<=', book.date_to);
-      })
-      .pluck('posts.id');
-
-    const postIdSet = new Set([...subjectPostIds, ...taggedPostIds]);
-    const postIds = [...postIdSet];
-
-    if (!postIds.length) {
+    if (!snapshotUuids.length) {
       return res.json({ book: serializeBook(book), contacts: contacts.map(stripContact), posts: [] });
     }
 
-    const posts = await db('posts')
-      .whereIn('id', postIds)
-      .orderBy('post_date', 'asc')
-      .orderBy('id', 'asc')
+    // Resolve UUIDs → ids, applying tenant + visibility filters as a defence
+    // in depth (a snapshot uuid that no longer matches the filter is dropped).
+    const postRows = await db('posts')
+      .where({ tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .whereIn('uuid', snapshotUuids)
+      .whereIn('visibility', allowedVisibilities)
       .select('id', 'uuid', 'body', 'post_date', 'contact_id', 'created_at');
+
+    if (!postRows.length) {
+      return res.json({ book: serializeBook(book), contacts: contacts.map(stripContact), posts: [] });
+    }
+
+    const postIds = postRows.map(p => p.id);
+
+    // Re-order to match snapshot order (snapshot is the source of truth for
+    // ordering — survives post_date edits after snapshot was taken).
+    const orderIndex = new Map(snapshotUuids.map((u, i) => [u, i]));
+    const posts = postRows.slice().sort((a, b) => {
+      const ai = orderIndex.has(a.uuid) ? orderIndex.get(a.uuid) : Number.MAX_SAFE_INTEGER;
+      const bi = orderIndex.has(b.uuid) ? orderIndex.get(b.uuid) : Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
 
     const media = await db('post_media')
       .whereIn('post_id', postIds)
       .orderBy('id', 'asc')
       .select('post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'taken_at');
-
-    const layout = parseLayout(book.layout_options);
 
     let comments = [];
     if (layout.includeComments) {
@@ -341,6 +405,36 @@ function stripContact(c) {
   };
 }
 
+// Score formula and threshold — MUST match the frontend (book-preview.js
+// scorePost / autoWeightForPost). Default is "small" (shared page); only
+// posts with real engagement or substantial body get a full page.
+const FULL_PAGE_THRESHOLD = 18;
+function scorePostRow(p) {
+  const bodyLen = (p.body || '').length;
+  return Number(p.likes) * 4 + Number(p.comments) * 6 + bodyLen / 40;
+}
+
+// Estimate page count from a set of post IDs. Used by both /preview and
+// /regenerate so they always agree.
+async function estimatePageCount(postIds) {
+  if (!postIds.length) return 2; // cover + back
+  const counts = await db('posts')
+    .whereIn('id', postIds)
+    .select('id', 'body')
+    .select(db.raw('(SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = posts.id) as likes'))
+    .select(db.raw('(SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = posts.id) as comments'));
+  let fullCount = 0;
+  let smallCount = 0;
+  for (const p of counts) {
+    if (scorePostRow(p) >= FULL_PAGE_THRESHOLD) fullCount += 1;
+    else smallCount += 1;
+  }
+  // Adjacent 1-post batches are promoted back to full pages on the
+  // frontend, but the average book has long enough small-runs that this
+  // approximation (ceil(small/4)) is close enough.
+  return 2 + fullCount + Math.ceil(smallCount / 4);
+}
+
 // ── POST /api/books/preview — estimate post + page count ──
 //
 // Returns the number of matching posts and a rough page estimate without
@@ -356,66 +450,125 @@ router.post('/preview', async (req, res, next) => {
     if (!contactIds.length) {
       return res.json({ postCount: 0, estimatedPages: 0 });
     }
-    const allowedVisibilities = visibility_filter === 'shared'
-      ? ['shared'] : ['shared', 'family'];
+    const uuids = await computePostUuids(
+      req.tenantId, contactIds, date_from || null, date_to || null, visibility_filter,
+    );
+    if (!uuids.length) return res.json({ postCount: 0, estimatedPages: 2 });
 
-    const subjectPosts = await db('posts')
-      .where({ tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .whereIn('contact_id', contactIds)
-      .whereIn('visibility', allowedVisibilities)
-      .modify((q) => {
-        if (date_from) q.where('post_date', '>=', date_from);
-        if (date_to) q.where('post_date', '<=', date_to);
-      })
-      .select('id');
+    const ids = await db('posts').whereIn('uuid', uuids).pluck('id');
+    const estimatedPages = await estimatePageCount(ids);
+    res.json({ postCount: uuids.length, estimatedPages });
+  } catch (err) { next(err); }
+});
 
-    const taggedPosts = await db('post_contacts')
-      .join('posts', 'post_contacts.post_id', 'posts.id')
-      .where('posts.tenant_id', req.tenantId)
-      .whereNull('posts.deleted_at')
-      .whereIn('post_contacts.contact_id', contactIds)
-      .whereIn('posts.visibility', allowedVisibilities)
-      .modify((q) => {
-        if (date_from) q.where('posts.post_date', '>=', date_from);
-        if (date_to) q.where('posts.post_date', '<=', date_to);
-      })
-      .select('posts.id');
+// ── POST /api/books/:uuid/regenerate — re-snapshot the book ──
+//
+// Re-runs the post query and replaces the saved snapshot with the fresh
+// list. Returns a diff so the frontend can show the user what changed
+// (e.g. "3 new posts added, 1 removed"). Per-post overrides are preserved
+// as long as the post UUID still exists in the new snapshot.
+router.post('/:uuid/regenerate', async (req, res, next) => {
+  try {
+    const book = await db('book_jobs')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId, user_id: req.user.id })
+      .first();
+    if (!book) throw new AppError('Book not found', 404);
 
-    const postIdSet = new Set([...subjectPosts.map(p => p.id), ...taggedPosts.map(p => p.id)]);
-    const postIds = [...postIdSet];
-    const postCount = postIds.length;
+    const contactUuids = parseContactUuids(book.contact_uuids);
+    const { ids: contactIds } = await resolveContacts(req.tenantId, contactUuids);
+    const freshUuids = await computePostUuids(
+      req.tenantId, contactIds, book.date_from, book.date_to, book.visibility_filter,
+    );
 
-    if (!postCount) {
-      return res.json({ postCount: 0, estimatedPages: 2 }); // cover + back
+    const layout = parseLayout(book.layout_options);
+    const prev = readSnapshot(layout);
+    const prevSet = new Set(prev ? prev.postUuids : []);
+    const freshSet = new Set(freshUuids);
+
+    const added = freshUuids.filter(u => !prevSet.has(u));
+    const removed = prev ? prev.postUuids.filter(u => !freshSet.has(u)) : [];
+
+    // Drop overrides that reference posts no longer in the snapshot. This
+    // prevents the override blob from growing unbounded over many
+    // regenerations and avoids dangling references.
+    const overrides = layout.overrides || {};
+    const isLive = (uuid) => freshSet.has(uuid);
+    if (overrides.postWeight) {
+      overrides.postWeight = Object.fromEntries(
+        Object.entries(overrides.postWeight).filter(([u]) => isLive(u)),
+      );
+    }
+    if (overrides.templates) {
+      overrides.templates = Object.fromEntries(
+        Object.entries(overrides.templates).filter(([u]) => isLive(u)),
+      );
+    }
+    if (overrides.customText) {
+      overrides.customText = Object.fromEntries(
+        Object.entries(overrides.customText).filter(([u]) => isLive(u)),
+      );
+    }
+    if (overrides.hideComments) {
+      overrides.hideComments = Object.fromEntries(
+        Object.entries(overrides.hideComments).filter(([u]) => isLive(u)),
+      );
     }
 
-    // Score each post to estimate full vs small. Same formula as the
-    // frontend autoWeightForPost: full when score >= 8, else small.
-    // Score = likes×3 + comments×4 + bodyLen/20 + mediaCount×2.
-    const counts = await db('posts')
-      .whereIn('id', postIds)
-      .select('id', 'body')
-      .select(db.raw('(SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = posts.id) as likes'))
-      .select(db.raw('(SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = posts.id) as comments'))
-      .select(db.raw("(SELECT COUNT(*) FROM post_media pm WHERE pm.post_id = posts.id AND pm.file_type LIKE 'image/%') as media"));
+    const merged = {
+      ...layout,
+      overrides,
+      snapshot: {
+        generatedAt: new Date().toISOString(),
+        postUuids: freshUuids,
+      },
+    };
 
-    let fullCount = 0;
-    let smallCount = 0;
-    for (const p of counts) {
-      const bodyLen = (p.body || '').length;
-      const score = Number(p.likes) * 3 + Number(p.comments) * 4 + bodyLen / 20 + Number(p.media) * 2;
-      if (score >= 8) fullCount += 1;
-      else smallCount += 1;
-    }
+    await db('book_jobs')
+      .where({ id: book.id })
+      .update({ layout_options: JSON.stringify(merged), updated_at: db.fn.now() });
 
-    // Pages = cover + full posts + ceil(small/4 batches) + back. Adds a
-    // chapter divider per year as a rough estimate when grouping is on.
-    // We don't know the user's grouping choice yet so this is a baseline.
-    const batchPages = Math.ceil(smallCount / 4);
-    const estimatedPages = 2 + fullCount + batchPages;
+    res.json({
+      added: added.length,
+      removed: removed.length,
+      total: freshUuids.length,
+      generatedAt: merged.snapshot.generatedAt,
+    });
+  } catch (err) { next(err); }
+});
 
-    res.json({ postCount, estimatedPages });
+// ── GET /api/books/:uuid/regenerate-preview — what would change? ──
+//
+// Returns the diff that a regenerate would produce, without committing.
+// Used by the frontend to show "3 new posts available" before the user
+// decides to regenerate.
+router.get('/:uuid/regenerate-preview', async (req, res, next) => {
+  try {
+    const book = await db('book_jobs')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId, user_id: req.user.id })
+      .first();
+    if (!book) throw new AppError('Book not found', 404);
+
+    const contactUuids = parseContactUuids(book.contact_uuids);
+    const { ids: contactIds } = await resolveContacts(req.tenantId, contactUuids);
+    const freshUuids = await computePostUuids(
+      req.tenantId, contactIds, book.date_from, book.date_to, book.visibility_filter,
+    );
+
+    const layout = parseLayout(book.layout_options);
+    const prev = readSnapshot(layout);
+    const prevSet = new Set(prev ? prev.postUuids : []);
+    const freshSet = new Set(freshUuids);
+
+    const added = freshUuids.filter(u => !prevSet.has(u)).length;
+    const removed = prev ? prev.postUuids.filter(u => !freshSet.has(u)).length : 0;
+
+    res.json({
+      added,
+      removed,
+      total: freshUuids.length,
+      currentTotal: prev ? prev.postUuids.length : null,
+      generatedAt: prev ? prev.generatedAt : null,
+    });
   } catch (err) { next(err); }
 });
 

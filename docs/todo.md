@@ -86,10 +86,10 @@ Flippable HTML book preview, single-contact, one template per post, browser-base
 
 #### Phase 2 — Curation + more layouts — DONE ✅
 
-All Phase 2 functionality is complete and pushed to production. See [docs/frontend.md](frontend.md) and [docs/api.md](api.md) for the full feature set. Highlights:
+See [docs/frontend.md](frontend.md) and [docs/api.md](api.md) for the full feature set. Highlights:
 
 - 7 layout templates with auto-selection by content + engagement score
-- Three view modes (Flip / Grid / Editor) + dedicated sub-editors (page / batch / cover)
+- Two view modes (Flip / Grid) + dedicated sub-editors (page / batch / cover)
 - 3-state weight model (full / small / hidden) with adaptive batch layouts
 - Multi-contact books with per-contact chapter grouping
 - Custom cover (upload + media picker + position + colors + font)
@@ -97,8 +97,20 @@ All Phase 2 functionality is complete and pushed to production. See [docs/fronte
 - Page-size picker (Bokfabrikken + Blurb formats)
 - Wizard live page-count preview
 - Page numbers, custom back-cover text, body text size
-- Loading skeleton, slide animation, swipe gestures
 - Comment bubbles with author avatars
+
+#### Phase 2.6 — Stability + workflow rework — DONE ✅
+
+Targeted refactor in response to real-world testing on a ~200-post production book:
+
+- **iOS Safari PWA crash fix**: book preview no longer mounts every page in the DOM. The flip view now keeps only `currentPage ± 2` (5 pages) live, and serves `thumbnail_path` for everything except the cover background and full-bleed templates. Decoded image memory was the killer — full-resolution × hundreds of pages blew past iOS's hard ceiling and got the PWA process killed silently.
+- **Snapshot model**: a book's post list is frozen at creation time (`layout_options.snapshot.postUuids`). New timeline activity no longer silently changes finished books. New endpoints: `POST /api/books/:uuid/regenerate` (commits a fresh snapshot, prunes orphaned overrides) and `GET /api/books/:uuid/regenerate-preview` (diff probe). The toolbar shows a yellow `+N −M` badge when new posts are detected. Backwards-compatible: legacy books without a snapshot fall back to dynamic queries.
+- **Editor view removed**: the dedicated vertical-list editor was killed. Per-post weight is now edited directly in the page-edit sub-view (3-button selector), and "promote to full page" is a button in the batch-edit sub-view. Editing happens *in context* with the actual page rendering, not in a parallel list.
+- **Weight rebalanced**: default is now `small` for almost everything. Score formula reformulated to `likes × 4 + comments × 6 + bodyLen / 40` with threshold ≥ 18 (was `likes × 3 + comments × 4 + bodyLen / 20 + media × 2` with threshold ≥ 8). Having an image is no longer poenggivende — engagement is the only signal that earns a full page. The same formula now lives in both `frontend/js/pages/book-preview.js` and `backend/src/routes/books.js` (`scorePostRow` / `FULL_PAGE_THRESHOLD`).
+- **Image rotation**: new `overrides.mediaRotation` (90/180/270). Rotate buttons in both the page editor (per image in the image grid) and the batch editor (per row, on the primary image).
+- **Engagement on shared pages**: batch cells now show `❤ N` / `💬 N` badges so the social signal isn't lost when a post lands on a compact page.
+
+The flip-view slide animation was dropped along with the lazy-mount rewrite — pages snap instead of sliding. Re-introducing it would require either keeping the old wrap mounted across remount or rebuilding the window incrementally; not worth the complexity for now.
 
 #### Phase 2.5 — Nice-to-have polish (not blocking)
 - Pagination/lazy loading of media in the grid view for very large books

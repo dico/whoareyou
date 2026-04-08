@@ -144,7 +144,9 @@ Photo book generation. Books are definitions stored in `book_jobs`; the HTML pre
 | GET | `/:uuid` | Book metadata |
 | PATCH | `/:uuid` | Update title/subtitle/layout_options (including `layout_options.overrides` for per-post weight, template, focal point, media/post exclusion, custom text, comment visibility, batch order/variant) |
 | DELETE | `/:uuid` | Delete book |
-| GET | `/:uuid/data` | Full rendered content: contacts + posts (with media, comments, reactions) filtered by contact, date range, and visibility. **Never includes `private` posts from any user** — enforces `WHERE visibility IN ('shared','family')`. Comment rows include `author_avatar` (thumbnail_path) for bubble rendering. |
+| GET | `/:uuid/data` | Full rendered content: contacts + posts (with media, comments, reactions). Posts come from the saved **snapshot** (`layout_options.snapshot.postUuids`) — falls back to a dynamic query for legacy books without one. **Never includes `private` posts from any user** — enforces `WHERE visibility IN ('shared','family')`. Comment rows include `author_avatar` (thumbnail_path) for bubble rendering. |
+| GET | `/:uuid/regenerate-preview` | Returns `{ added, removed, total, currentTotal, generatedAt }` describing what a regenerate would change. Used by the frontend on book load to show a "new posts available" badge. No mutation. |
+| POST | `/:uuid/regenerate` | Re-runs the post query for the book's current contacts/dates/visibility, replaces `layout_options.snapshot`, and prunes per-post overrides (`postWeight`, `templates`, `customText`, `hideComments`) that reference posts no longer in the book. Returns `{ added, removed, total, generatedAt }`. |
 | POST | `/:uuid/cover` | Upload a custom cover image (multipart `cover` field, image only). Processed via sharp, stored under `/uploads/books/{uuid}/cover_*.webp`, replaces previous cover file. Updates `layout_options.theme.coverImage`. |
 | DELETE | `/:uuid/cover` | Remove the custom cover image, reverting to the default gradient or theme color. |
 
@@ -170,11 +172,16 @@ Photo book generation. Books are definitions stored in `book_jobs`; the HTML pre
     postWeight:    { [postUuid]: 'full' | 'small' | 'hidden' },
     excludedMedia: [file_path, ...],
     mediaFocal:    { [file_path]: 'X% Y%' },
+    mediaRotation: { [file_path]: 90 | 180 | 270 },
     templates:     { [postUuid]: 'hero-top'|'full-bleed'|'grid-2'|'grid-3'|'grid-4'|'text-heavy'|'image-side' },
     customText:    { [postUuid]: 'overrides post.body in book' },
     hideComments:  { [postUuid]: true },
     batchOrder:    { [batchKey]: [postUuid, ...] },
     batchVariant:  { [batchKey]: 'horizontal'|'vertical'|'big-left'|'big-top'|'grid'|'rows'|'columns' },
+  },
+  snapshot: {
+    generatedAt: ISO timestamp,
+    postUuids:   [post_uuid, ...]   // frozen list — see /regenerate
   }
 }
 ```

@@ -364,12 +364,14 @@
 /* ── Grid view ───────────────────────────── */
 .book-viewer.is-grid .book-stage { display: none; }
 
-/* Thumb scale: 200mm ≈ 755.9px at 96dpi.
- * --book-thumb-size (CSS px) × --book-thumb-scale must equal 200mm.
- * 220px / 755.9px ≈ 0.291. */
+/* Grid thumbnail dimensions (--book-thumb-w / -h / -scale) are computed in
+ * JS from the book's actual page size so portrait/landscape pages don't
+ * leave white margins inside square containers. */
 .book-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--book-thumb-size, 220px));
+  /* Track width matches the actual thumb width (which is computed from the
+   * book's page aspect ratio in JS — see themeVarsStyle). */
+  grid-template-columns: repeat(auto-fill, var(--book-thumb-w, 220px));
   gap: var(--space-lg);
   padding: var(--space-lg);
   justify-content: center;
@@ -377,8 +379,8 @@
 
 .book-grid-item {
   position: relative;
-  width: var(--book-thumb-size, 220px);
-  height: var(--book-thumb-size, 220px);
+  width: var(--book-thumb-w, 220px);
+  height: var(--book-thumb-h, 220px);
   background: var(--book-paper);
   border-radius: 4px;
   overflow: hidden;
@@ -403,14 +405,16 @@
 }
 
 /* The thumbnail wraps a real .book-page scaled down to fit the grid item.
- * Scale is 220px / 200mm ≈ 0.291. If --book-thumb-size changes, update scale. */
+ * --book-thumb-scale is computed from the actual page aspect ratio in
+ * themeVarsStyle (long edge → 220px), so portrait/landscape/square pages
+ * all fill their item exactly with no white margin. */
 .book-grid-thumb {
   position: absolute;
   top: 0;
   left: 0;
   width: var(--book-page-width);
   height: var(--book-page-height);
-  transform: scale(0.291);
+  transform: scale(var(--book-thumb-scale, 0.291));
   transform-origin: top left;
   pointer-events: none;
 }
@@ -603,35 +607,11 @@
   background: rgba(0,0,0,0.1);
 }
 
-/* ── Editor view ─────────────────────────── */
-.book-viewer.is-editor .book-stage { display: none; }
-
-.book-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-  padding: var(--space-lg);
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.book-editor-empty {
-  text-align: center;
-  padding: var(--space-xl);
-}
-
-.book-editor-summary {
-  background: var(--color-surface, #fff);
-  border-radius: 8px;
-  padding: var(--space-md) var(--space-lg);
-  font-size: 1.05rem;
-  border: 1px solid rgba(0,0,0,0.06);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-}
-.book-editor-summary strong {
-  font-size: 1.4rem;
-  color: var(--book-accent);
-}
+/* The dedicated Editor view was removed in favour of click-to-edit
+ * directly inside the flip / batch editors. The shared classes below
+ * (book-weight-group, book-editor-label, book-editor-tpl-row,
+ * book-editor-images, book-editor-img-*) are still used by the page
+ * editor and batch editor sub-views. */
 
 .book-weight-group .btn {
   flex: 1;
@@ -654,85 +634,6 @@
   margin-left: 6px;
   text-transform: none;
   letter-spacing: 0;
-}
-
-.book-editor-row.book-editor-weight-hidden {
-  opacity: 0.5;
-}
-.book-editor-row.book-editor-weight-hidden .book-editor-preview-scale {
-  filter: grayscale(0.8);
-}
-
-.book-grid-hidden-header {
-  grid-column: 1 / -1;
-  padding: var(--space-md) 0 0;
-}
-
-.book-editor-row {
-  display: flex;
-  gap: var(--space-lg);
-  align-items: flex-start;
-  background: var(--color-surface, #fff);
-  border-radius: 12px;
-  padding: var(--space-md);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-  border: 1px solid rgba(0,0,0,0.05);
-}
-
-.book-editor-row.is-excluded {
-  opacity: 0.55;
-}
-.book-editor-row.is-excluded .book-editor-preview-scale {
-  filter: grayscale(1);
-}
-
-/* Scaled-down page on the left. 200mm × 0.55 ≈ 416px — large enough that
- * post text and comments are readable when deciding what to do. */
-.book-editor-preview {
-  width: 416px;
-  height: 416px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-}
-.book-editor-preview-scale {
-  width: var(--book-page-width);
-  height: var(--book-page-height);
-  transform: scale(0.55);
-  transform-origin: top left;
-  pointer-events: none;
-}
-.book-editor-preview-scale .book-page {
-  box-shadow: none;
-  border-radius: 0;
-}
-
-.book-editor-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  min-width: 0;
-}
-
-.book-editor-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
-  padding-bottom: 6px;
-}
-.book-editor-num {
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--book-ink);
-}
-.book-editor-date {
-  font-size: 0.85rem;
-  color: var(--book-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .book-editor-section {
@@ -804,10 +705,61 @@
   background: rgba(52,199,89,0.92);
 }
 
-@media (max-width: 720px) {
-  .book-editor-row { flex-direction: column; }
-  .book-editor-preview { width: 100%; max-width: 302px; margin: 0 auto; }
+/* Rotate button — top-LEFT of the thumb so it doesn't collide with the
+ * exclude/include button on the top-right. */
+.book-editor-img-rotate {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
+.book-editor-img-rotate:hover {
+  background: rgba(0,0,0,0.8);
+}
+.book-editor-img-thumb img {
+  transition: transform 0.2s ease;
+}
+
+/* Batch editor: per-row action buttons (rotate / promote / caption) live
+ * in a small flex container on the right. */
+.book-batch-edit-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* Engagement badge inside small batch cells: shows likes/comments so the
+ * social signal isn't lost when a post is on a shared page. */
+.book-batch-engagement {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+  pointer-events: none;
+}
+.book-batch-likes,
+.book-batch-comments {
+  font-size: 0.7rem;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
+}
+.book-batch-cell { position: relative; }
 
 /* ── Cover ─────────────────────────────────── */
 .book-page-cover {
