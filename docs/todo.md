@@ -2,12 +2,6 @@
 
 > Open tasks only. Completed work is documented in the relevant docs.
 
-## Migrations awaiting production deploy
-
-Once these migrations have run in production, the lines below can be removed.
-
-- `068_add_company_id_to_gift_order_participants.js` — adds nullable `company_id` FK and makes `contact_id` nullable so gifts can come from/go to groups. Run on dev via `cd /app/backend && npx knex migrate:latest` (batch 47).
-
 ## High Priority
 
 ### Standardize contact search component
