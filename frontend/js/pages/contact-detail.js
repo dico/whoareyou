@@ -2154,8 +2154,10 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
     }
 
     const maxRowW = Math.max(...[...byLevel.values()].map(ids => rowWidth(ids)));
-    const svgW = Math.max(400, maxRowW + gapX * 4);
-    const svgH = sortedLevels.length * (nodeH + gapY) + gapY;
+    // svgW/svgH may grow below if a proposed-relation phantom node is added
+    // outside the natural row bounds, so they must be `let`, not `const`.
+    let svgW = Math.max(400, maxRowW + gapX * 4);
+    let svgH = sortedLevels.length * (nodeH + gapY) + gapY;
 
     const positions = new Map();
     for (const level of sortedLevels) {
