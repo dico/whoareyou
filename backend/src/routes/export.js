@@ -9,10 +9,7 @@ import AdmZip from 'adm-zip';
 import fs from 'fs';
 import path from 'path';
 import { getCountryForIp } from '../services/geolocation.js';
-
-function getClientIp(req) {
-  return (req.headers['x-forwarded-for']?.split(',')[0] || req.ip || '').replace(/^::ffff:/, '').trim();
-}
+import { getClientIp } from '../utils/ip.js';
 
 async function createExportLog(req, exportType) {
   try {

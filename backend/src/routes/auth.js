@@ -12,7 +12,7 @@ import { validateEmail, validateRequired, validatePassword } from '../utils/vali
 import { authenticate } from '../middleware/auth.js';
 import { createSession, hashToken, generateAccessToken, revokeSession } from '../utils/session.js';
 import { sendEmail } from '../services/email.js';
-import { isTrustedIp, hasTrustedIpConfig, isLoginAllowed } from '../utils/ip.js';
+import { isTrustedIp, hasTrustedIpConfig, isLoginAllowed, getClientIp } from '../utils/ip.js';
 import {
   generateRegistrationOptions, verifyRegistrationResponse,
   generateAuthenticationOptions, verifyAuthenticationResponse,
@@ -25,7 +25,7 @@ const SALT_ROUNDS = 12;
 // Creates a new tenant + admin user (first user in a household)
 router.post('/register', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    const ipCheck = await isLoginAllowed(getClientIp(req));
     if (!ipCheck.allowed) throw new AppError('Access denied', 403);
 
     // Check if registration is disabled (always allow first user)
@@ -114,7 +114,7 @@ router.post('/register', async (req, res, next) => {
 // POST /api/auth/forgot-password — request password reset email
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    const ipCheck = await isLoginAllowed(getClientIp(req));
     if (!ipCheck.allowed) throw new AppError('Access denied', 403);
 
     const { getSetting } = await import('../utils/settings.js');
@@ -158,7 +158,7 @@ router.post('/forgot-password', async (req, res, next) => {
 // POST /api/auth/reset-password — set new password with token
 router.post('/reset-password', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    const ipCheck = await isLoginAllowed(getClientIp(req));
     if (!ipCheck.allowed) throw new AppError('Access denied', 403);
 
     const { token, password } = req.body;
@@ -193,7 +193,7 @@ router.post('/reset-password', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     // Check IP restrictions before anything else
-    const clientIpRaw = (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, '');
+    const clientIpRaw = getClientIp(req);
     const loginCheck = await isLoginAllowed(clientIpRaw);
     if (!loginCheck.allowed) {
       throw new AppError('Access denied', 403);
@@ -213,7 +213,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     // Check if 2FA is required
-    const clientIp = (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, '');
+    const clientIp = getClientIp(req);
     const trusted = await isTrustedIp(clientIp, user.id);
     const hasIpConfig = await hasTrustedIpConfig(user.id);
 
@@ -285,7 +285,7 @@ router.post('/refresh', async (req, res, next) => {
 
     // If session was created from trusted IP, verify IP is still trusted
     if (session.is_trusted_ip) {
-      const clientIp = (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, '');
+      const clientIp = getClientIp(req);
       const stillTrusted = await isTrustedIp(clientIp, user.id);
       if (!stillTrusted) {
         // IP changed to untrusted — revoke session, require re-login
@@ -328,7 +328,7 @@ router.post('/logout', async (req, res, next) => {
 // POST /api/auth/2fa/verify — verify TOTP code during login (completes 2FA challenge)
 router.post('/2fa/verify', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    const ipCheck = await isLoginAllowed(getClientIp(req));
     if (!ipCheck.allowed) throw new AppError('Access denied', 403);
 
     const { challengeToken, code } = req.body;
@@ -578,7 +578,7 @@ router.delete('/passkeys/:id', authenticate, async (req, res, next) => {
 // POST /api/auth/passkey/login-options — start passkey authentication (no auth required)
 router.post('/passkey/login-options', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    const ipCheck = await isLoginAllowed(getClientIp(req));
     if (!ipCheck.allowed) throw new AppError('Access denied', 403);
 
     // If email provided, get user's passkeys for allowCredentials
@@ -611,7 +611,7 @@ router.post('/passkey/login-options', async (req, res, next) => {
 // POST /api/auth/passkey/login — verify passkey and create session
 router.post('/passkey/login', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed((req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''));
+    const ipCheck = await isLoginAllowed(getClientIp(req));
     if (!ipCheck.allowed) throw new AppError('Access denied', 403);
 
     const { credential } = req.body;

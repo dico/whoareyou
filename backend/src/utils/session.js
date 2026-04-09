@@ -5,6 +5,7 @@ import { UAParser } from 'ua-parser-js';
 import { db } from '../db.js';
 import { config } from '../config/index.js';
 import { sendLoginNotification } from '../services/email.js';
+import { getClientIp } from './ip.js';
 
 /**
  * Hash a refresh token with SHA-256.
@@ -51,7 +52,7 @@ export async function createSession(user, req, activeTenantId = null, { isTruste
   const sessionUuid = uuidv4();
   const refreshToken = crypto.randomBytes(48).toString('base64url');
   const refreshTokenHash = hashToken(refreshToken);
-  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  const ip = getClientIp(req) || 'unknown';
   const userAgent = req.headers['user-agent'] || '';
   const deviceLabel = parseDevice(userAgent);
 

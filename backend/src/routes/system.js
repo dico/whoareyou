@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { AppError } from '../utils/errors.js';
 import { getSetting, setSetting } from '../utils/settings.js';
 import { getSmtpConfig, verifySmtp, sendEmail } from '../services/email.js';
+import { getClientIp } from '../utils/ip.js';
 
 const router = Router();
 
@@ -313,7 +314,7 @@ router.get('/ip-security', async (req, res, next) => {
       ipgeo_api_key: await getSetting('ipgeo_api_key', ''),
       login_country_whitelist: await getSetting('login_country_whitelist', ''),
       login_ip_whitelist: await getSetting('login_ip_whitelist', ''),
-      client_ip: (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, ''),
+      client_ip: getClientIp(req),
     });
   } catch (err) { next(err); }
 });
@@ -340,7 +341,7 @@ router.post('/ip-security/test', async (req, res, next) => {
     if (!apiKey) throw new AppError('No API key configured', 400);
 
     // Use provided IP, or fall back to client IP, or use 8.8.8.8 for local IPs
-    let ip = req.body.ip || (req.ip || req.headers['x-forwarded-for'] || '').replace(/^::ffff:/, '');
+    let ip = req.body.ip || getClientIp(req);
     const isLocal = !ip || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.');
 
     if (isLocal && !req.body.ip) {

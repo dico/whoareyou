@@ -4,6 +4,16 @@ import { getSetting } from './settings.js';
 import { getCountryForIp } from '../services/geolocation.js';
 
 /**
+ * Resolve the real client IP from a request. Express's `req.ip` is
+ * authoritative as long as `trust proxy` is configured to walk the entire
+ * internal proxy chain (see backend/src/index.js). Strip the IPv6-mapped
+ * IPv4 prefix so downstream code works with bare dotted-quad strings.
+ */
+export function getClientIp(req) {
+  return (req?.ip || '').replace(/^::ffff:/, '');
+}
+
+/**
  * Check if an IP address is trusted for a specific user's tenant.
  * Reads from tenant's trusted_ip_ranges column, falls back to env var.
  */

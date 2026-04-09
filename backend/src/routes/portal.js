@@ -12,6 +12,7 @@ import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
 import { portalAuthenticate } from '../middleware/portal-auth.js';
 import { getSetting } from '../utils/settings.js';
+import { getClientIp } from '../utils/ip.js';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
@@ -614,7 +615,7 @@ async function createPortalSession(guest, req) {
   const sessionUuid = uuidv4();
   const refreshToken = crypto.randomBytes(48).toString('base64url');
   const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  const ip = getClientIp(req) || 'unknown';
   const ua = new UAParser(req.headers['user-agent'] || '');
   const browser = ua.getBrowser();
   const os = ua.getOS();

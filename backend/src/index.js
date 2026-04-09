@@ -28,8 +28,12 @@ import portalAdminRoutes from './routes/portal-admin.js';
 
 const app = express();
 
-// Trust Nginx proxy (needed for rate limiting and X-Forwarded-For)
-app.set('trust proxy', 1);
+// Trust any proxy on a loopback / link-local / private network. The real
+// chain is: external reverse proxy → in-container nginx → node, so a fixed
+// hop count (e.g. 1) lands on the external proxy IP for every session.
+// Trusting all private-range proxies makes Express peel the whole internal
+// chain off X-Forwarded-For and surface the actual client IP via req.ip.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 // Security
 app.use(helmet());
