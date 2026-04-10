@@ -1078,7 +1078,9 @@
     "urlCopied": "Copied!",
     "fieldImageFit": "Image fit",
     "fitContain": "Keep ratio (black bars)",
-    "fitCover": "Fill screen (crop)"
+    "fitCover": "Fill screen (crop)",
+    "regenToken": "Regenerate URL",
+    "regenTokenConfirm": "Generate a new URL? The old one will stop working — you'll need to update the TV."
   },
   "book": {
     "settingsCardLabel": "Generate book",

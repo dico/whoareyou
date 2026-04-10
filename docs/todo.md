@@ -150,6 +150,16 @@ The flip-view slide animation was dropped along with the lazy-mount rewrite — 
 
 ---
 
+### Signage: access logging and online monitoring
+**Status:** Not started
+**Why:** A signage token grants unauthenticated read access to family posts/photos. If the token leaks, there's currently no way to know. Need:
+- **Access log table** (`signage_access_log`): screen_id, ip_address, country (via ipgeolocation), user_agent, timestamp. Logged on every `/feed/:token` call (throttled to at most 1 row per IP per 5 minutes to avoid DB spam from polling).
+- **Admin UI**: per-screen "Activity" tab showing recent IPs, countries, devices. Flag unknown IPs.
+- **Online indicator**: `last_accessed_at` already exists — show green/grey dot on the screen list (green if < 2 min ago). Already have `last_accessed_at` update on each feed fetch.
+- **Alert on new IP**: optional notification when a previously unseen IP accesses the feed.
+
+---
+
 ## Low Priority
 
 ### Gift module UX improvements

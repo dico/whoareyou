@@ -1078,7 +1078,9 @@
     "urlCopied": "Kopiert!",
     "fieldImageFit": "Bildetilpasning",
     "fitContain": "Behold ratio (svarte kanter)",
-    "fitCover": "Fyll skjerm (crop)"
+    "fitCover": "Fyll skjerm (crop)",
+    "regenToken": "Regenerer URL",
+    "regenTokenConfirm": "Generere ny URL? Den gamle slutter å virke — du må oppdatere TV-en."
   },
   "book": {
     "settingsCardLabel": "Lag bok",

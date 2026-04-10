@@ -39,6 +39,7 @@ function screenRowHtml(screen) {
             </button></li>
             <li><button class="dropdown-item btn-open-screen" data-uuid="${screen.uuid}"><i class="bi bi-box-arrow-up-right me-2"></i>${t('signage.openScreen')}</button></li>
             <li><button class="dropdown-item btn-copy-url" data-uuid="${screen.uuid}"><i class="bi bi-link-45deg me-2"></i>${t('signage.copyUrl')}</button></li>
+            <li><button class="dropdown-item btn-regen-token" data-uuid="${screen.uuid}"><i class="bi bi-arrow-clockwise me-2"></i>${t('signage.regenToken')}</button></li>
             <li><hr class="dropdown-divider"></li>
             <li><button class="dropdown-item text-danger btn-delete-screen" data-uuid="${screen.uuid}"><i class="bi bi-trash3 me-2"></i>${t('signage.deleteScreen')}</button></li>
           </ul>
@@ -227,24 +228,29 @@ export async function renderSignage() {
         };
       });
       el.querySelectorAll('.btn-open-screen').forEach(btn => {
-        btn.onclick = async () => {
-          try {
-            const res = await api.post(`/signage/${btn.dataset.uuid}/regenerate-token`, {});
-            window.open(`/signage/${res.token}`, '_blank');
-          } catch (err) {
-            confirmDialog(err.message || 'Failed', { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
-          }
+        btn.onclick = () => {
+          const screen = screens.find(s => s.uuid === btn.dataset.uuid);
+          if (screen?.token) window.open(`/signage/${screen.token}`, '_blank');
         };
       });
       el.querySelectorAll('.btn-copy-url').forEach(btn => {
         btn.onclick = async () => {
-          const uuid = btn.dataset.uuid;
+          const screen = screens.find(s => s.uuid === btn.dataset.uuid);
+          if (!screen?.token) return;
+          const url = `${window.location.origin}/signage/${screen.token}`;
           try {
-            const res = await api.post(`/signage/${uuid}/regenerate-token`, {});
-            const url = `${window.location.origin}/signage/${res.token}`;
             await navigator.clipboard.writeText(url);
             btn.innerHTML = `<i class="bi bi-check-lg me-2"></i>${t('signage.urlCopied')}`;
             setTimeout(() => { btn.innerHTML = `<i class="bi bi-link-45deg me-2"></i>${t('signage.copyUrl')}`; }, 2000);
+          } catch {}
+        };
+      });
+      el.querySelectorAll('.btn-regen-token').forEach(btn => {
+        btn.onclick = async () => {
+          if (!await confirmDialog(t('signage.regenTokenConfirm'), { title: t('signage.regenToken') })) return;
+          try {
+            await api.post(`/signage/${btn.dataset.uuid}/regenerate-token`, {});
+            loadList();
           } catch (err) {
             confirmDialog(err.message || 'Failed', { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
           }
@@ -269,22 +275,21 @@ export async function renderSignage() {
     document.getElementById('btn-new-screen').style.display = 'none';
 
     // Contact multi-select
-    const selectedContacts = (screen?.contact_uuids || []).map(uuid => ({ uuid }));
-    // Resolve names from existing list or fetch
+    const selectedContacts = [];
     const searchInput = document.getElementById('sig-contact-search');
     const chipWrap = document.getElementById('sig-contact-chips');
 
-    // If editing, pre-fill chips (we only have UUIDs, fetch names)
-    if (selectedContacts.length) {
-      api.get(`/contacts?limit=200`).then(res => {
-        const map = new Map((res.contacts || []).map(c => [c.uuid, c]));
-        selectedContacts.length = 0;
-        for (const uuid of (screen?.contact_uuids || [])) {
-          const c = map.get(uuid);
+    // If editing, resolve each UUID individually so we never miss contacts
+    // that are beyond page 1 of a large contact list.
+    if (screen?.contact_uuids?.length) {
+      Promise.all(screen.contact_uuids.map(uuid =>
+        api.get(`/contacts/${uuid}`).then(r => r.contact).catch(() => null)
+      )).then(results => {
+        for (const c of results) {
           if (c) selectedContacts.push(c);
         }
         renderChips();
-      }).catch(() => {});
+      });
     }
 
     function renderChips() {

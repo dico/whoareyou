@@ -14,6 +14,7 @@ function serializeScreen(row, includeToken) {
   const out = {
     uuid: row.uuid,
     name: row.name,
+    token: row.token || null,
     is_active: !!row.is_active,
     contact_uuids: parseJson(row.contact_uuids, []),
     visibility_filter: row.visibility_filter,
@@ -34,7 +35,6 @@ function serializeScreen(row, includeToken) {
     last_accessed_at: row.last_accessed_at,
     created_at: row.created_at,
   };
-  if (includeToken) out.token = includeToken;
   return out;
 }
 
@@ -103,13 +103,14 @@ router.post('/', async (req, res, next) => {
       uuid,
       tenant_id: req.tenantId,
       name: name.trim().slice(0, 255),
+      token,
       token_hash,
       contact_uuids: JSON.stringify(contact_uuids),
       ...config,
     });
 
     const row = await db('signage_screens').where({ uuid }).first();
-    res.status(201).json({ screen: serializeScreen(row, token) });
+    res.status(201).json({ screen: serializeScreen(row) });
   } catch (err) { next(err); }
 });
 
@@ -196,6 +197,7 @@ router.post('/:uuid/regenerate-token', async (req, res, next) => {
     if (!row) throw new AppError('Screen not found', 404);
     const token = crypto.randomBytes(48).toString('base64url');
     await db('signage_screens').where({ id: row.id }).update({
+      token,
       token_hash: hashToken(token),
       updated_at: db.fn.now(),
     });
