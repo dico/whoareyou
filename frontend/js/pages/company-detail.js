@@ -414,7 +414,7 @@ export async function renderCompanyDetail(uuid) {
       enableDropZone(composeEl, (files) => {
         groupPostMedia.push(...files);
         renderGroupMediaPreview();
-      });
+      }, { acceptDocuments: true });
     }
 
     function renderGroupMediaPreview() {
