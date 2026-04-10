@@ -167,9 +167,12 @@ router.get('/me', portalAuthenticate, async (req, res, next) => {
 // GET /api/portal/contacts — contacts this guest can see
 router.get('/contacts', portalAuthenticate, async (req, res, next) => {
   try {
+    // Portal NEVER sees sensitive contacts — they're hidden unconditionally,
+    // there's no toggle for portal guests.
     const contacts = await db('contacts')
       .whereIn('id', req.portal.contactIds)
       .whereNull('deleted_at')
+      .where('is_sensitive', false)
       .select('uuid', 'first_name', 'last_name')
       .orderBy('first_name');
 
@@ -191,7 +194,7 @@ router.get('/contacts', portalAuthenticate, async (req, res, next) => {
 router.get('/contacts/:uuid/gallery', portalAuthenticate, async (req, res, next) => {
   try {
     const contact = await db('contacts').where({ uuid: req.params.uuid }).whereNull('deleted_at').first();
-    if (!contact || !req.portal.contactIds.includes(contact.id)) {
+    if (!contact || !req.portal.contactIds.includes(contact.id) || contact.is_sensitive) {
       throw new AppError('Contact not found', 404);
     }
 
@@ -199,10 +202,17 @@ router.get('/contacts/:uuid/gallery', portalAuthenticate, async (req, res, next)
       .where('posts.tenant_id', req.portal.tenantId)
       .whereNull('posts.deleted_at')
       .where('posts.visibility', 'shared')
+      .where('posts.is_sensitive', false)
       .where(function () {
         this.where('posts.contact_id', contact.id)
           .orWhereIn('posts.id', db('post_contacts').where('contact_id', contact.id).select('post_id'));
       })
+      .whereNotExists(
+        db('post_contacts')
+          .join('contacts as sc', 'post_contacts.contact_id', 'sc.id')
+          .whereRaw('post_contacts.post_id = posts.id')
+          .where('sc.is_sensitive', true),
+      )
       .select('posts.id');
 
     const images = await db('post_media')
@@ -221,7 +231,7 @@ router.get('/contacts/:uuid/gallery', portalAuthenticate, async (req, res, next)
 router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next) => {
   try {
     const contact = await db('contacts').where({ uuid: req.params.uuid }).whereNull('deleted_at').first();
-    if (!contact || !req.portal.contactIds.includes(contact.id)) {
+    if (!contact || !req.portal.contactIds.includes(contact.id) || contact.is_sensitive) {
       throw new AppError('Contact not found', 404);
     }
 
@@ -232,10 +242,17 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
       .where('posts.tenant_id', req.portal.tenantId)
       .whereNull('posts.deleted_at')
       .where('posts.visibility', 'shared') // Portal ONLY sees shared posts
+      .where('posts.is_sensitive', false) // and never sensitive ones
       .where(function () {
         this.where('posts.contact_id', contact.id)
           .orWhereIn('posts.id', db('post_contacts').where('contact_id', contact.id).select('post_id'));
       })
+      .whereNotExists(
+        db('post_contacts')
+          .join('contacts as sc', 'post_contacts.contact_id', 'sc.id')
+          .whereRaw('post_contacts.post_id = posts.id')
+          .where('sc.is_sensitive', true),
+      )
       .select('posts.*')
       .orderBy('posts.post_date', 'desc')
       .limit(limit)
@@ -457,18 +474,29 @@ router.post('/posts/:uuid/media', portalAuthenticate, portalUpload.array('media'
 router.get('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) => {
   try {
     const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, visibility: 'shared' })
+      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, visibility: 'shared', is_sensitive: false })
       .whereNull('deleted_at')
       .first();
     if (!post) throw new AppError('Post not found', 404);
 
-    // Verify post is about a contact this guest can see
+    // Verify post is about a contact this guest can see, and that contact
+    // (and any tagged contacts) aren't sensitive.
     const isAbout = post.contact_id && req.portal.contactIds.includes(post.contact_id);
     const isTagged = await db('post_contacts')
       .where('post_id', post.id)
       .whereIn('contact_id', req.portal.contactIds)
       .first();
     if (!isAbout && !isTagged) throw new AppError('Post not found', 404);
+    const sensitiveTag = await db('post_contacts')
+      .join('contacts', 'post_contacts.contact_id', 'contacts.id')
+      .where('post_contacts.post_id', post.id)
+      .where('contacts.is_sensitive', true)
+      .first();
+    if (sensitiveTag) throw new AppError('Post not found', 404);
+    if (post.contact_id) {
+      const subj = await db('contacts').where({ id: post.contact_id }).select('is_sensitive').first();
+      if (subj?.is_sensitive) throw new AppError('Post not found', 404);
+    }
 
     const comments = await db('post_comments')
       .where({ post_id: post.id })
@@ -515,15 +543,25 @@ router.post('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) 
     if (!body?.trim()) throw new AppError('Comment body required', 400);
 
     const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, visibility: 'shared' })
+      .where({ uuid: req.params.uuid, tenant_id: req.portal.tenantId, visibility: 'shared', is_sensitive: false })
       .whereNull('deleted_at')
       .first();
     if (!post) throw new AppError('Post not found', 404);
 
-    // Verify access
+    // Verify access — and that neither subject nor any tagged contact is sensitive
     const isAbout = post.contact_id && req.portal.contactIds.includes(post.contact_id);
     const isTagged = await db('post_contacts').where('post_id', post.id).whereIn('contact_id', req.portal.contactIds).first();
     if (!isAbout && !isTagged) throw new AppError('Post not found', 404);
+    if (post.contact_id) {
+      const subj = await db('contacts').where({ id: post.contact_id }).select('is_sensitive').first();
+      if (subj?.is_sensitive) throw new AppError('Post not found', 404);
+    }
+    const sensitiveTag = await db('post_contacts')
+      .join('contacts', 'post_contacts.contact_id', 'contacts.id')
+      .where('post_contacts.post_id', post.id)
+      .where('contacts.is_sensitive', true)
+      .first();
+    if (sensitiveTag) throw new AppError('Post not found', 404);
 
     // Resolve contact_id from portal guest's linked contact
     const guest = await db('portal_guests').where({ id: req.portal.guestId }).first();

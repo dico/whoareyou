@@ -700,17 +700,52 @@ router.get('/me', authenticate, async (req, res, next) => {
       }
     }
 
+    // Sensitive-mode state for the current session (persisted on the
+    // sessions row, not the user). The middleware has already resolved
+    // it into req.showSensitive; we also surface the expiry so the UI
+    // can show "active until 14:30".
+    let sensitive_until = null;
+    if (req.user.sessionId) {
+      const sess = await db('sessions').where({ uuid: req.user.sessionId })
+        .select('show_sensitive_until').first();
+      sensitive_until = sess?.show_sensitive_until || null;
+    }
+
     res.json({
       user: {
         uuid: user.uuid, email: user.email, first_name: user.first_name, last_name: user.last_name,
         role: user.role, is_system_admin: !!user.is_system_admin, language: user.language,
         avatar, linked_contact_uuid,
         tenant_name: activeTenant?.name, tenant_uuid: activeTenant?.uuid,
+        show_sensitive: !!req.showSensitive,
+        sensitive_until,
       },
     });
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/auth/sensitive-mode — toggle sensitive-content visibility for
+// the current session only. Body: { enabled: boolean, durationMinutes?: number }
+// durationMinutes defaults to 240 (4h). Pass a very large number for
+// "until I turn it off". Setting enabled=false clears the timestamp.
+router.post('/sensitive-mode', authenticate, async (req, res, next) => {
+  try {
+    if (!req.user.sessionId) throw new AppError('No active session', 400);
+    const { enabled, durationMinutes } = req.body || {};
+    let until = null;
+    if (enabled) {
+      const minutes = Number.isFinite(durationMinutes) && durationMinutes > 0
+        ? Math.min(durationMinutes, 60 * 24 * 365 * 50) // hard cap 50 years
+        : 240;
+      until = new Date(Date.now() + minutes * 60 * 1000);
+    }
+    await db('sessions')
+      .where({ uuid: req.user.sessionId })
+      .update({ show_sensitive_until: until });
+    res.json({ show_sensitive: !!enabled, sensitive_until: until });
+  } catch (err) { next(err); }
 });
 
 // PUT /api/auth/profile — update user profile

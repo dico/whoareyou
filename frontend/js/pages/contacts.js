@@ -233,6 +233,7 @@ async function loadContacts() {
         </div>
         <div class="contact-badges">
           ${c.is_favorite ? '<i class="bi bi-star-fill text-warning"></i>' : ''}
+          ${c.is_sensitive ? `<i class="bi bi-eye-slash post-sensitive-icon" title="${t('sensitive.markedTooltip')}"></i>` : ''}
           ${c.visibility === 'private'
             ? `<span class="badge bg-secondary badge-sm"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>`
             : `<span class="badge bg-light text-muted badge-sm"><i class="bi bi-people-fill"></i></span>`

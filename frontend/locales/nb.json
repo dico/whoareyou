@@ -138,6 +138,23 @@
     "familyHint": "Kun synlig for familien, ikke portalgjester",
     "privateHint": "Bare synlig for deg"
   },
+  "sensitive": {
+    "title": "Sensitivt innhold",
+    "desc": "Skjul innlegg og kontakter som er markert som sensitive (f.eks. helseopplysninger). Du kan slå dette på når du er hjemme og av når du er på jobb eller har gjester. Modusen lagres per enhet.",
+    "show": "Vis sensitivt innhold på denne enheten",
+    "duration_4h": "I 4 timer",
+    "duration_midnight": "Til midnatt",
+    "duration_1w": "I 1 uke",
+    "duration_forever": "Inntil jeg slår av",
+    "activeUntil": "Aktivt til {time}",
+    "activeForever": "Aktivt til du slår av",
+    "markShort": "Sensitivt",
+    "markPostHint": "Marker dette innlegget som sensitivt — det skjules unntatt når sensitiv-modus er på",
+    "markContactHint": "Marker denne kontakten som sensitiv — kontakten og alle hennes innlegg skjules unntatt når sensitiv-modus er på",
+    "markedTooltip": "Markert som sensitivt",
+    "dotTooltipOn": "Sensitivt innhold vises",
+    "dotTooltipOff": "Sensitivt innhold skjules"
+  },
   "fields": {
     "title": "Kontaktinfo",
     "add": "Legg til",

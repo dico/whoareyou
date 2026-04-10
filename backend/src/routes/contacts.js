@@ -6,6 +6,7 @@ import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
+import { filterSensitiveContacts, filterSensitivePosts, parseSensitiveFlag, stripSensitiveContacts } from '../utils/sensitive.js';
 
 const router = Router();
 
@@ -22,7 +23,8 @@ router.get('/', async (req, res, next) => {
       .where(function () {
         this.where('contacts.visibility', 'shared')
           .orWhere('contacts.created_by', req.user.id);
-      });
+      })
+      .modify(filterSensitiveContacts(req));
 
     // Search
     if (search) {
@@ -98,7 +100,7 @@ router.get('/', async (req, res, next) => {
         'contacts.nickname', 'contacts.birth_day', 'contacts.birth_month', 'contacts.birth_year',
         'contacts.deceased_date', 'contacts.is_favorite',
         'contacts.last_contacted_at', 'contacts.last_viewed_at', 'contacts.created_at',
-        'contacts.visibility'
+        'contacts.visibility', 'contacts.is_sensitive'
       )
       .select(db.raw(`(
         SELECT cp.thumbnail_path FROM contact_photos cp
@@ -132,6 +134,7 @@ router.get('/:uuid', async (req, res, next) => {
       .where(function () {
         this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
       })
+      .modify(filterSensitiveContacts(req))
       .first();
 
     if (!contact) {
@@ -168,6 +171,7 @@ router.get('/:uuid', async (req, res, next) => {
         .select(
           'relationships.id as relationship_id',
           'related.uuid', 'related.first_name', 'related.last_name',
+          'related.is_sensitive as related_is_sensitive',
           'relationship_types.name as relationship', 'relationship_types.id as relationship_type_id',
           'relationship_types.category',
           'relationships.notes', 'relationships.start_date', 'relationships.end_date',
@@ -183,6 +187,7 @@ router.get('/:uuid', async (req, res, next) => {
             .select(
               'relationships.id as relationship_id',
               'origin.uuid', 'origin.first_name', 'origin.last_name',
+              'origin.is_sensitive as related_is_sensitive',
               'relationship_types.inverse_name as relationship', 'relationship_types.id as relationship_type_id',
               'relationship_types.category',
               'relationships.notes', 'relationships.start_date', 'relationships.end_date',
@@ -220,12 +225,22 @@ router.get('/:uuid', async (req, res, next) => {
         .whereNull('contacts.deleted_at')
         .whereNull('contact_addresses.moved_out_at')
         .select(
-          'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+          'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.is_sensitive',
           'addresses.id as address_id', 'addresses.street', 'contact_addresses.label',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
         )
         .groupBy('contacts.id', 'addresses.id', 'addresses.street', 'contact_addresses.label');
     }
+
+    // Strip sensitive contacts from related lists when sensitive mode is off.
+    // The relationships JOIN already pulled the rows; we filter in memory so
+    // we don't have to rewrite the unionAll query.
+    const filteredRelationships = req.showSensitive
+      ? relationships
+      : relationships.filter(r => !r.related_is_sensitive);
+    const filteredHousehold = req.showSensitive
+      ? household
+      : household.filter(h => !h.is_sensitive);
 
     res.json({
       contact: {
@@ -241,14 +256,15 @@ router.get('/:uuid', async (req, res, next) => {
         notes: contact.notes,
         is_favorite: !!contact.is_favorite,
         visibility: contact.visibility,
+        is_sensitive: !!contact.is_sensitive,
         last_contacted_at: contact.last_contacted_at,
         created_at: contact.created_at,
         photos,
         fields,
         labels,
-        relationships,
+        relationships: filteredRelationships,
         addresses,
-        household,
+        household: filteredHousehold,
         companies: await db('contact_companies')
           .join('companies', 'contact_companies.company_id', 'companies.id')
           .where({ 'contact_companies.contact_id': contact.id, 'contact_companies.tenant_id': req.tenantId })
@@ -283,6 +299,7 @@ router.post('/', async (req, res, next) => {
       how_we_met: req.body.how_we_met?.trim() || null,
       notes: req.body.notes?.trim() || null,
       is_favorite: !!req.body.is_favorite,
+      is_sensitive: parseSensitiveFlag(req.body.is_sensitive),
       visibility: ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared',
     });
 
@@ -341,6 +358,7 @@ router.put('/:uuid', async (req, res, next) => {
         updates[field] = typeof req.body[field] === 'string' ? req.body[field].trim() : req.body[field];
       }
     }
+    if (req.body.is_sensitive !== undefined) updates.is_sensitive = parseSensitiveFlag(req.body.is_sensitive);
 
     if (Object.keys(updates).length) {
       await db('contacts').where({ id: contact.id }).update(updates);
@@ -444,6 +462,7 @@ router.get('/search/global', async (req, res, next) => {
       .where(function () {
         this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
       })
+      .modify(filterSensitiveContacts(req))
       .where(function () {
         // Multi-word search: each term must match somewhere
         const terms = q.trim().split(/\s+/).filter(Boolean);
@@ -470,6 +489,7 @@ router.get('/search/global', async (req, res, next) => {
       .where(function () {
         this.whereIn('posts.visibility', ['shared', 'family']).orWhere('posts.created_by', req.user.id);
       })
+      .modify(filterSensitivePosts(req))
       .where('posts.body', 'like', like)
       .select('posts.uuid', 'posts.body', 'posts.post_date', 'posts.contact_id')
       .orderBy('posts.post_date', 'desc')
@@ -534,6 +554,7 @@ router.get('/upcoming-birthdays/list', async (req, res, next) => {
       .where(function () {
         this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
       })
+      .modify(filterSensitiveContacts(req))
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
         'contacts.birth_day', 'contacts.birth_month', 'contacts.birth_year',

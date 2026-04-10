@@ -64,11 +64,14 @@ export function renderNavbar() {
         </div>
 
         <div class="dropdown">
-          <button class="nav-link nav-user" data-bs-toggle="dropdown">
+          <button class="nav-link nav-user nav-user-with-dot ${user?.show_sensitive ? 'is-sensitive-on' : ''}"
+            data-bs-toggle="dropdown"
+            title="${user?.show_sensitive ? t('sensitive.dotTooltipOn') : t('sensitive.dotTooltipOff')}">
             ${user?.avatar
               ? `<img class="user-avatar" src="${authUrl(user.avatar)}" alt="">`
               : `<span class="user-avatar">${user ? (user.first_name[0] + user.last_name[0]) : '?'}</span>`
             }
+            <span class="nav-user-dot"></span>
           </button>
           <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
             ${user?.linked_contact_uuid

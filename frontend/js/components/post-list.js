@@ -96,6 +96,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             </div>
           `}
           <div class="post-header-actions">
+            ${(p.is_sensitive || p.about?.is_sensitive) ? `<i class="bi bi-eye-slash post-sensitive-icon" title="${t('sensitive.markedTooltip')}"></i>` : ''}
             ${p.visibility === 'private' ? `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('visibility.private')}"></i>` : ''}
             ${p.visibility === 'family' ? `<i class="bi bi-people-fill text-muted post-visibility-icon" title="${t('visibility.family')}"></i>` : ''}
             <div class="dropdown">
@@ -269,6 +270,11 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
                 <i class="bi bi-image"></i>
                 <input type="file" class="edit-media-input" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
               </label>
+              <button type="button" class="edit-action btn-toggle-sensitive ${p.is_sensitive ? 'is-on' : ''}"
+                data-sensitive="${p.is_sensitive ? '1' : '0'}"
+                title="${t('sensitive.markPostHint')}">
+                <i class="bi bi-eye-slash"></i>
+              </button>
             </div>
             <div class="edit-actions">
               <input type="date" class="form-control form-control-sm edit-post-date" value="${p.post_date ? new Date(p.post_date).toISOString().split('T')[0] : ''}">
@@ -362,6 +368,14 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           } catch {}
         });
       });
+      // Sensitive toggle
+      postEl.querySelectorAll('.btn-toggle-sensitive').forEach(btn => {
+        btn.onclick = () => {
+          const next = btn.dataset.sensitive === '1' ? '0' : '1';
+          btn.dataset.sensitive = next;
+          btn.classList.toggle('is-on', next === '1');
+        };
+      });
       // Cancel
       postEl.querySelectorAll('.btn-cancel-edit').forEach(btn => {
         btn.onclick = () => {
@@ -385,7 +399,14 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           try {
             const postDate = form.querySelector('.edit-post-date')?.value || undefined;
             const linkPreview = editLinkPreviewMap.get(uuid) ?? undefined;
-            const payload = { body, contact_uuids: contactUuids, post_date: postDate, link_preview: linkPreview };
+            const sensitiveBtn = form.querySelector('.btn-toggle-sensitive');
+            const payload = {
+              body,
+              contact_uuids: contactUuids,
+              post_date: postDate,
+              link_preview: linkPreview,
+              is_sensitive: sensitiveBtn?.dataset.sensitive === '1',
+            };
             if (aboutEl) payload.about_contact_uuid = aboutUuid;
             await api.put(`/posts/${uuid}`, payload);
             if (onChanged) onChanged();

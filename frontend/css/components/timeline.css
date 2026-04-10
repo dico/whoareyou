@@ -1032,6 +1032,16 @@ a.post-comment-author:hover {
   color: var(--color-primary);
 }
 
+/* Sensitive toggle in the inline edit bar — amber when on. Same shape as
+ * the other edit-action icon buttons so it lines up with tag/media. */
+.edit-action.btn-toggle-sensitive.is-on {
+  color: #fff;
+  background: #d97706;
+}
+.edit-action.btn-toggle-sensitive.is-on:hover {
+  background: #b45309;
+}
+
 .edit-actions {
   display: flex;
   gap: 2px;

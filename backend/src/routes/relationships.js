@@ -416,6 +416,7 @@ router.get('/family-tree/:contactUuid', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.contactUuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
+      .modify((q) => { if (!req.showSensitive) q.where('is_sensitive', false); })
       .first();
     if (!contact) throw new AppError('Contact not found', 404);
 
@@ -520,11 +521,14 @@ router.get('/family-tree/:contactUuid', async (req, res, next) => {
       }
     }
 
-    // Fetch contact details
+    // Fetch contact details. Sensitive contacts are pruned from the tree
+    // unless sensitive mode is on — orphaned edges are dropped below since
+    // nodeIds won't contain the missing endpoint.
     const contactIds = [...generations.keys()];
     const contacts = contactIds.length ? await db('contacts')
       .whereIn('id', contactIds)
       .whereNull('deleted_at')
+      .modify((q) => { if (!req.showSensitive) q.where('is_sensitive', false); })
       .select('id', 'uuid', 'first_name', 'last_name', 'birth_year', 'deceased_date',
         db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
       ) : [];
@@ -536,8 +540,10 @@ router.get('/family-tree/:contactUuid', async (req, res, next) => {
       is_root: c.id === contact.id,
     }));
 
-    // Build edges between nodes in the tree
-    const nodeIds = new Set(contactIds);
+    // Build edges between nodes in the tree. nodeIds = surviving contacts
+    // (sensitive filter may have removed some), so edges to pruned nodes
+    // are dropped automatically.
+    const nodeIds = new Set(contacts.map(c => c.id));
     const edges = [];
     const edgeSet = new Set();
     for (const r of allRels) {
@@ -591,6 +597,7 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.contactUuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
+      .modify((q) => { if (!req.showSensitive) q.where('is_sensitive', false); })
       .first();
     if (!contact) throw new AppError('Contact not found', 404);
 
@@ -654,11 +661,13 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
       }
     }
 
-    // Fetch contact details for all visited nodes
+    // Fetch contact details for all visited nodes. Sensitive contacts are
+    // pruned unless sensitive mode is on; orphaned edges are dropped below.
     if (visited.size) {
       const contacts = await db('contacts')
         .whereIn('id', [...visited])
         .whereNull('deleted_at')
+        .modify((q) => { if (!req.showSensitive) q.where('is_sensitive', false); })
         .select(
           'id', 'uuid', 'first_name', 'last_name', 'birth_year', 'deceased_date',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
@@ -674,10 +683,12 @@ router.get('/tree/:contactUuid', async (req, res, next) => {
       }
     }
 
-    // Deduplicate edges (A→B and B→A are the same relationship)
+    // Deduplicate edges (A→B and B→A are the same relationship), and drop
+    // any edge whose endpoints didn't survive the sensitive filter.
     const uniqueEdges = [];
     const edgeSet = new Set();
     for (const e of edges) {
+      if (!nodes.has(e.from) || !nodes.has(e.to)) continue;
       const key = [Math.min(e.from, e.to), Math.max(e.from, e.to)].join('-');
       if (!edgeSet.has(key)) {
         edgeSet.add(key);

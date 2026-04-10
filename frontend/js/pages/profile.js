@@ -95,6 +95,27 @@ export async function renderProfile() {
         </form>
       </div>
 
+      <!-- Sensitive content mode -->
+      <div class="settings-section glass-card">
+        <h4><i class="bi bi-eye-slash"></i> ${t('sensitive.title')}</h4>
+        <p class="text-muted small">${t('sensitive.desc')}</p>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" id="sensitive-toggle"
+              ${state.user?.show_sensitive ? 'checked' : ''}>
+            <label class="form-check-label" for="sensitive-toggle">${t('sensitive.show')}</label>
+          </div>
+          <select class="form-select form-select-sm" id="sensitive-duration" style="width:auto"
+            ${state.user?.show_sensitive ? 'disabled' : ''}>
+            <option value="240">${t('sensitive.duration_4h')}</option>
+            <option value="midnight">${t('sensitive.duration_midnight')}</option>
+            <option value="10080">${t('sensitive.duration_1w')}</option>
+            <option value="forever">${t('sensitive.duration_forever')}</option>
+          </select>
+          <span class="text-muted small" id="sensitive-status"></span>
+        </div>
+      </div>
+
       <!-- Households -->
       <div class="settings-section glass-card">
         <h4><i class="bi bi-house-door"></i> ${t('settings.households')}</h4>
@@ -207,6 +228,58 @@ export async function renderProfile() {
     if (tab.dataset.tab === 'sessions' && !document.getElementById('sessions-list').dataset.loaded) {
       document.getElementById('sessions-list').dataset.loaded = 'true';
       loadSessions();
+    }
+  });
+
+  // Sensitive content toggle
+  const sensitiveToggle = document.getElementById('sensitive-toggle');
+  const sensitiveDuration = document.getElementById('sensitive-duration');
+  const sensitiveStatus = document.getElementById('sensitive-status');
+  const renderSensitiveStatus = () => {
+    if (state.user?.show_sensitive && state.user?.sensitive_until) {
+      const until = new Date(state.user.sensitive_until);
+      // "Forever" is sentinel: > 5 years out
+      const fiveYearsFromNow = Date.now() + 5 * 365 * 24 * 60 * 60 * 1000;
+      if (until.getTime() > fiveYearsFromNow) {
+        sensitiveStatus.textContent = t('sensitive.activeForever');
+      } else {
+        sensitiveStatus.textContent = t('sensitive.activeUntil', {
+          time: until.toLocaleString(getLocale() === 'nb' ? 'nb-NO' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }),
+        });
+      }
+    } else {
+      sensitiveStatus.textContent = '';
+    }
+  };
+  renderSensitiveStatus();
+  sensitiveToggle.addEventListener('change', async (e) => {
+    const enabled = e.target.checked;
+    let durationMinutes = 240;
+    if (enabled) {
+      const v = sensitiveDuration.value;
+      if (v === 'midnight') {
+        const now = new Date();
+        const midnight = new Date(now);
+        midnight.setHours(24, 0, 0, 0);
+        durationMinutes = Math.max(1, Math.round((midnight - now) / 60000));
+      } else if (v === 'forever') {
+        durationMinutes = 60 * 24 * 365 * 50; // 50 years
+      } else {
+        durationMinutes = parseInt(v, 10) || 240;
+      }
+    }
+    try {
+      const res = await api.post('/auth/sensitive-mode', { enabled, durationMinutes });
+      if (state.user) {
+        state.user.show_sensitive = res.show_sensitive;
+        state.user.sensitive_until = res.sensitive_until;
+      }
+      sensitiveDuration.disabled = enabled;
+      renderSensitiveStatus();
+      renderNavbar();
+    } catch (err) {
+      sensitiveToggle.checked = !enabled;
+      alert(err.message || 'Failed to toggle');
     }
   });
 

@@ -55,11 +55,17 @@ export function addContactModalHtml() {
                 <textarea class="form-control" id="new-how-met" placeholder="${t('contacts.howWeMet')}" style="height:80px"></textarea>
                 <label>${t('contacts.howWeMet')}</label>
               </div>
-              <div class="mb-3">
+              <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
                 <div class="visibility-pill" id="new-visibility-btn" data-visibility="shared">
                   <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
                   <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
                 </div>
+                <button type="button" class="sensitive-toggle" id="new-sensitive-btn"
+                  data-sensitive="0"
+                  title="${t('sensitive.markContactHint')}">
+                  <i class="bi bi-eye-slash"></i>
+                  <span>${t('sensitive.markShort')}</span>
+                </button>
               </div>
               <div id="add-contact-error" class="alert alert-danger d-none"></div>
             </div>
@@ -82,6 +88,14 @@ export function initAddContactModal() {
     if (!clicked) return;
     pill.dataset.visibility = clicked.dataset.val;
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
+  });
+
+  // Sensitive toggle
+  document.getElementById('new-sensitive-btn').addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    const next = btn.dataset.sensitive === '1' ? '0' : '1';
+    btn.dataset.sensitive = next;
+    btn.classList.toggle('is-on', next === '1');
   });
 
   // Duplicate hint — debounced search as user types name
@@ -133,6 +147,7 @@ export function initAddContactModal() {
         birth_year: parseInt(document.getElementById('new-birth-year').value) || undefined,
         how_we_met: document.getElementById('new-how-met').value || undefined,
         visibility: document.getElementById('new-visibility-btn').dataset.visibility,
+        is_sensitive: document.getElementById('new-sensitive-btn').dataset.sensitive === '1',
       });
 
       bootstrap.Modal.getInstance(document.getElementById('add-contact-modal')).hide();

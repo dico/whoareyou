@@ -33,6 +33,20 @@ export async function authenticate(req, res, next) {
       }
     }
 
+    // Read sensitive-mode state from the session row. The toggle lives on
+    // the session, not the user, so each device has its own state. A NULL
+    // or past timestamp means sensitive content is hidden (the default).
+    let showSensitive = false;
+    if (payload.sid) {
+      const session = await db('sessions')
+        .where({ uuid: payload.sid })
+        .select('show_sensitive_until')
+        .first();
+      if (session?.show_sensitive_until) {
+        showSensitive = new Date(session.show_sensitive_until) > new Date();
+      }
+    }
+
     req.user = {
       id: user.id,
       uuid: user.uuid,
@@ -43,6 +57,7 @@ export async function authenticate(req, res, next) {
       isSystemAdmin: !!user.is_system_admin,
       sessionId: payload.sid || null,
     };
+    req.showSensitive = showSensitive;
 
     next();
   } catch (err) {

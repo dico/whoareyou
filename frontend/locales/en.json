@@ -138,6 +138,23 @@
     "familyHint": "Visible to family only, not portal guests",
     "privateHint": "Only visible to you"
   },
+  "sensitive": {
+    "title": "Sensitive content",
+    "desc": "Hide posts and contacts marked as sensitive (e.g. health notes). You can turn this on at home and off at work or when guests are around. The mode is stored per device.",
+    "show": "Show sensitive content on this device",
+    "duration_4h": "For 4 hours",
+    "duration_midnight": "Until midnight",
+    "duration_1w": "For 1 week",
+    "duration_forever": "Until I turn it off",
+    "activeUntil": "Active until {time}",
+    "activeForever": "Active until you turn it off",
+    "markShort": "Sensitive",
+    "markPostHint": "Mark this post as sensitive — it will be hidden unless sensitive mode is on",
+    "markContactHint": "Mark this contact as sensitive — the contact and all of its posts will be hidden unless sensitive mode is on",
+    "markedTooltip": "Marked as sensitive",
+    "dotTooltipOn": "Sensitive content is showing",
+    "dotTooltipOff": "Sensitive content is hidden"
+  },
   "fields": {
     "title": "Contact info",
     "add": "Add",

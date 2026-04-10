@@ -96,6 +96,53 @@ POST /api/auth/login (email + password)
 - Portal queries: `WHERE visibility = 'shared'` (family and private are NEVER visible)
 - Backend enforces valid values: `['shared','family','private']`
 
+## Sensitive Content Mode
+
+A second axis, **orthogonal to visibility**, that lets the user mark individual posts and contacts as sensitive (e.g. health notes, a private therapist contact) and toggle them on/off per device. Designed for the "I want to show family photos to a guest without exposing my dad's medical history" case. Not a security boundary against network-level adversaries — see "Threat model" below.
+
+### How it works
+- **Two new columns**:
+  - `posts.is_sensitive` BOOLEAN
+  - `contacts.is_sensitive` BOOLEAN — cascades to all posts where the contact is the subject (`posts.contact_id`) or tagged (`post_contacts`)
+- **Per-session toggle**: `sessions.show_sensitive_until TIMESTAMP NULL`. NULL or past = off, future = on. Stored on the session row, **not the user**, so each device (phone, work laptop, home browser) has independent state. New sessions always start with the mode off.
+- **Auth middleware** reads `show_sensitive_until` from the session row on every request and exposes `req.showSensitive` (boolean) to route handlers.
+- **Filtering helper** (`utils/sensitive.js`) provides `filterSensitivePosts(req)` and `filterSensitiveContacts(req)` Knex modifiers used on every relevant query.
+
+### Backend-enforced (not just UI)
+The whole point is that sensitive items are *missing from the response payload* when the mode is off. A guest pulling DevTools out of the user's hand and inspecting network traffic still sees nothing. The filter is applied to:
+
+- `GET /api/posts` (timeline + contact/company filter), `/posts/geo`, `/posts/gallery`, `/posts/:uuid/comments`
+- `GET /api/contacts`, `/contacts/:uuid` (returns 404 for sensitive contacts), `/contacts/upcoming-birthdays/list`, `/contacts/search/global` (both contacts and posts results)
+- `GET /api/relationships/family-tree/:uuid` and `/relationships/tree/:uuid` — sensitive contacts are pruned from the tree, orphaned edges dropped
+- `GET /api/books/:uuid/data` — book preview respects the same filter
+
+### Toggle endpoint
+`POST /api/auth/sensitive-mode { enabled, durationMinutes }` updates `show_sensitive_until` on the current session only. Predefined durations in the UI: 4 hours (default), until midnight, 1 week, "until I turn it off" (50 years sentinel).
+
+### UI cues
+- A small dot is always visible on the navbar avatar — neutral grey when off, amber when on. Always visible (even off) so the user is reminded that the mode exists.
+- Sensitive items get a `bi-eye-slash` icon next to their visibility icon when mode is on, so the user knows what *would* be hidden from a guest.
+- The toggle lives in `/profile` → Account → "Sensitive content" section, with the duration picker.
+
+### Default-off semantics
+- Every new session starts with the mode off. Logging in on a new device → safe by default.
+- The mode does NOT auto-propagate across devices. Turning it on at home leaves it off on the work laptop.
+- The user must actively turn it on each time they want to see sensitive content. Auto-expiry (4h default) ensures it doesn't accidentally stay on indefinitely.
+
+### Threat model
+This is **not** a security boundary against network-level adversaries (you can't protect against someone with a TLS-stripping proxy, a compromised browser, or a malicious browser extension — they have your entire app already). It IS a meaningful boundary against:
+- A guest who borrows your phone to look at family photos
+- A coworker glancing at your screen
+- Showing the app on a projector during a demo
+
+The threat model is **physical proximity, short window**. The implementation is robust against that: the data isn't in the response payload at all when the mode is off.
+
+### Out of scope (deliberate)
+- Re-auth prompt to enable (deliberate — friction undermines the use case)
+- Field-level sensitivity (e.g. a single field on a contact). All-or-nothing per contact in v1.
+- Sensitive `life_events`, `reminders`, `contact_fields`. Easy to add later if needed; not in v1.
+- Portal guest visibility: portal already only sees `shared` posts; sensitive flag is also enforced on portal queries to be safe.
+
 ## Family Portal Security
 
 ### Architecture — defense in depth

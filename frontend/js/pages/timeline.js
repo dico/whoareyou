@@ -43,6 +43,12 @@ export async function renderTimeline(contactUuid = null) {
                 <span class="visibility-pill-option" data-val="family"><i class="bi bi-people-fill"></i> ${t('visibility.family')}</span>
                 <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
               </div>
+              <button type="button" class="sensitive-toggle" id="post-sensitive-btn"
+                data-sensitive="0"
+                title="${t('sensitive.markPostHint')}">
+                <i class="bi bi-eye-slash"></i>
+                <span>${t('sensitive.markShort')}</span>
+              </button>
               <div class="post-compose-actions">
                 <label class="post-media-btn" id="btn-add-media" title="${t('posts.addMedia')}">
                   <i class="bi bi-image"></i>
@@ -157,6 +163,14 @@ export async function renderTimeline(contactUuid = null) {
     if (!clicked) return;
     pill.dataset.visibility = clicked.dataset.val;
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
+  });
+
+  // Sensitive toggle on compose
+  document.getElementById('post-sensitive-btn').addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    const next = btn.dataset.sensitive === '1' ? '0' : '1';
+    btn.dataset.sensitive = next;
+    btn.classList.toggle('is-on', next === '1');
   });
 
   // Media file handling (images + documents)
@@ -299,6 +313,7 @@ export async function renderTimeline(contactUuid = null) {
         body: document.getElementById('post-body').value,
         contact_uuids: taggedContacts.map((c) => c.uuid),
         visibility: document.getElementById('post-visibility-btn').dataset.visibility,
+        is_sensitive: document.getElementById('post-sensitive-btn').dataset.sensitive === '1',
       });
 
       // Upload media if any

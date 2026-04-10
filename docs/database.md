@@ -31,6 +31,7 @@ People being tracked. Not login accounts.
 - `birth_day`, `birth_month`, `birth_year` — partial dates supported (e.g., day+month without year)
 - `how_we_met`, `notes`
 - `is_favorite`, `visibility`, `last_contacted_at`, `last_viewed_at`
+- `is_sensitive` — orthogonal to visibility; when true the contact AND every post that references it (subject or tagged) is hidden from every session unless sensitive mode is on. See [security.md](security.md#sensitive-content-mode).
 
 ### posts
 Universal timeline entries (replaces Monica's notes/activities/diary).
@@ -38,7 +39,8 @@ Universal timeline entries (replaces Monica's notes/activities/diary).
 - `company_id` — "about" group (group timeline post)
 - `body` — post text
 - `post_date` — when the event happened
-- `visibility` — shared/private
+- `visibility` — shared/family/private
+- `is_sensitive` — orthogonal to visibility; when true the post is hidden from every session unless that session has sensitive mode on. See [security.md](security.md#sensitive-content-mode).
 - `portal_guest_id` — set when created by portal guest
 
 ### post_media
@@ -81,7 +83,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `life_event_contacts` | Linked contacts per life event |
 | `reminders` | Custom reminders with recurrence |
 | `notifications` | In-app notification queue |
-| `sessions` | Active login sessions with device/IP tracking |
+| `sessions` | Active login sessions with device/IP tracking. Holds `show_sensitive_until` (timestamp, NULL = off) which controls per-device sensitive content visibility. |
 | `passkeys` | WebAuthn credentials |
 | `system_settings` | Key-value system config (SMTP, IP security, etc.) |
 | `tenant_members` | User ↔ tenant membership (multi-tenant), `linked_contact_id` per tenant |

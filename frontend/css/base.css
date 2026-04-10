@@ -443,6 +443,45 @@ a:hover {
   margin-right: 2px;
 }
 
+/* Sensitive content marker — shown next to the visibility icon when a
+ * post or contact is marked as sensitive. Deliberately neutral so a guest
+ * glancing at the screen doesn't see anything that screams "this is the
+ * sensitive stuff". Same look as .post-visibility-icon. */
+.post-sensitive-icon {
+  font-size: 0.8rem;
+  margin-right: 4px;
+  color: var(--color-text-secondary);
+}
+
+/* Sensitive toggle — sits next to .visibility-pill in compose forms.
+ * Subtle when off, amber when on. Same vertical rhythm as the pill. */
+.sensitive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  padding: .25rem 10px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  line-height: 1.5;
+}
+.sensitive-toggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.sensitive-toggle.is-on {
+  background: #d97706;
+  border-color: #d97706;
+  color: #fff;
+}
+@media (max-width: 576px) {
+  .sensitive-toggle span { display: none; }
+  .sensitive-toggle { padding: .25rem 8px; }
+}
+
 .post-compose-actions {
   display: flex;
   align-items: center;

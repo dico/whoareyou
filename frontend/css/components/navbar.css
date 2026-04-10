@@ -225,6 +225,28 @@ img.user-avatar {
   object-fit: cover;
 }
 
+/* Sensitive-mode dot — small indicator on the navbar avatar. Always
+ * visible (even when off) so the user is reminded that the mode exists,
+ * but neutral grey when off and amber when on. */
+.nav-user-with-dot {
+  position: relative;
+}
+.nav-user-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  border: 2px solid var(--color-surface, #fff);
+  pointer-events: none;
+  transition: background 0.15s;
+}
+.nav-user-with-dot.is-sensitive-on .nav-user-dot {
+  background: #d97706;
+}
+
 /* Notification bell */
 .notification-bell {
   position: relative;

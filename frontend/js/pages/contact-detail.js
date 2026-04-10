@@ -70,6 +70,7 @@ export async function renderContactDetail(uuid) {
                     ? `<span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>`
                     : `<span class="badge bg-light text-muted"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>`
                   }
+                  ${contact.is_sensitive ? `<i class="bi bi-eye-slash text-muted post-visibility-icon" title="${t('sensitive.markedTooltip')}"></i>` : ''}
                   ${contact.is_favorite ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> ${t('contacts.favorites')}</span>` : ''}
                 </div>
               </div>
@@ -96,6 +97,12 @@ export async function renderContactDetail(uuid) {
                     <span class="visibility-pill-option" data-val="family"><i class="bi bi-people-fill"></i> ${t('visibility.family')}</span>
                     <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
                   </div>
+                  <button type="button" class="sensitive-toggle" id="quick-post-sensitive-btn"
+                    data-sensitive="0"
+                    title="${t('sensitive.markPostHint')}">
+                    <i class="bi bi-eye-slash"></i>
+                    <span>${t('sensitive.markShort')}</span>
+                  </button>
                   <div class="post-compose-actions">
                     <label class="post-media-btn" title="${t('posts.addMedia')}">
                       <i class="bi bi-image"></i>
@@ -987,6 +994,13 @@ export async function renderContactDetail(uuid) {
     });
 
     // Quick post visibility pill toggle
+    document.getElementById('quick-post-sensitive-btn').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const next = btn.dataset.sensitive === '1' ? '0' : '1';
+      btn.dataset.sensitive = next;
+      btn.classList.toggle('is-on', next === '1');
+    });
+
     document.getElementById('quick-post-visibility-btn').addEventListener('click', (e) => {
       const pill = e.currentTarget;
       const clicked = e.target.closest('.visibility-pill-option');
@@ -1146,6 +1160,7 @@ export async function renderContactDetail(uuid) {
         about_contact_uuid: uuid,
         contact_uuids: extraUuids.length ? extraUuids : undefined,
         visibility: document.getElementById('quick-post-visibility-btn').dataset.visibility,
+        is_sensitive: document.getElementById('quick-post-sensitive-btn').dataset.sensitive === '1',
         link_preview: quickPostLinkPreview || undefined,
       });
 
@@ -1415,11 +1430,17 @@ function renderEditMode(contact) {
             <input type="date" class="form-control form-control-sm" id="edit-deceased-date" value="${contact.deceased_date ? new Date(contact.deceased_date).toISOString().split('T')[0] : ''}">
           </div>
         </div>
-        <div class="mt-3">
+        <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
           <div class="visibility-pill" id="edit-visibility-btn" data-visibility="${contact.visibility}">
             <span class="visibility-pill-option ${contact.visibility === 'shared' ? 'active' : ''}" data-val="shared"><i class="bi bi-people-fill"></i> ${t('visibility.shared')}</span>
             <span class="visibility-pill-option ${contact.visibility === 'private' ? 'active' : ''}" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
           </div>
+          <button type="button" class="sensitive-toggle ${contact.is_sensitive ? 'is-on' : ''}" id="edit-sensitive-btn"
+            data-sensitive="${contact.is_sensitive ? '1' : '0'}"
+            title="${t('sensitive.markContactHint')}">
+            <i class="bi bi-eye-slash"></i>
+            <span>${t('sensitive.markShort')}</span>
+          </button>
         </div>
         <div id="edit-error" class="alert alert-danger d-none mt-3"></div>
         <div class="d-flex gap-2 mt-3">
@@ -1440,6 +1461,13 @@ function renderEditMode(contact) {
     if (!clicked) return;
     pill.dataset.visibility = clicked.dataset.val;
     pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
+  });
+
+  document.getElementById('edit-sensitive-btn').addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    const next = btn.dataset.sensitive === '1' ? '0' : '1';
+    btn.dataset.sensitive = next;
+    btn.classList.toggle('is-on', next === '1');
   });
 
   // More info toggle
@@ -1472,6 +1500,7 @@ function renderEditMode(contact) {
         notes: document.getElementById('edit-notes').value || null,
         deceased_date: document.getElementById('edit-deceased-date').value || null,
         visibility: document.getElementById('edit-visibility-btn').dataset.visibility,
+        is_sensitive: document.getElementById('edit-sensitive-btn').dataset.sensitive === '1',
       });
       renderContactDetail(contact.uuid);
     } catch (err) {

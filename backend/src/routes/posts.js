@@ -7,6 +7,7 @@ import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
 import { getLinkedContactId } from '../utils/tenant.js';
+import { filterSensitivePosts, filterSensitiveContacts, parseSensitiveFlag, stripSensitiveContacts } from '../utils/sensitive.js';
 
 const router = Router();
 
@@ -27,7 +28,8 @@ router.get('/', async (req, res, next) => {
       .where(function () {
         this.whereIn('posts.visibility', ['shared', 'family'])
           .orWhere('posts.created_by', req.user.id);
-      });
+      })
+      .modify(filterSensitivePosts(req));
 
     // Filter by company/group
     if (company) {
@@ -56,7 +58,7 @@ router.get('/', async (req, res, next) => {
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
         'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
-        'posts.visibility', 'posts.portal_guest_id', 'posts.created_by'
+        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by'
       )
       .groupBy('posts.id')
       .orderBy('posts.post_date', 'desc')
@@ -86,7 +88,7 @@ router.get('/', async (req, res, next) => {
         ? db('contacts')
             .whereIn('contacts.id', profileContactIds)
             .select(
-              'contacts.id', 'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+              'contacts.id', 'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.is_sensitive',
               db.raw(`(
                 SELECT cp.thumbnail_path FROM contact_photos cp
                 WHERE cp.contact_id = contacts.id AND cp.is_primary = true
@@ -241,6 +243,7 @@ router.get('/', async (req, res, next) => {
         body: p.body,
         post_date: p.post_date,
         visibility: p.visibility,
+        is_sensitive: !!p.is_sensitive,
         created_at: p.created_at,
         // Profile post: about this contact
         about: profileContact ? {
@@ -248,6 +251,7 @@ router.get('/', async (req, res, next) => {
           first_name: profileContact.first_name,
           last_name: profileContact.last_name,
           avatar: profileContact.avatar || null,
+          is_sensitive: !!profileContact.is_sensitive,
         } : null,
         // Group post: about this company/group
         company: companyInfo ? {
@@ -363,6 +367,7 @@ router.get('/geo', async (req, res, next) => {
       .whereNotNull('post_media.latitude')
       .whereNotNull('post_media.longitude')
       .where('post_media.file_type', 'like', 'image/%')
+      .modify(filterSensitivePosts(req))
       .select(
         'post_media.thumbnail_path', 'post_media.file_path',
         'post_media.latitude', 'post_media.longitude', 'post_media.taken_at',
@@ -466,7 +471,8 @@ router.get('/gallery', async (req, res, next) => {
       .whereNull('posts.deleted_at')
       .where(function () {
         this.where('posts.visibility', 'shared').orWhere('posts.created_by', req.user.id);
-      });
+      })
+      .modify(filterSensitivePosts(req));
 
     if (contact) {
       const contactRow = await db('contacts').where({ uuid: contact, tenant_id: req.tenantId }).first();
@@ -565,7 +571,7 @@ router.post('/', async (req, res, next) => {
     if (!req.body.body?.trim() && !req.body.has_media) req.body.body = '';
 
     const uuid = uuidv4();
-    const { body, post_date, contact_uuids, about_contact_uuid, company_uuid, visibility } = req.body;
+    const { body, post_date, contact_uuids, about_contact_uuid, company_uuid, visibility, is_sensitive } = req.body;
 
     // Resolve "about" contact (profile post)
     let aboutContactId = null;
@@ -596,6 +602,7 @@ router.post('/', async (req, res, next) => {
         contact_id: aboutContactId,
         company_id: companyId,
         visibility: ['shared', 'family', 'private'].includes(visibility) ? visibility : 'shared',
+        is_sensitive: parseSensitiveFlag(is_sensitive),
       });
 
       // Tag contacts (for activity posts, or additional tags on profile posts)
@@ -665,6 +672,7 @@ router.put('/:uuid', async (req, res, next) => {
         updates.post_date = d;
       }
       if (req.body.visibility !== undefined) updates.visibility = ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared';
+      if (req.body.is_sensitive !== undefined) updates.is_sensitive = parseSensitiveFlag(req.body.is_sensitive);
 
       // Change "about" contact (profile post)
       if (req.body.about_contact_uuid !== undefined) {
@@ -778,6 +786,7 @@ async function getPostWithDetails(postId, tenantId) {
     body: post.body,
     post_date: post.post_date,
     visibility: post.visibility,
+    is_sensitive: !!post.is_sensitive,
     created_at: post.created_at,
     about,
     contacts,
@@ -794,6 +803,7 @@ router.get('/:uuid/comments', async (req, res, next) => {
     const post = await db('posts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
+      .modify(filterSensitivePosts(req))
       .first();
     if (!post) throw new AppError('Post not found', 404);
 

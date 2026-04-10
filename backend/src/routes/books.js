@@ -7,6 +7,7 @@ import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
 import { config } from '../config/index.js';
+import { filterSensitivePosts } from '../utils/sensitive.js';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const coverUpload = multer({
@@ -286,11 +287,14 @@ router.get('/:uuid/data', async (req, res, next) => {
 
     // Resolve UUIDs → ids, applying tenant + visibility filters as a defence
     // in depth (a snapshot uuid that no longer matches the filter is dropped).
+    // Also strip sensitive posts when sensitive mode is off — book preview
+    // should respect the same hide rules as the timeline.
     const postRows = await db('posts')
       .where({ tenant_id: req.tenantId })
       .whereNull('deleted_at')
       .whereIn('uuid', snapshotUuids)
       .whereIn('visibility', allowedVisibilities)
+      .modify(filterSensitivePosts(req))
       .select('id', 'uuid', 'body', 'post_date', 'contact_id', 'created_at');
 
     if (!postRows.length) {
