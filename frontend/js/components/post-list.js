@@ -397,7 +397,26 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           submitBtn.disabled = true;
           submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
           try {
-            const postDate = form.querySelector('.edit-post-date')?.value || undefined;
+            // Read the date from the original hidden input (flatpickr keeps it
+            // in YYYY-MM-DD). If flatpickr didn't load (e.g. CDN issue on
+            // mobile) the input is still type="date" and iOS may have put a
+            // localized string in .value. Try to parse it as a date and
+            // normalize to YYYY-MM-DD so the backend never sees "01. apr 2026".
+            let postDate;
+            const dateEl = form.querySelector('input.edit-post-date[type="hidden"]')
+              || form.querySelector('.edit-post-date');
+            if (dateEl?.value) {
+              const raw = dateEl.value.trim();
+              // Already ISO?
+              if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                postDate = raw;
+              } else {
+                const parsed = new Date(raw);
+                postDate = !isNaN(parsed.getTime())
+                  ? parsed.toISOString().split('T')[0]
+                  : undefined;
+              }
+            }
             const linkPreview = editLinkPreviewMap.get(uuid) ?? undefined;
             const sensitiveBtn = form.querySelector('.btn-toggle-sensitive');
             const payload = {
