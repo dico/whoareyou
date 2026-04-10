@@ -100,6 +100,14 @@ The dedicated **Editor view** was removed — its job (per-post weight, image in
 | Export Data | `/admin/export-data` | `renderExportData()` — JSON and full backup download |
 | Trash | `/admin/trash` | `renderTrash()` — restore or permanently delete contacts/posts |
 | Security | `/admin/security` | `renderSecurityAdmin()` |
+| Signage | `/admin/signage` | `renderSignage()` — CRUD for TV display screens (token-based) |
+
+### Signage Display (separate entry point)
+| Page | Route | File |
+|------|-------|------|
+| Signage viewer | `/signage/{token}` | `signage.html` + `js/signage.js` + `css/signage.css` |
+
+Standalone fullscreen page — no navbar, no SPA router, no Bootstrap. Fetches `/api/signage/feed/{token}` and renders either a **slideshow** (fade transitions, configurable interval) or a **feed** (1–6 cards, horizontal or vertical). Images served via `/api/signage/media/:token?path=...` proxy. Auto-refreshes data periodically. Multi-image posts render as a CSS grid collage (2–4 images). Overlay (names, text, date, likes, comments) is configurable per screen. Image fit: `contain` (ratio preserved, black bars) or `cover` (fill screen, crop).
 
 ### Portal Pages
 | Page | Route | Function |

@@ -55,7 +55,7 @@ whoareyou/
 │       ├── index.js              # Express app entry point
 │       ├── config/               # App configuration
 │       ├── middleware/            # Auth, tenant scope, portal auth
-│       ├── routes/               # 17 route modules
+│       ├── routes/               # 18 route modules
 │       ├── services/             # Email, image, geocoding, geolocation
 │       ├── utils/                # Errors, validation, sessions, IP, settings
 │       └── migrations/           # 69 Knex migrations

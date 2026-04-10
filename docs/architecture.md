@@ -34,7 +34,7 @@ Client → Nginx → Express
 5. **tenantScope** (`middleware/tenant.js`) — sets `req.tenantId` from JWT
 6. **portalAuthenticate** (`middleware/portal-auth.js`) — separate chain for portal guests
 
-### Route Modules (17 files)
+### Route Modules (18 files)
 | File | Prefix | Description |
 |------|--------|-------------|
 | `auth.js` | `/api/auth` | Login, register, 2FA, passkeys, sessions, members |
@@ -54,6 +54,7 @@ Client → Nginx → Express
 | `system.js` | `/api/system` | System admin, SMTP, IP security, tenants |
 | `portal.js` | `/api/portal` | Portal guest timeline, comments, reactions |
 | `portal-admin.js` | `/api/portal-admin` | Portal guest/link management |
+| `signage.js` | `/api/signage` | Signage screen CRUD + public feed/media endpoints |
 
 ### Services
 | Service | File | Purpose |

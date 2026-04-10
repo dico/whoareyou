@@ -108,6 +108,12 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `gift_wishlists` | Wishlists per family member |
 | `gift_wishlist_items` | Items in wishlists |
 
+## Signage Tables
+
+| Table | Purpose |
+|-------|---------|
+| `signage_screens` | Token-based TV display configs. `token_hash` (SHA-256), `contact_uuids` (JSON), `display_mode` (slideshow/feed), `image_fit` (contain/cover), overlay toggles (`show_body/contact_name/date/reactions/comments`), `shuffle`, `include_sensitive`, `feed_layout`, `multi_image`, `slide_interval`, `days_back`. `last_accessed_at` updated on every feed fetch. |
+
 ## Portal Tables
 
 | Table | Purpose |
@@ -122,7 +128,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 69 migrations
+- Currently 73 migrations
 
 ### Creating a New Migration
 ```bash

@@ -488,6 +488,41 @@ a:hover {
   gap: var(--space-xs);
 }
 
+/* Signage screen list — follows the same icon + info + actions pattern as
+ * the book list (book.css .book-list-item). */
+.signage-screen-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.signage-screen-row:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.signage-screen-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(99,102,241,0.12);
+  color: #6366f1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.signage-screen-icon.is-inactive {
+  background: rgba(142,142,147,0.1);
+  color: #8e8e93;
+}
+.signage-screen-info { flex: 1; min-width: 0; }
+.signage-screen-title { font-weight: 600; margin: 0; }
+.signage-screen-meta { color: var(--color-text-muted, #6b6b6b); font-size: 0.85rem; margin: 0; }
+.signage-screen-actions { flex-shrink: 0; }
+
 /* Settings / admin pages */
 .settings-section {
   padding: var(--space-lg);

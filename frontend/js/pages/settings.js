@@ -48,6 +48,11 @@ export async function renderSettings() {
           <div class="settings-card-label">${t('book.settingsCardLabel')}</div>
           <div class="settings-card-desc">${t('book.settingsCardDesc')}</div>
         </a>
+        <a href="/admin/signage" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(99,102,241,0.1);color:#6366f1"><i class="bi bi-tv"></i></div>
+          <div class="settings-card-label">${t('signage.settingsCardLabel')}</div>
+          <div class="settings-card-desc">${t('signage.settingsCardDesc')}</div>
+        </a>
         <a href="/admin/export-data" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(0,199,190,0.1);color:#00C7BE"><i class="bi bi-download"></i></div>
           <div class="settings-card-label">${t('export.title')}</div>

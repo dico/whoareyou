@@ -198,6 +198,33 @@ The threat model is **physical proximity, short window**. The implementation is 
 - **Portal guests**: additional check that file belongs to an accessible contact
 - **Portal thumbnail exception**: Thumbnail avatars (`photo_*_thumb.*`) are accessible to all portal guests within the same tenant — needed for comment/reaction avatars from users outside the guest's contactIds. Full-size contact photos remain restricted to contactIds.
 
+## Signage Security
+
+Token-based, read-only display for TVs — conceptually similar to portal share links but entirely passive (no write operations, no login).
+
+### Token
+- 48 bytes `crypto.randomBytes`, stored as SHA-256 hash in `signage_screens.token_hash`.
+- URL: `/signage/{token}`. Token IS the authentication — no cookies, no headers.
+- `POST /:uuid/regenerate-token` issues a new token and invalidates the old URL.
+
+### Data exposure
+- Only returns posts matching the screen's configured contacts, visibility filter, and date range.
+- Respects `is_sensitive` filter (default: exclude sensitive content).
+- Response contains only: post body (if configured), post_date (if configured), contact first names (if configured), image file paths, reaction counts, last 3 comments. No UUIDs, no user IDs, no metadata.
+- `Cache-Control: private` — shared CDN edge nodes won't cache family data.
+
+### Media proxy
+- `/api/signage/media/:token?path=...` — serves images without requiring a JWT.
+- Path traversal hardened: rejects `..`, absolute paths (`/`, `\`), null bytes. Uses `path.join` (not `path.resolve`) and `startsWith(uploadsDir + path.sep)` to prevent both directory escape and prefix-collision attacks (`/app/uploads-secret/` cannot match `/app/uploads`).
+
+### Rate limiting
+- Dedicated signage limiter: 60 req/min per IP (stricter than the general 1000/15min API limiter).
+- Public path matching uses anchored regex (`/^\/(?:feed|media)\/[^/]+$/`) to prevent accidental auth bypass on future routes.
+
+### Deactivation
+- `is_active = false` immediately blocks all feed and media requests.
+- Delete removes the screen row entirely — token becomes permanently invalid.
+
 ## URL Scraping (SSRF Protection)
 - Link preview and product scrape endpoints fetch external URLs server-side
 - **Protocol whitelist**: only `http:` and `https:` allowed

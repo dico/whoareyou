@@ -25,6 +25,7 @@ import exportRoutes from './routes/export.js';
 import bookRoutes from './routes/books.js';
 import portalRoutes from './routes/portal.js';
 import portalAdminRoutes from './routes/portal-admin.js';
+import signageRoutes from './routes/signage.js';
 
 const app = express();
 
@@ -128,6 +129,19 @@ app.use('/api/system', (req, res, next) => {
 }, systemRoutes);
 app.use('/api/portal', portalLimiter, portalRoutes); // Portal has own auth + stricter rate limit
 app.use('/api/portal-admin', authenticate, tenantScope, portalAdminRoutes);
+// Signage rate limiter — stricter than main API since these endpoints are
+// public and token-based (no auth). 60 requests per minute per IP.
+const signageLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
+// Signage: /feed/:token and /media/:token are public (token-based, strict
+// regex match), all other routes require auth.
+const signagePublicPath = /^\/(?:feed|media)\/[^/]+$/;
+app.use('/api/signage', (req, res, next) => {
+  if (signagePublicPath.test(req.path)) return signageLimiter(req, res, next);
+  authenticate(req, res, (err) => {
+    if (err) return next(err);
+    tenantScope(req, res, next);
+  });
+}, signageRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
 const exportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 10,

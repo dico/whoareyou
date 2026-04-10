@@ -1,0 +1,235 @@
+/* Signage display — standalone fullscreen view for TVs / digital signage.
+ * No framework, no Bootstrap — pure CSS for minimal footprint. */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#signage-root {
+  width: 100%; height: 100%;
+  position: relative;
+}
+
+.signage-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%; height: 100%;
+  color: #666;
+  font-size: 1.2rem;
+}
+
+.signage-error {
+  color: #ff6b6b;
+}
+
+/* ── Slideshow mode ──────────────────────── */
+
+.signage-slideshow {
+  width: 100%; height: 100%;
+  position: relative;
+}
+
+.signage-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.signage-slide.is-active {
+  opacity: 1;
+  z-index: 1;
+}
+
+/* Single image — fill the screen, maintain aspect ratio */
+.signage-slide-img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* Collage for multi-image posts — CSS grid, max 4 images */
+.signage-collage {
+  width: 100%; height: 100%;
+  display: grid;
+  gap: 4px;
+  background: #111;
+}
+.signage-collage.count-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.signage-collage.count-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.signage-collage.count-3 > :first-child {
+  grid-row: span 2;
+}
+.signage-collage.count-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.signage-collage > img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+
+/* Overlay — gradient background in bottom portion */
+.signage-overlay {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.85));
+  padding: 40px 48px 36px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signage-overlay-names {
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+.signage-overlay-body {
+  font-size: 1.1rem;
+  line-height: 1.5;
+  max-height: 3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.signage-overlay-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.95rem;
+  opacity: 0.7;
+}
+
+.signage-overlay-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+.signage-overlay-comment {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.signage-overlay-comment strong {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+/* ── Feed mode ───────────────────────────── */
+
+.signage-feed {
+  width: 100%; height: 100%;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #111;
+}
+.signage-feed.layout-horizontal {
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+.signage-feed.layout-vertical {
+  grid-auto-flow: row;
+  grid-auto-rows: 1fr;
+  grid-template-columns: 1fr;
+}
+
+.signage-feed-card {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+}
+
+.signage-feed-card-img {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.signage-feed-card-img img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Feed collage */
+.signage-feed-card-img .signage-collage {
+  width: 100%; height: 100%;
+}
+
+.signage-feed-card-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.signage-feed-card-names {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.signage-feed-card-text {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  max-height: 2.6em;
+  overflow: hidden;
+}
+.signage-feed-card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.signage-feed-card-comments {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+.signage-feed-card-comments strong {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+/* ── Fullscreen hint ─────────────────────── */
+.signage-fullscreen-hint {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  z-index: 100;
+  opacity: 0.8;
+  transition: opacity 0.3s;
+}
+.signage-fullscreen-hint:hover {
+  opacity: 1;
+}

@@ -193,6 +193,28 @@ Photo book generation. Books are definitions stored in `book_jobs`; the HTML pre
 - Cover files at `/uploads/books/{uuid}/` are scoped to the book owner only (never readable by other tenant members or portal guests). Validated in the `/uploads/` route handler in `index.js`.
 - `/preview` enforces tenant isolation and visibility filtering (same rules as `/data`).
 
+### Signage (`/api/signage`)
+Token-based, read-only display of timeline posts on TVs / digital signage.
+
+**Admin (authenticated):**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | List screens for this tenant |
+| POST | `/` | Create screen (returns URL with token) |
+| PATCH | `/:uuid` | Update screen configuration |
+| DELETE | `/:uuid` | Delete screen |
+| POST | `/:uuid/regenerate-token` | Issue a new token (invalidates old URL) |
+
+**Public (token-based, no auth):**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/feed/:token` | Fetch posts for display, respects all screen config (contacts, visibility, days_back, sensitive, display_mode). Rate limited 60 req/min/IP. |
+| GET | `/media/:token?path=...` | Serve an image file. Path traversal hardened (reject `..`, absolute paths, null bytes; `path.join` + trailing-sep `startsWith` guard). |
+
+Screen configuration options: `display_mode` (slideshow/feed), `slide_interval`, `visibility_filter`, `days_back`, `shuffle`, `show_body/contact_name/date/reactions/comments`, `max_posts`, `feed_layout` (horizontal/vertical), `multi_image` (collage/first), `image_fit` (contain/cover), `include_sensitive`.
+
 ### Export (`/api/export`)
 Data export with two modes: instant JSON ZIP (`GET /data`) and full backup with media (`POST /full`, `GET /status/:jobId`, `GET /download/:jobId`). See [export.md](export.md) for field documentation.
 

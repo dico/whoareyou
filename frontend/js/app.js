@@ -30,6 +30,7 @@ import { renderGiftWishlists } from './pages/gift-wishlists.js';
 import { renderGiftPlanning } from './pages/gift-planning.js';
 import { renderGenerateBook } from './pages/generate-book.js';
 import { renderBookPreview } from './pages/book-preview.js';
+import { renderSignage } from './pages/admin-signage.js';
 import { renderNavbar } from './components/navbar.js';
 import { renderPortalLogin, renderPortalTimeline, handleShareLink } from './pages/portal-timeline.js';
 
@@ -52,6 +53,7 @@ const routes = {
   '/admin/duplicates': () => renderDuplicates(),
   '/admin/consistency': () => renderConsistencyReport(),
   '/admin/export-data': () => renderExportData(),
+  '/admin/signage': () => renderSignage(),
   '/admin/trash': () => renderTrash(),
   '/admin/addresses': () => renderAddressMerge(),
   '/admin/labels': () => renderLabelAdmin(),
