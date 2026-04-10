@@ -227,17 +227,28 @@ export async function renderSignage() {
           loadList();
         };
       });
+      // Ensure the screen has a token (legacy screens created before migration
+      // 074 have token=null). Lazily generates one on first use.
+      async function ensureToken(screen) {
+        if (screen.token) return screen.token;
+        const res = await api.post(`/signage/${screen.uuid}/regenerate-token`, {});
+        screen.token = res.token;
+        return res.token;
+      }
       el.querySelectorAll('.btn-open-screen').forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
           const screen = screens.find(s => s.uuid === btn.dataset.uuid);
-          if (screen?.token) window.open(`/signage/${screen.token}`, '_blank');
+          if (!screen) return;
+          const token = await ensureToken(screen);
+          window.open(`/signage/${token}`, '_blank');
         };
       });
       el.querySelectorAll('.btn-copy-url').forEach(btn => {
         btn.onclick = async () => {
           const screen = screens.find(s => s.uuid === btn.dataset.uuid);
-          if (!screen?.token) return;
-          const url = `${window.location.origin}/signage/${screen.token}`;
+          if (!screen) return;
+          const token = await ensureToken(screen);
+          const url = `${window.location.origin}/signage/${token}`;
           try {
             await navigator.clipboard.writeText(url);
             btn.innerHTML = `<i class="bi bi-check-lg me-2"></i>${t('signage.urlCopied')}`;
