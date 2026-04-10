@@ -17,6 +17,7 @@
 | [Relationships](relationships.md) | Storage convention, display logic, suggestions, family tree, consistency |
 | [Export](export.md) | Data export formats, JSON field reference, security |
 | [TODO](todo.md) | Development backlog — refactoring, known issues, planned improvements |
+| [Feature Ideas](feature-ideas.md) | Brainstormed future features — not committed, just a reference |
 
 ## Quick Start for Contributors
 
