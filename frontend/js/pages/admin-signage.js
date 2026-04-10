@@ -294,7 +294,16 @@ export async function renderSignage() {
     // that are beyond page 1 of a large contact list.
     if (screen?.contact_uuids?.length) {
       Promise.all(screen.contact_uuids.map(uuid =>
-        api.get(`/contacts/${uuid}`).then(r => r.contact).catch(() => null)
+        api.get(`/contacts/${uuid}`).then(r => {
+          const c = r.contact;
+          // GET /contacts/:uuid returns photos[] but no top-level avatar.
+          // Derive it so the chip renderer can show the profile photo.
+          if (c && !c.avatar && c.photos?.length) {
+            const primary = c.photos.find(p => p.is_primary) || c.photos[0];
+            c.avatar = primary?.thumbnail_path || null;
+          }
+          return c;
+        }).catch(() => null)
       )).then(results => {
         for (const c of results) {
           if (c) selectedContacts.push(c);
