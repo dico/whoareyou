@@ -2,14 +2,6 @@
 
 > Open tasks only. Completed work is documented in the relevant docs.
 
-## Migrations awaiting production deploy
-
-Once these migrations have run in production, the lines below can be removed.
-
-- `068_add_company_id_to_gift_order_participants.js` — nullable `company_id` FK on gift_order_participants, contact_id made nullable. Allows gifts from/to groups. (Dev batch 47.)
-- `069_create_gift_event_honorees.js` — junction table for multi-honoree events (wedding bride+groom, joint birthdays). Backfills from legacy `gift_events.honoree_contact_id`, which stays in place for backwards compatibility until a follow-up migration removes it. (Dev batch 48.)
-- `070_add_directions_to_gift_events.js` — adds `directions` enum (`both`/`incoming`/`outgoing`) to control which gift tabs an event shows. Backfills wedding/birthday rows to `incoming`. (Dev batch 49.)
-
 ## High Priority
 
 ### Standardize contact search component
@@ -162,10 +154,14 @@ The flip-view slide animation was dropped along with the lazy-mount rewrite — 
 
 ## Low Priority
 
-### Gift module UX improvements
-**Status:** In progress
-**Remaining:**
-- **Wedding: two honorees** — second honoree field (requires migration)
+### Wishlist sharing via portal
+**Status:** Not started
+**Why:** Portal guests (grandparents, aunts, etc.) should be able to view wishlists for the children they have access to. Reuses existing portal infrastructure (`portal_guest_contacts` for access control, `portalAuthenticate` middleware). No write access — guests can only browse.
+**Plan:**
+- New portal endpoint: `GET /api/portal/wishlists` — returns wishlists for accessible contacts
+- Portal frontend: wishlist section on the portal timeline or a dedicated tab
+- Respect `visibility` on wishlists (only `shared` visible to portal guests)
+- Product images via existing portal file-access path (token-based `?token=` on uploads)
 
 ### admin-tenant.js misuses `.product-picker-dropdown` class
 **Status:** Not started
