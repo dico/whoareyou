@@ -215,11 +215,12 @@ function renderSlideshow(data) {
 function renderFeed(data) {
   const { config, posts } = data;
   const container = document.createElement('div');
-  container.className = `signage-feed layout-${config.feed_layout || 'horizontal'}`;
+  const visiblePosts = posts.slice(0, config.max_posts || 3);
+  container.className = `signage-feed layout-${config.feed_layout || 'horizontal'} count-${visiblePosts.length}`;
   root.innerHTML = '';
   root.appendChild(container);
 
-  for (const post of posts.slice(0, config.max_posts || 3)) {
+  for (const post of visiblePosts) {
     const card = document.createElement('div');
     card.className = 'signage-feed-card';
 
