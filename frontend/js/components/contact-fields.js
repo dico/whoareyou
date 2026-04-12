@@ -147,21 +147,24 @@ export async function renderContactFields(containerId, contactUuid, fields) {
 }
 
 const SOCIAL_TYPES = ['facebook', 'instagram', 'linkedin', 'x', 'snapchat', 'youtube', 'tiktok'];
-const CONTACT_TYPES = ['phone', 'email'];
 const WEB_TYPES = ['website'];
 
-// Group fields by category for display
+// Group fields by type for display — each type gets its own visual
+// section so phone numbers stay together, emails stay together, etc.
 function groupFields(fields) {
+  const order = ['phone', 'email', 'website', ...SOCIAL_TYPES];
+  const byType = new Map();
+  for (const f of fields) {
+    const key = f.type || '_other';
+    if (!byType.has(key)) byType.set(key, []);
+    byType.get(key).push(f);
+  }
+  // Sort groups: known types first (in defined order), then unknowns at end
   const groups = [];
-  const contact = fields.filter(f => CONTACT_TYPES.includes(f.type));
-  const web = fields.filter(f => WEB_TYPES.includes(f.type));
-  const social = fields.filter(f => SOCIAL_TYPES.includes(f.type));
-  const other = fields.filter(f => !CONTACT_TYPES.includes(f.type) && !WEB_TYPES.includes(f.type) && !SOCIAL_TYPES.includes(f.type));
-
-  if (contact.length) groups.push({ fields: contact });
-  if (web.length) groups.push({ fields: web });
-  if (social.length) groups.push({ fields: social });
-  if (other.length) groups.push({ fields: other });
+  for (const t of order) {
+    if (byType.has(t)) { groups.push({ fields: byType.get(t) }); byType.delete(t); }
+  }
+  for (const [, v] of byType) groups.push({ fields: v });
   return groups;
 }
 
