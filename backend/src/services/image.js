@@ -6,25 +6,28 @@ import exifReader from 'exif-reader';
 
 const { dir: uploadsDir, image: imageConfig } = config.uploads;
 
+const MEDIUM_WIDTH = 800;
+
 /**
  * Process an uploaded image:
- * - Resize to max width
- * - Generate thumbnail
+ * - Resize to max width (full) + medium variant (~800px) + thumbnail (square crop)
  * - Convert to WebP
  * - Strip EXIF metadata
  *
  * @param {string} inputPath - Path to uploaded temp file
  * @param {string} subDir - Subdirectory (e.g. 'contacts/uuid' or 'posts/uuid')
  * @param {string} filename - Base filename (without extension)
- * @returns {{ filePath: string, thumbnailPath: string }}
+ * @returns {{ filePath: string, mediumPath: string, thumbnailPath: string }}
  */
 export async function processImage(inputPath, subDir, filename, { keepOriginal = false } = {}) {
   const outDir = path.join(uploadsDir, subDir);
   await fs.mkdir(outDir, { recursive: true });
 
   const mainFile = `${filename}.webp`;
+  const mediumFile = `${filename}_medium.webp`;
   const thumbFile = `${filename}_thumb.webp`;
   const mainPath = path.join(outDir, mainFile);
+  const mediumPath = path.join(outDir, mediumFile);
   const thumbPath = path.join(outDir, thumbFile);
 
   // Main image: resize + webp + strip metadata
@@ -33,6 +36,13 @@ export async function processImage(inputPath, subDir, filename, { keepOriginal =
     .resize(imageConfig.maxWidth, null, { withoutEnlargement: true })
     .webp({ quality: imageConfig.quality })
     .toFile(mainPath);
+
+  // Medium variant: ~800px wide, good for inline timeline display
+  await sharp(inputPath)
+    .rotate()
+    .resize(MEDIUM_WIDTH, null, { withoutEnlargement: true })
+    .webp({ quality: imageConfig.quality })
+    .toFile(mediumPath);
 
   // Thumbnail: square crop + webp
   await sharp(inputPath)
@@ -49,6 +59,7 @@ export async function processImage(inputPath, subDir, filename, { keepOriginal =
   // Return web-accessible paths
   return {
     filePath: `/uploads/${subDir}/${mainFile}`,
+    mediumPath: `/uploads/${subDir}/${mediumFile}`,
     thumbnailPath: `/uploads/${subDir}/${thumbFile}`,
   };
 }

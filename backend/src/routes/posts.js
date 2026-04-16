@@ -31,7 +31,7 @@ async function assemblePosts(req, posts) {
       .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)),
     db('post_media')
       .whereIn('post_id', postIds)
-      .select('id', 'post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
+      .select('id', 'post_id', 'file_path', 'medium_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
       .orderBy('sort_order'),
     profileContactIds.length
       ? db('contacts')
@@ -88,6 +88,7 @@ async function assemblePosts(req, posts) {
     mediaByPost[m.post_id].push({
       id: m.id,
       file_path: m.file_path,
+      medium_path: m.medium_path || null,
       thumbnail_path: m.thumbnail_path,
       file_type: m.file_type,
       original_name: m.original_name,

@@ -5,33 +5,37 @@
 ## High Priority
 
 ### Memories / "this day in history" — Phase 2
-**Status:** Phase 1 + notification delivered ✅ — `/memories` page live, `GET /api/posts/memories` returns posts from the same MM-DD in previous years grouped by year. `memory` notification type fires only on **milestone anniversaries** ({1, 5, 10, 15, 20, 25, 30, 40, 50} years ago) to avoid yearly repeats. The email digest expands the memory row into individual post cards with inline CID thumbnails.
+**Status:** Phase 1 + notification + `/memories` page delivered ✅ — `GET /api/posts/memories` returns posts from the same MM-DD in previous years grouped by year. `memory` notification type fires only on **milestone anniversaries** ({1, 5, 10, 15, 20, 25, 30, 40, 50} years ago). `/memories` page live with year-group headers. `renderPostList` accepts `endpoint` parameter so memories reuses the shared component. The email digest expands the memory row into individual post cards with inline CID thumbnails.
 
 **Remaining for Phase 2:**
 - Promote to main wall (`/`) — highlighted "På denne dagen"-card at top of timeline when matches exist, with thumbnail + "for N år siden" (skipped until we see how the notification feels in real use).
 
 ### Medium-size image variant for inline post display
-**Status:** Not started — workaround in place
-**Why:** `post_media.thumbnail_path` is 200×200 (square crop). Inline post display in `renderPostList` previously used the thumbnail, which stretched heavily on wide cards (memories, full-width timelines) and looked pixelated. Current workaround: use `file_path` (up to 1920px wide) for inline display too. Lazy loading mitigates bandwidth, but 20 full-res WebPs × ~300KB = ~6MB per timeline page is heavy on mobile.
+**Status:** Delivered ✅ — new uploads get `_medium.webp` (800px). Legacy rows have `medium_path = NULL` and fall back to `file_path` in the frontend.
 
-**Plan:**
-- Add a `medium` variant in `services/image.js` (~800-1024px max width, WebP).
-- Store path in a new `post_media.medium_path` column (nullable — legacy rows fall back to `file_path`).
-- Migration script to generate `medium_*.webp` from existing `file_path`s for active posts.
-- Change `renderPostList` to prefer `medium_path || file_path`.
-- Same pattern for `contact_photos` (currently same 200px thumb problem on wide galleries).
+**What was done:**
+- `services/image.js`: generates `_medium.webp` at 800px alongside full + thumb on every upload
+- Migration `078_add_medium_path`: nullable `medium_path` on `post_media` and `contact_photos`
+- `routes/uploads.js`: stores `medium_path` in both tables
+- `routes/posts.js` (`assemblePosts`): includes `medium_path` in SELECT + API response
+- `post-list.js`: `src="${medium_path || file_path}"` — new images served at 800px, old at 1920px
+
+**Remaining (nice-to-have):**
+- Backfill script to generate `_medium.webp` for existing `post_media` rows (currently fall back to full-res)
 
 ### Notification filtering and coverage — Phase 1 delivered ✅
 Three-layer model shipped: per-type global rule (scope + app/email channels) + per-contact `always`/`never` override + favorites-aware scope. Types: `birthday`, `anniversary`, `reminder`, `memory`, `family_post`, `family_comment`. Tables: `user_notification_prefs`, `user_notification_overrides`. Filter helper: [utils/notification-prefs.js](../backend/src/utils/notification-prefs.js). UI: [/settings/notifications](../frontend/js/pages/settings-notifications.js), link in navbar user dropdown.
 
 **Phase 2 — open items:**
-- **Cron-driven generation** — `/notifications/generate` currently runs on navbar load. Email digest also piggybacks on the same trigger. For reliable delivery when no one opens the app, move to a server-side cron (entrypoint pattern or node-cron). Hourly would match the digest throttle.
+- **Cron-driven generation** — Delivered ✅. Generate logic extracted to `services/notification-generate.js`. `index.js` runs hourly for all tenants — birthday/reminder/anniversary/memory notifications are created server-side regardless of whether anyone opens the app. Route `POST /generate` calls the same service function. `family_post`/`family_comment` emails are unaffected (triggered directly from those routes).
 - **Labels as scope source** — today `favorites` is the only "curated subset". Add label-based scope once we see whether favorites alone is enough.
 - **Mute a post** — per-post override so a single chatty thread doesn't spam `family_comment` notifications.
 - **Notifications for reactions** — currently no notification when someone likes your post.
 
+**Also done in Phase 1 (portal side):** `notifyPortalPost()` + `notifyPortalComment()` added to `portal.js` — tenant users are notified when a portal guest posts or comments.
+
 ### Portal/guest notifications
-**Status:** Not started — guests currently receive no notifications at all.
+**Status:** Not started — guests receive no notifications. (Tenant users already get notified when guests post — see Phase 1 above.)
 **Why:** When a family member posts or comments, portal guests with access to that contact don't know about it. Also no way for a guest to subscribe to "new posts about Child X".
 
 **Plan:**
@@ -49,7 +53,7 @@ Hourly-throttled digest email implemented ([services/notification-email.js](../b
 Immediate push via `web-push` library ([services/notification-push.js](../backend/src/services/notification-push.js)). Service worker at [frontend/sw.js](../frontend/sw.js) handles `push` + `notificationclick`. Subscribe/unsubscribe/test endpoints and a push-status card on `/settings/notifications`. VAPID keys auto-generated and stored in `system_settings`. Expired subscriptions (404/410) are pruned. Three-layer prefs extended with `deliver_push` (default on).
 
 **Open items:**
-- iOS PWA testing — push only works when installed from home screen (16.4+). Needs a real-device test before shipping to family.
+- iOS PWA testing — push only works when installed from home screen (16.4+). **Tested 2026-04-16 — push works ✅.** Automatic background push (birthday/reminder via cron) not yet verified on real device — cron is now running server-side so this should work.
 - Rich notifications (action buttons like "Open post" or "Dismiss") — web-push supports this but not in the MVP.
 - Badge API for unread count on the PWA icon (Chrome desktop/Android only).
 

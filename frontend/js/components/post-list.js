@@ -142,7 +142,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             let html = '';
             if (images.length) {
               html += `<div class="post-media post-media-grid-${Math.min(images.length, 4)}" data-post-uuid="${p.uuid}">
-                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.file_path)}" alt="" loading="lazy"></div>`).join('')}
+                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.medium_path || m.file_path)}" alt="" loading="lazy"></div>`).join('')}
               </div>`;
             }
             if (videos.length) {

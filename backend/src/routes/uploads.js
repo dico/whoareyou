@@ -56,7 +56,7 @@ router.post('/contacts/:uuid/photos', upload.single('photo'), async (req, res, n
 
     // Process image
     const timestamp = Date.now();
-    const { filePath, thumbnailPath } = await processImage(
+    const { filePath, mediumPath, thumbnailPath } = await processImage(
       req.file.path,
       `contacts/${contact.uuid}`,
       `photo_${timestamp}`
@@ -72,6 +72,7 @@ router.post('/contacts/:uuid/photos', upload.single('photo'), async (req, res, n
       contact_id: contact.id,
       tenant_id: req.tenantId,
       file_path: filePath,
+      medium_path: mediumPath,
       thumbnail_path: thumbnailPath,
       is_primary: existingCount.count === 0,
       caption: req.body.caption || null,
@@ -83,6 +84,7 @@ router.post('/contacts/:uuid/photos', upload.single('photo'), async (req, res, n
       photo: {
         id: photoId,
         file_path: filePath,
+        medium_path: mediumPath,
         thumbnail_path: thumbnailPath,
         is_primary: existingCount.count === 0,
       },
@@ -168,7 +170,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
       const isImage = IMAGE_TYPES.includes(file.mimetype);
       const isVideo = VIDEO_TYPES.includes(file.mimetype);
 
-      let filePath, thumbnailPath, fileType;
+      let filePath, mediumPath, thumbnailPath, fileType;
 
       let takenAt = null, mediaLat = null, mediaLng = null;
 
@@ -184,6 +186,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
         );
         filePath = processed.filePath;
         thumbnailPath = processed.thumbnailPath;
+        mediumPath = processed.mediumPath;
         fileType = 'image/webp';
       } else {
         // Video or document — store as-is with original extension
@@ -202,6 +205,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
         post_id: post.id,
         tenant_id: req.tenantId,
         file_path: filePath,
+        medium_path: mediumPath || null,
         thumbnail_path: thumbnailPath,
         file_type: fileType,
         file_size: file.size,
@@ -213,8 +217,8 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
       });
 
       results.push({
-        id: mediaId, file_path: filePath, thumbnail_path: thumbnailPath,
-        file_type: fileType, original_name: file.originalname,
+        id: mediaId, file_path: filePath, medium_path: mediumPath || null,
+        thumbnail_path: thumbnailPath, file_type: fileType, original_name: file.originalname,
       });
     }
 

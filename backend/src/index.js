@@ -228,6 +228,24 @@ setInterval(() => {
   cleanExpiredSessions().catch(() => {});
 }, config.session.cleanupIntervalMs);
 
+// Notification cron — runs every hour for all tenants.
+// Generates birthday/reminder/anniversary/memory notifications and kicks off
+// the email digest. Idempotent: each type has a per-day dedup check.
+// Hourly is sufficient: date-driven notifications only need to fire once per
+// day, and the email digest has its own 60-minute per-user throttle.
+import { generateNotificationsForTenant } from './services/notification-generate.js';
+async function runNotificationCron() {
+  try {
+    const tenants = await db('tenants').select('id');
+    for (const tenant of tenants) {
+      await generateNotificationsForTenant(tenant.id);
+    }
+  } catch (err) {
+    console.error('Notification cron error:', err.message);
+  }
+}
+setInterval(() => runNotificationCron(), 60 * 60 * 1000);
+
 // Start server
 app.listen(config.port, '0.0.0.0', () => {
   console.log(`WhoareYou API running on port ${config.port} (${config.env})`);
