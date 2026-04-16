@@ -71,6 +71,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/` | Timeline (filter by contact or company, paginate) |
+| GET | `/memories` | Posts from the same MM-DD in previous years. Same shape as `/` plus `years_ago` per post and `today: { month, day }`. No pagination — returns all matching posts ordered by date desc. |
 | GET | `/geo` | Photos with GPS coordinates for map |
 | GET | `/trash` | List soft-deleted posts |
 | POST | `/restore/:uuid` | Restore soft-deleted post |
@@ -128,7 +129,45 @@ CRUD, 10 types, annual reminder opt-in, linked contacts.
 CRUD, recurring (yearly).
 
 ### Notifications (`/api/notifications`)
-List, mark-read, generate (birthdays, anniversaries).
+List, mark-read, generate (birthdays, anniversaries, reminders, memories). Notification payloads beyond `title` put structured data in `body` as pipe-separated strings so the navbar can render a richer item:
+
+| Type | `body` format |
+|------|---------------|
+| `birthday` | `{contact_uuid}` |
+| `anniversary` | `{contact_uuid}\|{event_type}\|{years}` |
+| `reminder` | `{contact_uuid?}` |
+| `memory` | `{count}\|{thumbnail_path}\|{post_uuid}` — `title` = years ago |
+| `family_post` | `{post_uuid}\|{thumbnail_path?}` |
+| `family_comment` | `{post_uuid}\|{preview}` |
+
+**Generation** (`POST /generate`) is idempotent — duplicates for the same day are suppressed. `memory` notifications only fire on **milestone anniversaries** to avoid annual repeats: years_ago ∈ {1, 5, 10, 15, 20, 25, 30, 40, 50}. The `/memories` page still lists every matching post regardless of milestone.
+
+**Per-user preferences and per-contact overrides** (`utils/notification-prefs.js`):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/prefs` | List of per-type rules + valid scopes (`meta`) for UI rendering |
+| PUT | `/prefs/:type` | Upsert `{ scope, deliver_app, deliver_email }` for a type. Validates scope per type. |
+| GET | `/overrides` | Per-contact overrides for current user (joined with contact name + avatar) |
+| POST | `/overrides` | Create/update override `{ contact_uuid, type, mode }` where `mode ∈ {'always','never'}` |
+| DELETE | `/overrides/:id` | Remove an override |
+
+**Filter logic** (`shouldNotify`): override (always/never) → global type scope → channel toggles. Never notifies the actor about their own actions. `family_post` scope filters by `authorIsGuest`; `family_comment` scope filters by whether the post is the viewer's own.
+
+**New hooks:** `POST /api/posts` and `POST /api/portal/posts` fire `family_post` notifications to every other active tenant user. `POST /api/posts/:uuid/comments` and `POST /api/portal/posts/:uuid/comments` fire `family_comment`. All hooks are fire-and-forget after the response is sent.
+
+**Email digest** ([services/notification-email.js](../backend/src/services/notification-email.js)): the `deliver_email=true` toggle triggers an hourly-throttled digest email. `sendDigestsForTenant(tenantId)` is called from `/generate` and from the post/comment hooks. Per-recipient throttle: 60 minutes, implemented as `MAX(notifications.email_sent_at) < now - 1h OR IS NULL`. Digest renders all unsent email-flagged notifications for the user as one email grouped by type. Defense-in-depth: `sendDigestFor(userId, tenantId)` only emails users that are active `tenant_members` with a non-null `users.email` — never contacts, never portal guests, never users outside the tenant.
+
+**Web Push** ([services/notification-push.js](../backend/src/services/notification-push.js)): the `deliver_push=true` toggle (on by default) sends an immediate web push from `tryCreateNotification`. VAPID keys are auto-generated on first use and stored in `system_settings`. Expired subscriptions (HTTP 404/410 from the push service) are pruned automatically.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/push/vapid-key` | Returns the public VAPID key for the browser to subscribe |
+| POST | `/push/subscribe` | Register a `PushSubscription` payload — upserts on (user, endpoint) |
+| POST | `/push/unsubscribe` | Remove a subscription by endpoint |
+| POST | `/push/test` | Send a test push to the current user's active subscriptions |
+
+Frontend: [frontend/sw.js](../frontend/sw.js) is registered from [app.js](../frontend/js/app.js) on boot. It handles `push` (showNotification) and `notificationclick` (open/focus URL). [utils/push.js](../frontend/js/utils/push.js) provides `subscribe()`, `unsubscribe()`, `isSubscribed()`, `pushPermission()`. iOS note: Web Push only works in PWAs installed to the home screen (iOS 16.4+) — in a regular Safari tab, `Notification.requestPermission` resolves to `denied`.
 
 ### Gifts (`/api/gifts`)
 Products (CRUD, URL scraping, images), events (CRUD, auto-fill), orders (CRUD, status lifecycle), wishlists (CRUD, items).

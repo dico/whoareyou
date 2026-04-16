@@ -78,6 +78,8 @@ All thumbnails use `border-radius: var(--radius-full)` (circles). Contacts, prod
 ### 10. Image viewer
 All images open in the same lightbox design (black background, white footer, arrow navigation, keyboard support). Never open images in new tabs. Reuse `photo-viewer` CSS.
 
+**Image resolution for inline display:** use `file_path` (full-size, up to 1920px) for post media in `renderPostList`, not `thumbnail_path`. Thumbnails are 200×200 square crops — fine for tiny avatars (32-64px) and compose previews (64-96px), but pixelate badly when stretched to ~500-1000px wide cards. See [TODO](todo.md) "Medium-size image variant" for the planned intermediate size.
+
 ### 11. Consistent action buttons
 In modals: `btn btn-outline-secondary btn-sm` (cancel), `btn btn-primary btn-sm` (primary action). Use `btn-danger` for destructive actions.
 

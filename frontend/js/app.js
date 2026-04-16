@@ -29,6 +29,9 @@ import { renderGiftProducts } from './pages/gift-products.js';
 import { renderGiftWishlists } from './pages/gift-wishlists.js';
 import { renderGiftPlanning } from './pages/gift-planning.js';
 import { renderGenerateBook } from './pages/generate-book.js';
+import { renderMemories } from './pages/memories.js';
+import { renderNotificationSettings } from './pages/settings-notifications.js';
+import { registerServiceWorker } from './utils/push.js';
 import { renderBookPreview } from './pages/book-preview.js';
 import { renderSignage } from './pages/admin-signage.js';
 import { renderNavbar } from './components/navbar.js';
@@ -67,6 +70,8 @@ const routes = {
   '/gifts/wishlists': () => renderGiftWishlists(),
   '/gifts/planning': () => renderGiftPlanning(),
   '/settings/generate-book': () => renderGenerateBook(),
+  '/memories': () => renderMemories(),
+  '/settings/notifications': () => renderNotificationSettings(),
   '/books/:uuid/preview': (params) => renderBookPreview(params.uuid),
   '/login': () => renderLogin(),
   '/reset-password': () => renderLogin(),
@@ -229,3 +234,7 @@ document.addEventListener('click', (e) => {
 
 // Initial render
 render();
+
+// Register PWA service worker (handles web push + notification clicks).
+// Fire-and-forget — failing to register should never break the app.
+registerServiceWorker();

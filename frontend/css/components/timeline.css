@@ -157,6 +157,27 @@
   gap: var(--space-md);
 }
 
+/* Memories — year group divider */
+.memories-year-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0 calc(var(--space-sm) * -1);
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.memories-year-header::before,
+.memories-year-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+.memories-year-header:first-child {
+  margin-top: 0;
+}
+
 .timeline-post {
   padding: var(--space-md) var(--space-lg);
 }

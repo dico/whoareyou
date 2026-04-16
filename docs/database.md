@@ -94,6 +94,12 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `export_log` | Export audit trail (user, IP, country, type, status, encryption) |
 | `ip_geo_cache` | IP → country cache (30-day TTL) |
 | `book_jobs` | Photo book definitions (title, contacts, date range, layout options). See [todo.md](todo.md) book generation section. |
+| `user_notification_prefs` | Per-user, per-tenant, per-type notification rules. Columns: `user_id`, `tenant_id`, `type`, `scope` (interpretation depends on type: `none`/`all`/`favorites`/`family`/`guests`/`both`/`my_posts`/`all_posts`), `deliver_app`, `deliver_email`. Unique on (user_id, tenant_id, type). Missing rows fall back to "all + app on, email off" defaults in `utils/notification-prefs.js`. |
+| `user_notification_overrides` | Per-contact override that wins over global rules. Columns: `user_id`, `tenant_id`, `contact_id`, `type`, `mode` (`always`/`never`). Unique on (user_id, tenant_id, contact_id, type). |
+| `notifications.email_sent_at` | Timestamp column (migration 076). NULL = candidate for next email digest. Populated by `sendDigestFor()` after a successful email send. `MAX(email_sent_at) per user` implements the 60-minute digest throttle. |
+| `push_subscriptions` | One row per subscribed browser/device for a user. Columns: `user_id`, `tenant_id`, `endpoint` (the push service URL; indexed on prefix 255), `p256dh`, `auth` (the VAPID-encrypted key material), `user_agent`, `last_used_at`. Rows are deleted on explicit unsubscribe or when the push service returns 404/410 (expired). |
+| `user_notification_prefs.deliver_push` | Third delivery channel (migration 077), default `true`. Used alongside `deliver_app` and `deliver_email`. Push is sent immediately from `tryCreateNotification` — no throttling — because it's the "right now" channel. |
+| `system_settings` keys `vapid_public_key`, `vapid_private_key` | Auto-generated on first push API call. Survives restarts. The private key MUST NOT leak — it is never exposed via any endpoint. |
 
 ## Gift Tables
 
@@ -128,7 +134,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 73 migrations
+- Currently 77 migrations
 
 ### Creating a New Migration
 ```bash

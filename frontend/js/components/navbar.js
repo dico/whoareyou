@@ -79,6 +79,7 @@ export function renderNavbar() {
               : ''
             }
             <li><a class="dropdown-item" href="/profile" data-link><i class="bi bi-gear me-2"></i>${t('nav.accountSettings')}</a></li>
+            <li><a class="dropdown-item" href="/settings/notifications" data-link><i class="bi bi-bell me-2"></i>${t('notifications.settingsTitle')}</a></li>
             ${user?.role === 'admin' || user?.is_system_admin ? `<li><a class="dropdown-item" href="/settings" data-link><i class="bi bi-sliders me-2"></i>${t('settings.administration')}</a></li>` : ''}
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="#" id="btn-logout"><i class="bi bi-box-arrow-right me-2"></i>${t('nav.logout')}</a></li>
@@ -137,8 +138,14 @@ export function renderNavbar() {
       }
 
       list.innerHTML = notifications.map(n => {
-        const icon = n.type === 'birthday' ? 'cake2' : n.type === 'anniversary' ? 'calendar-heart' : n.type === 'reminder' ? 'bell' : 'info-circle';
+        const iconByType = {
+          birthday: 'cake2', anniversary: 'calendar-heart', reminder: 'bell',
+          memory: 'clock-history', family_post: 'chat-square-text', family_comment: 'chat-left-text',
+        };
+        const icon = iconByType[n.type] || 'info-circle';
         let title = n.title;
+        let avatarHtml = `<div class="notification-icon"><i class="bi bi-${icon}"></i></div>`;
+
         if (n.type === 'birthday') {
           title = t('notifications.birthday', { name: n.title });
         } else if (n.type === 'anniversary') {
@@ -146,12 +153,23 @@ export function renderNavbar() {
           const eventType = parts[1] || '';
           const years = parts[2] || '';
           title = t('notifications.anniversary', { name: n.title, event: t('lifeEvents.types.' + eventType), years });
+        } else if (n.type === 'memory') {
+          const [count, thumb] = (n.body || '').split('|');
+          const years = parseInt(n.title, 10);
+          title = t('notifications.memory', { n: parseInt(count, 10) || 1, years });
+          if (thumb) avatarHtml = `<div class="notification-thumb"><img src="${authUrl(thumb)}" alt=""></div>`;
+        } else if (n.type === 'family_post') {
+          const [, thumb] = (n.body || '').split('|');
+          title = t('notifications.familyPost', { name: n.title });
+          if (thumb) avatarHtml = `<div class="notification-thumb"><img src="${authUrl(thumb)}" alt=""></div>`;
+        } else if (n.type === 'family_comment') {
+          const [, preview] = (n.body || '').split('|');
+          title = t('notifications.familyComment', { name: n.title, preview: preview || '' });
         }
+
         return `
         <a href="${n.link || '#'}" data-link class="notification-item ${n.is_read ? 'read' : ''}" data-id="${n.id}">
-          <div class="notification-icon">
-            <i class="bi bi-${icon}"></i>
-          </div>
+          ${avatarHtml}
           <div class="notification-content">
             <div class="notification-title">${title}</div>
             <div class="notification-time">${formatTimeAgo(n.created_at)}</div>

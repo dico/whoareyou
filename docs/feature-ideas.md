@@ -52,9 +52,8 @@ Bulk-import photos with EXIF dates → automatic timeline posts. Google Photos h
 Export contacts as vCard for phone import. vCard export is simple; CardDAV server is larger scope.
 - Reuses: contacts data
 
-### Email notifications (daily digest) ⭐ low effort / high value
-Daily email: "Today is Ola's birthday", "Reminder: dentist appointment". Notification generation exists, SMTP is configured — needs a cron job to send pending notifications.
-- Reuses: notification module, SMTP service, cron pattern from export
+### Email notifications (hourly digest) — delivered ✅
+Implemented in [services/notification-email.js](../backend/src/services/notification-email.js). Per-user 60-minute throttle, bundles any unsent email-flagged notifications into one email grouped by type. Triggered opportunistically from `/notifications/generate` and post/comment hooks. Remaining: cron for reliable delivery even when nobody opens the app (see [todo.md](todo.md)).
 
 ---
 
@@ -111,9 +110,8 @@ Let portal guests upload their own photos (partially implemented). Extend with a
 
 ## Signage & Display
 
-### "This day in history" ⭐ low effort / high engagement
-Show posts from the same date in previous years. Nostalgia trigger. Can be shown on signage, in portal, or as a daily push notification.
-- Reuses: posts table (simple date query)
+### "This day in history" — Phase 1 delivered ✅
+Implemented as `/memories` page (see [todo.md](todo.md) for Phase 2 plan: navbar notification + notification filters). Shows posts from the same MM-DD in previous years with year-group dividers. Endpoint `GET /api/posts/memories` and `renderMemories()` page. Next steps: surface on main timeline, in notifications, and on signage.
 
 ### Digital photo frame mode
 Dedicated fullscreen mode with transition effects, background music, and "this day last year" function. Runs on an old iPad or Raspberry Pi.

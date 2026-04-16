@@ -35,6 +35,8 @@ Each page exports a `render*()` function called by the router in `app.js`.
 | Contact Detail | `/contacts/:uuid` | `renderContactDetail(uuid)`. Also exports `loadGalleryInto()` for reusable photo gallery. |
 | Map | `/map` | `renderMap()` |
 | Address Detail | `/contacts/:uuid/addresses/:id` | `renderAddressDetail(uuid, id)` |
+| Memories | `/memories` | `renderMemories()` — "on this day" view, posts from same MM-DD in earlier years, grouped by year via DOM post-processing |
+| Notification Settings | `/settings/notifications` | `renderNotificationSettings()` — per-user three-layer rules: global per-type scope + three delivery channels (app, push, email), plus per-contact `always`/`never` overrides. Also includes the push-subscription flow (Enable/Test/Disable). Linked from the navbar user dropdown (accessible to all users, not admin-gated). |
 | Groups | `/groups` | `renderCompanies()` — companies, schools, clubs, teams |
 | Group Detail | `/groups/:uuid` | `renderCompanyDetail(uuid)` — members, info/timeline, photos |
 

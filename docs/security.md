@@ -191,6 +191,16 @@ The threat model is **physical proximity, short window**. The implementation is 
 - Query parameter tokens for media (needed for `<img src>`, short-lived tokens only)
 - 365-day session expiry (designed for grandparents; admin can revoke)
 
+## Web Push
+
+- **VAPID keys** auto-generated on first use and stored in `system_settings` (`vapid_public_key`, `vapid_private_key`). The private key is never exposed via any endpoint — only signing happens server-side.
+- **Subscriptions** are per (user, endpoint) in `push_subscriptions`. The `endpoint` URL points at the browser vendor's push service (Google, Mozilla, Apple, Microsoft) and is not sensitive on its own; `p256dh` + `auth` are the per-subscription keys used for payload encryption.
+- **Payloads are encrypted** end-to-end by the web-push library with the subscription's keys. The push service only forwards the ciphertext.
+- **Subscription cleanup** — the push service returns 404/410 for expired subscriptions; we delete those rows on the next send attempt so we don't retain stale data.
+- **Unsubscribe** on the server requires the endpoint string and is scoped to the current user's rows only — one user cannot unsubscribe another's device.
+- **Tenant isolation** — `sendPushToUser(userId, tenantId, ...)` queries by both; a subscription from one tenant is never sent to on behalf of another.
+- **Defense against payload injection** — payloads are constructed server-side from the notification row. User-provided strings (post bodies, contact names) pass through the same renderer as the in-app bell.
+
 ## File Access Control
 - `/uploads/` route requires authentication (main app OR portal tokens)
 - Token can be passed as `?token=` query param (for embedded images)

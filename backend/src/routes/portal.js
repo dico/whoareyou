@@ -8,6 +8,8 @@ import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db.js';
 import { config } from '../config/index.js';
+import { tryCreateNotification } from '../utils/notification-prefs.js';
+import { sendDigestsForTenant } from '../services/notification-email.js';
 import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
 import { portalAuthenticate } from '../middleware/portal-auth.js';
@@ -384,8 +386,33 @@ router.post('/posts', portalAuthenticate, async (req, res, next) => {
     });
 
     res.status(201).json({ post: { uuid, id: postId } });
+
+    // family_post notifications (guest author)
+    notifyPortalPost(req, { postId, postUuid: uuid, contactUuid: contact.uuid, guest }).catch(() => {});
   } catch (err) { next(err); }
 });
+
+async function notifyPortalPost(req, { postId, postUuid, contactUuid, guest }) {
+  const authorLinkedContactId = guest?.linked_contact_id || null;
+  const authorName = guest?.display_name || 'Guest';
+
+  const users = await db('users')
+    .join('tenant_members', function () {
+      this.on('users.id', 'tenant_members.user_id')
+        .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.portal.tenantId]));
+    })
+    .where('users.is_active', true)
+    .select('users.id');
+
+  for (const u of users) {
+    await tryCreateNotification(u.id, req.portal.tenantId, 'family_post', {
+      title: authorName,
+      body: `${postUuid}|`,
+      link: `/contacts/${contactUuid}?post=${postUuid}`,
+    }, { contactId: authorLinkedContactId, authorIsGuest: true });
+  }
+  sendDigestsForTenant(req.portal.tenantId).catch(() => {});
+}
 
 // PUT /api/portal/posts/:uuid — edit own post
 router.put('/posts/:uuid', portalAuthenticate, async (req, res, next) => {
@@ -577,8 +604,34 @@ router.post('/posts/:uuid/comments', portalAuthenticate, async (req, res, next) 
     });
 
     res.status(201).json({ message: 'Comment added' });
+
+    // family_comment notification for guest comment
+    notifyPortalComment(req, post, { guestLinkedContactId: contactId, guestName: guest?.display_name, commentBody: body.trim() }).catch(() => {});
   } catch (err) { next(err); }
 });
+
+async function notifyPortalComment(req, post, { guestLinkedContactId, guestName, commentBody }) {
+  const preview = (commentBody || '').slice(0, 80);
+  const users = await db('users')
+    .join('tenant_members', function () {
+      this.on('users.id', 'tenant_members.user_id')
+        .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.portal.tenantId]));
+    })
+    .where('users.is_active', true)
+    .select('users.id');
+  for (const u of users) {
+    await tryCreateNotification(u.id, req.portal.tenantId, 'family_comment', {
+      title: guestName || 'Guest',
+      body: `${post.uuid}|${preview}`,
+      link: `/?post=${post.uuid}`,
+    }, {
+      contactId: guestLinkedContactId,
+      authorIsGuest: true,
+      postAuthorUserId: post.created_by || null,
+    });
+  }
+  sendDigestsForTenant(req.portal.tenantId).catch(() => {});
+}
 
 // DELETE /api/portal/posts/:uuid/comments/:id
 router.delete('/posts/:uuid/comments/:commentId', portalAuthenticate, async (req, res, next) => {

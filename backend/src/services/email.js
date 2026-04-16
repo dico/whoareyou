@@ -48,7 +48,7 @@ async function getTransporter() {
  * Send an email. Returns true on success, false if SMTP is not configured.
  * Throws on transport errors.
  */
-export async function sendEmail({ to, subject, text, html }) {
+export async function sendEmail({ to, subject, text, html, attachments }) {
   const t = await getTransporter();
   if (!t) return false;
 
@@ -59,6 +59,7 @@ export async function sendEmail({ to, subject, text, html }) {
     subject,
     text,
     html,
+    attachments,
   });
 
   return true;

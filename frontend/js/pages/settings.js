@@ -43,6 +43,16 @@ export async function renderSettings() {
           <div class="settings-card-label">${t('trash.title')}</div>
           <div class="settings-card-desc">${t('trash.desc')}</div>
         </a>
+        <a href="/settings/notifications" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(255,59,48,0.1);color:#FF3B30"><i class="bi bi-bell"></i></div>
+          <div class="settings-card-label">${t('notifications.settingsTitle')}</div>
+          <div class="settings-card-desc">${t('notifications.settingsCardDesc')}</div>
+        </a>
+        <a href="/memories" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(255,149,0,0.1);color:#FF9500"><i class="bi bi-clock-history"></i></div>
+          <div class="settings-card-label">${t('memories.title')}</div>
+          <div class="settings-card-desc">${t('memories.settingsCardDesc')}</div>
+        </a>
         <a href="/settings/generate-book" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(200,139,58,0.1);color:#c88b3a"><i class="bi bi-book"></i></div>
           <div class="settings-card-label">${t('book.settingsCardLabel')}</div>

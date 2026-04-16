@@ -8,8 +8,212 @@ import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
 import { getLinkedContactId } from '../utils/tenant.js';
 import { filterSensitivePosts, filterSensitiveContacts, parseSensitiveFlag, stripSensitiveContacts } from '../utils/sensitive.js';
+import { tryCreateNotification } from '../utils/notification-prefs.js';
+import { sendDigestsForTenant } from '../services/notification-email.js';
 
 const router = Router();
+
+// Enriches a list of post rows with tagged contacts, media, authors, reactions,
+// comments counts, link previews and the subject contact/company. Shared by
+// `/` and `/memories` so the response shape stays consistent.
+async function assemblePosts(req, posts) {
+  const profileContactIds = posts.map((p) => p.contact_id).filter(Boolean);
+  const postIds = posts.map((p) => p.id);
+
+  const [taggedContacts, media, profileContacts, commentCounts, reactions, linkPreviews] = postIds.length ? await Promise.all([
+    db('post_contacts')
+      .join('contacts', 'post_contacts.contact_id', 'contacts.id')
+      .whereIn('post_contacts.post_id', postIds)
+      .select(
+        'post_contacts.post_id',
+        'contacts.uuid', 'contacts.first_name', 'contacts.last_name'
+      )
+      .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)),
+    db('post_media')
+      .whereIn('post_id', postIds)
+      .select('id', 'post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
+      .orderBy('sort_order'),
+    profileContactIds.length
+      ? db('contacts')
+          .whereIn('contacts.id', profileContactIds)
+          .select(
+            'contacts.id', 'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.is_sensitive',
+            db.raw(`(
+              SELECT cp.thumbnail_path FROM contact_photos cp
+              WHERE cp.contact_id = contacts.id AND cp.is_primary = true
+              LIMIT 1
+            ) as avatar`)
+          )
+          .then((rows) => {
+            const map = new Map();
+            for (const r of rows) map.set(r.id, r);
+            return map;
+          })
+      : Promise.resolve(new Map()),
+    db('post_comments')
+      .whereIn('post_id', postIds)
+      .groupBy('post_id')
+      .select('post_id', db.raw('count(*) as count')),
+    db('post_reactions')
+      .whereIn('post_reactions.post_id', postIds)
+      .leftJoin('users', 'post_reactions.user_id', 'users.id')
+      .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
+      .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
+      .select('post_reactions.post_id', 'post_reactions.emoji',
+        'post_reactions.user_id', 'post_reactions.contact_id',
+        'users.first_name as user_first', 'users.last_name as user_last',
+        'users.linked_contact_id as user_linked_contact_id',
+        'rc.first_name as contact_first', 'rc.last_name as contact_last',
+        'rc.uuid as contact_uuid',
+        'portal_guests.display_name as guest_name'),
+    db('post_link_previews')
+      .whereIn('post_id', postIds)
+      .select('post_id', 'url', 'title', 'description', 'image_url', 'site_name'),
+  ]) : [[], [], new Map(), [], [], []];
+
+  const contactsByPost = {};
+  for (const tc of taggedContacts) {
+    if (!contactsByPost[tc.post_id]) contactsByPost[tc.post_id] = [];
+    contactsByPost[tc.post_id].push({
+      uuid: tc.uuid,
+      first_name: tc.first_name,
+      last_name: tc.last_name,
+      avatar: tc.avatar || null,
+    });
+  }
+
+  const mediaByPost = {};
+  for (const m of media) {
+    if (!mediaByPost[m.post_id]) mediaByPost[m.post_id] = [];
+    mediaByPost[m.post_id].push({
+      id: m.id,
+      file_path: m.file_path,
+      thumbnail_path: m.thumbnail_path,
+      file_type: m.file_type,
+      original_name: m.original_name,
+      file_size: m.file_size,
+    });
+  }
+
+  const linkPreviewByPost = {};
+  for (const lp of linkPreviews) {
+    if (!linkPreviewByPost[lp.post_id]) {
+      linkPreviewByPost[lp.post_id] = { url: lp.url, title: lp.title, description: lp.description, image_url: lp.image_url, site_name: lp.site_name };
+    }
+  }
+
+  const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
+  const authorUserIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
+  const postAuthorMap = new Map();
+
+  if (guestIds.length) {
+    const guests = await db('portal_guests').whereIn('portal_guests.id', guestIds)
+      .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
+      .select('portal_guests.id', 'portal_guests.display_name', 'portal_guests.linked_contact_id',
+        'gc.uuid as contact_uuid', 'gc.first_name as contact_first', 'gc.last_name as contact_last');
+    const guestContactIds = guests.map(g => g.linked_contact_id).filter(Boolean);
+    const guestAvatars = new Map();
+    if (guestContactIds.length) {
+      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(guestContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) guestAvatars.set(p.contact_id, p.thumbnail_path);
+    }
+    for (const g of guests) {
+      const name = g.contact_first ? `${g.contact_first} ${g.contact_last || ''}`.trim() : g.display_name;
+      postAuthorMap.set(`guest_${g.id}`, { name, contact_uuid: g.contact_uuid, avatar: guestAvatars.get(g.linked_contact_id) || null });
+    }
+  }
+  if (authorUserIds.length) {
+    const users = await db('users').whereIn('users.id', authorUserIds)
+      .leftJoin('tenant_members as tm', function () {
+        this.on('users.id', 'tm.user_id').andOn('tm.tenant_id', '=', db.raw('?', [req.tenantId]));
+      })
+      .leftJoin('contacts as uc', 'tm.linked_contact_id', 'uc.id')
+      .select('users.id', 'users.first_name',
+        'tm.linked_contact_id',
+        'uc.uuid as contact_uuid', 'uc.first_name as contact_first', 'uc.last_name as contact_last');
+    const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
+    const userAvatars = new Map();
+    if (userContactIds.length) {
+      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(userContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) userAvatars.set(p.contact_id, p.thumbnail_path);
+    }
+    for (const u of users) {
+      const name = u.contact_first ? `${u.contact_first} ${u.contact_last || ''}`.trim() : u.first_name;
+      postAuthorMap.set(`user_${u.id}`, { name, contact_uuid: u.contact_uuid, avatar: userAvatars.get(u.linked_contact_id) || null });
+    }
+  }
+
+  const commentCountByPost = {};
+  for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
+
+  const userLinkedContactId = await getLinkedContactId(req.user.id, req.tenantId);
+
+  const userLinkedIds = [...new Set(reactions.map(r => r.user_linked_contact_id).filter(Boolean))];
+  const linkedContactMap = new Map();
+  if (userLinkedIds.length) {
+    const contacts = await db('contacts').whereIn('id', userLinkedIds).select('id', 'first_name');
+    for (const c of contacts) linkedContactMap.set(c.id, c);
+  }
+
+  const reactionsByPost = {};
+  for (const r of reactions) {
+    if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false, names: [] };
+    reactionsByPost[r.post_id].count++;
+    if (r.user_id === req.user.id || (userLinkedContactId && r.contact_id === userLinkedContactId)) {
+      reactionsByPost[r.post_id].reacted = true;
+    }
+    if (reactionsByPost[r.post_id].names.length < 3) {
+      const linked = linkedContactMap.get(r.user_linked_contact_id);
+      const firstName = r.contact_first || r.guest_name || linked?.first_name || r.user_first;
+      if (firstName) reactionsByPost[r.post_id].names.push(firstName);
+    }
+  }
+
+  const companyIds = [...new Set(posts.map(p => p.company_id).filter(Boolean))];
+  const companyMap = new Map();
+  if (companyIds.length) {
+    const companies = await db('companies').whereIn('id', companyIds)
+      .select('id', 'uuid', 'name', 'type', 'logo_path');
+    for (const c of companies) companyMap.set(c.id, c);
+  }
+
+  return posts.map((p) => {
+    const profileContact = p.contact_id ? profileContacts.get(p.contact_id) : null;
+    const companyInfo = p.company_id ? companyMap.get(p.company_id) : null;
+    return {
+      uuid: p.uuid,
+      body: p.body,
+      post_date: p.post_date,
+      visibility: p.visibility,
+      is_sensitive: !!p.is_sensitive,
+      created_at: p.created_at,
+      about: profileContact ? {
+        uuid: profileContact.uuid,
+        first_name: profileContact.first_name,
+        last_name: profileContact.last_name,
+        avatar: profileContact.avatar || null,
+        is_sensitive: !!profileContact.is_sensitive,
+      } : null,
+      company: companyInfo ? {
+        uuid: companyInfo.uuid,
+        name: companyInfo.name,
+        type: companyInfo.type,
+        logo_path: companyInfo.logo_path,
+      } : null,
+      contacts: contactsByPost[p.id] || [],
+      media: mediaByPost[p.id] || [],
+      link_preview: linkPreviewByPost[p.id] || null,
+      comment_count: commentCountByPost[p.id] || 0,
+      reaction_count: reactionsByPost[p.id]?.count || 0,
+      reaction_names: reactionsByPost[p.id]?.names || [],
+      reacted: reactionsByPost[p.id]?.reacted || false,
+      posted_by: (() => {
+        const key = p.portal_guest_id ? `guest_${p.portal_guest_id}` : p.created_by ? `user_${p.created_by}` : null;
+        return key ? postAuthorMap.get(key) || null : null;
+      })(),
+    };
+  });
+}
 
 // GET /api/posts — global timeline
 router.get('/', async (req, res, next) => {
@@ -65,215 +269,7 @@ router.get('/', async (req, res, next) => {
       .limit(limit)
       .offset(offset);
 
-    // Collect contact_ids for profile posts
-    const profileContactIds = posts.map((p) => p.contact_id).filter(Boolean);
-
-    // Fetch tagged contacts, media, and profile contacts
-    const postIds = posts.map((p) => p.id);
-
-    const [taggedContacts, media, profileContacts, commentCounts, reactions, linkPreviews] = postIds.length ? await Promise.all([
-      db('post_contacts')
-        .join('contacts', 'post_contacts.contact_id', 'contacts.id')
-        .whereIn('post_contacts.post_id', postIds)
-        .select(
-          'post_contacts.post_id',
-          'contacts.uuid', 'contacts.first_name', 'contacts.last_name'
-        )
-        .select(db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)),
-      db('post_media')
-        .whereIn('post_id', postIds)
-        .select('id', 'post_id', 'file_path', 'thumbnail_path', 'file_type', 'original_name', 'file_size')
-        .orderBy('sort_order'),
-      profileContactIds.length
-        ? db('contacts')
-            .whereIn('contacts.id', profileContactIds)
-            .select(
-              'contacts.id', 'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.is_sensitive',
-              db.raw(`(
-                SELECT cp.thumbnail_path FROM contact_photos cp
-                WHERE cp.contact_id = contacts.id AND cp.is_primary = true
-                LIMIT 1
-              ) as avatar`)
-            )
-            .then((rows) => {
-              const map = new Map();
-              for (const r of rows) map.set(r.id, r);
-              return map;
-            })
-        : Promise.resolve(new Map()),
-      db('post_comments')
-        .whereIn('post_id', postIds)
-        .groupBy('post_id')
-        .select('post_id', db.raw('count(*) as count')),
-      db('post_reactions')
-        .whereIn('post_reactions.post_id', postIds)
-        .leftJoin('users', 'post_reactions.user_id', 'users.id')
-        .leftJoin('contacts as rc', 'post_reactions.contact_id', 'rc.id')
-        .leftJoin('portal_guests', 'post_reactions.portal_guest_id', 'portal_guests.id')
-        .select('post_reactions.post_id', 'post_reactions.emoji',
-          'post_reactions.user_id', 'post_reactions.contact_id',
-          'users.first_name as user_first', 'users.last_name as user_last',
-          'users.linked_contact_id as user_linked_contact_id',
-          'rc.first_name as contact_first', 'rc.last_name as contact_last',
-          'rc.uuid as contact_uuid',
-          'portal_guests.display_name as guest_name'),
-      db('post_link_previews')
-        .whereIn('post_id', postIds)
-        .select('post_id', 'url', 'title', 'description', 'image_url', 'site_name'),
-    ]) : [[], [], new Map(), [], [], []];
-
-    // Group by post
-    const contactsByPost = {};
-    for (const tc of taggedContacts) {
-      if (!contactsByPost[tc.post_id]) contactsByPost[tc.post_id] = [];
-      contactsByPost[tc.post_id].push({
-        uuid: tc.uuid,
-        first_name: tc.first_name,
-        last_name: tc.last_name,
-        avatar: tc.avatar || null,
-      });
-    }
-
-    const mediaByPost = {};
-    for (const m of media) {
-      if (!mediaByPost[m.post_id]) mediaByPost[m.post_id] = [];
-      mediaByPost[m.post_id].push({
-        id: m.id,
-        file_path: m.file_path,
-        thumbnail_path: m.thumbnail_path,
-        file_type: m.file_type,
-        original_name: m.original_name,
-        file_size: m.file_size,
-      });
-    }
-
-    const linkPreviewByPost = {};
-    for (const lp of linkPreviews) {
-      if (!linkPreviewByPost[lp.post_id]) {
-        linkPreviewByPost[lp.post_id] = { url: lp.url, title: lp.title, description: lp.description, image_url: lp.image_url, site_name: lp.site_name };
-      }
-    }
-
-    // Resolve post authors (portal guests and users)
-    const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
-    const authorUserIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
-    const postAuthorMap = new Map(); // key -> { name, contact_uuid, avatar }
-
-    if (guestIds.length) {
-      const guests = await db('portal_guests').whereIn('portal_guests.id', guestIds)
-        .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
-        .select('portal_guests.id', 'portal_guests.display_name', 'portal_guests.linked_contact_id',
-          'gc.uuid as contact_uuid', 'gc.first_name as contact_first', 'gc.last_name as contact_last');
-      const guestContactIds = guests.map(g => g.linked_contact_id).filter(Boolean);
-      const guestAvatars = new Map();
-      if (guestContactIds.length) {
-        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(guestContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
-        for (const p of photos) guestAvatars.set(p.contact_id, p.thumbnail_path);
-      }
-      for (const g of guests) {
-        const name = g.contact_first ? `${g.contact_first} ${g.contact_last || ''}`.trim() : g.display_name;
-        postAuthorMap.set(`guest_${g.id}`, { name, contact_uuid: g.contact_uuid, avatar: guestAvatars.get(g.linked_contact_id) || null });
-      }
-    }
-    if (authorUserIds.length) {
-      // Use tenant_members.linked_contact_id (per-tenant) instead of users.linked_contact_id
-      const users = await db('users').whereIn('users.id', authorUserIds)
-        .leftJoin('tenant_members as tm', function () {
-          this.on('users.id', 'tm.user_id').andOn('tm.tenant_id', '=', db.raw('?', [req.tenantId]));
-        })
-        .leftJoin('contacts as uc', 'tm.linked_contact_id', 'uc.id')
-        .select('users.id', 'users.first_name',
-          'tm.linked_contact_id',
-          'uc.uuid as contact_uuid', 'uc.first_name as contact_first', 'uc.last_name as contact_last');
-      const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
-      const userAvatars = new Map();
-      if (userContactIds.length) {
-        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(userContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
-        for (const p of photos) userAvatars.set(p.contact_id, p.thumbnail_path);
-      }
-      for (const u of users) {
-        const name = u.contact_first ? `${u.contact_first} ${u.contact_last || ''}`.trim() : u.first_name;
-        postAuthorMap.set(`user_${u.id}`, { name, contact_uuid: u.contact_uuid, avatar: userAvatars.get(u.linked_contact_id) || null });
-      }
-    }
-
-    const commentCountByPost = {};
-    for (const c of commentCounts) commentCountByPost[c.post_id] = c.count;
-
-    // Get user's linked contact for matching contact-based reactions (per-tenant)
-    const userLinkedContactId = await getLinkedContactId(req.user.id, req.tenantId);
-
-    // Build lightweight reaction summaries (no avatars — loaded on demand in engagement popup)
-    const userLinkedIds = [...new Set(reactions.map(r => r.user_linked_contact_id).filter(Boolean))];
-    const linkedContactMap = new Map();
-    if (userLinkedIds.length) {
-      const contacts = await db('contacts').whereIn('id', userLinkedIds).select('id', 'first_name');
-      for (const c of contacts) linkedContactMap.set(c.id, c);
-    }
-
-    const reactionsByPost = {};
-    for (const r of reactions) {
-      if (!reactionsByPost[r.post_id]) reactionsByPost[r.post_id] = { count: 0, reacted: false, names: [] };
-      reactionsByPost[r.post_id].count++;
-      if (r.user_id === req.user.id || (userLinkedContactId && r.contact_id === userLinkedContactId)) {
-        reactionsByPost[r.post_id].reacted = true;
-      }
-      // Only collect first names (max 3) for display like "Ola, Robert and 3 others"
-      if (reactionsByPost[r.post_id].names.length < 3) {
-        const linked = linkedContactMap.get(r.user_linked_contact_id);
-        const firstName = r.contact_first || r.guest_name || linked?.first_name || r.user_first;
-        if (firstName) reactionsByPost[r.post_id].names.push(firstName);
-      }
-    }
-
-    // Fetch company info for group posts
-    const companyIds = [...new Set(posts.map(p => p.company_id).filter(Boolean))];
-    const companyMap = new Map();
-    if (companyIds.length) {
-      const companies = await db('companies').whereIn('id', companyIds)
-        .select('id', 'uuid', 'name', 'type', 'logo_path');
-      for (const c of companies) companyMap.set(c.id, c);
-    }
-
-    const result = posts.map((p) => {
-      const profileContact = p.contact_id ? profileContacts.get(p.contact_id) : null;
-      const companyInfo = p.company_id ? companyMap.get(p.company_id) : null;
-      return {
-        uuid: p.uuid,
-        body: p.body,
-        post_date: p.post_date,
-        visibility: p.visibility,
-        is_sensitive: !!p.is_sensitive,
-        created_at: p.created_at,
-        // Profile post: about this contact
-        about: profileContact ? {
-          uuid: profileContact.uuid,
-          first_name: profileContact.first_name,
-          last_name: profileContact.last_name,
-          avatar: profileContact.avatar || null,
-          is_sensitive: !!profileContact.is_sensitive,
-        } : null,
-        // Group post: about this company/group
-        company: companyInfo ? {
-          uuid: companyInfo.uuid,
-          name: companyInfo.name,
-          type: companyInfo.type,
-          logo_path: companyInfo.logo_path,
-        } : null,
-        // Tagged contacts (for activity posts)
-        contacts: contactsByPost[p.id] || [],
-        media: mediaByPost[p.id] || [],
-        link_preview: linkPreviewByPost[p.id] || null,
-        comment_count: commentCountByPost[p.id] || 0,
-        reaction_count: reactionsByPost[p.id]?.count || 0,
-        reaction_names: reactionsByPost[p.id]?.names || [],
-        reacted: reactionsByPost[p.id]?.reacted || false,
-        posted_by: (() => {
-          const key = p.portal_guest_id ? `guest_${p.portal_guest_id}` : p.created_by ? `user_${p.created_by}` : null;
-          return key ? postAuthorMap.get(key) || null : null;
-        })(),
-      };
-    });
+    const result = await assemblePosts(req, posts);
 
     // Fetch life events for this contact (if filtering by contact)
     let lifeEvents = [];
@@ -351,6 +347,50 @@ router.get('/', async (req, res, next) => {
         limit,
         pages: Math.ceil(count / limit),
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/posts/memories — posts from this day in previous years
+router.get('/memories', async (req, res, next) => {
+  try {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    const currentYear = now.getFullYear();
+
+    const posts = await db('posts')
+      .where('posts.tenant_id', req.tenantId)
+      .whereNull('posts.deleted_at')
+      .where(function () {
+        this.whereIn('posts.visibility', ['shared', 'family'])
+          .orWhere('posts.created_by', req.user.id);
+      })
+      .modify(filterSensitivePosts(req))
+      .whereRaw('MONTH(posts.post_date) = ?', [month])
+      .whereRaw('DAY(posts.post_date) = ?', [day])
+      .whereRaw('YEAR(posts.post_date) < ?', [currentYear])
+      .select(
+        'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
+        'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
+        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by'
+      )
+      .orderBy('posts.post_date', 'desc');
+
+    const assembled = await assemblePosts(req, posts);
+
+    // Annotate each post with yearsAgo so the frontend can render "for N år siden"
+    const withYearsAgo = assembled.map((p) => ({
+      ...p,
+      years_ago: currentYear - new Date(p.post_date).getFullYear(),
+    }));
+
+    res.json({
+      posts: withYearsAgo,
+      pagination: { total: withYearsAgo.length, page: 1, limit: withYearsAgo.length, pages: 1 },
+      today: { month, day },
     });
   } catch (err) {
     next(err);
@@ -643,10 +683,42 @@ router.post('/', async (req, res, next) => {
 
     const created = await getPostWithDetails(post.id, req.tenantId);
     res.status(201).json({ post: created });
+
+    // family_post notifications (fire-and-forget after response)
+    notifyFamilyPost(req, post, created).catch(() => {});
   } catch (err) {
     next(err);
   }
 });
+
+async function notifyFamilyPost(req, post, created) {
+  if (created.visibility === 'private') return;
+  const authorUserId = req.user.id;
+  const authorLinkedContactId = await db('tenant_members')
+    .where({ user_id: authorUserId, tenant_id: req.tenantId })
+    .select('linked_contact_id').first().then(r => r?.linked_contact_id || null);
+  const authorName = created.posted_by?.name || 'Someone';
+  const firstImage = (created.media || []).find(m => m.file_type?.startsWith('image'));
+  const thumb = firstImage?.thumbnail_path || '';
+
+  const users = await db('users')
+    .join('tenant_members', function () {
+      this.on('users.id', 'tenant_members.user_id')
+        .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.tenantId]));
+    })
+    .where('users.is_active', true)
+    .whereNot('users.id', authorUserId)
+    .select('users.id');
+
+  for (const u of users) {
+    await tryCreateNotification(u.id, req.tenantId, 'family_post', {
+      title: authorName,
+      body: `${post.uuid}|${thumb}`,
+      link: created.about?.uuid ? `/contacts/${created.about.uuid}?post=${post.uuid}` : `/?post=${post.uuid}`,
+    }, { contactId: authorLinkedContactId, authorUserId, authorIsGuest: false });
+  }
+  sendDigestsForTenant(req.tenantId).catch(() => {});
+}
 
 // PUT /api/posts/:uuid — update post
 router.put('/:uuid', async (req, res, next) => {
@@ -924,10 +996,48 @@ router.post('/:uuid/comments', async (req, res, next) => {
         is_own: true,
       },
     });
+
+    // family_comment notifications (fire-and-forget)
+    notifyFamilyComment(req, post, comment, { commentBody: req.body.body.trim(), authorIsGuest: false }).catch(() => {});
   } catch (err) {
     next(err);
   }
 });
+
+async function notifyFamilyComment(req, post, comment, { commentBody, authorIsGuest }) {
+  const authorUserId = comment.user_id || req.user?.id || null;
+  const authorLinkedContactId = authorUserId
+    ? await db('tenant_members')
+        .where({ user_id: authorUserId, tenant_id: req.tenantId })
+        .select('linked_contact_id').first().then(r => r?.linked_contact_id || null)
+    : null;
+  const authorName = comment.first_name || 'Someone';
+  const preview = (commentBody || '').slice(0, 80);
+
+  // Everyone who should get a notification: all active tenant users except the commenter.
+  const users = await db('users')
+    .join('tenant_members', function () {
+      this.on('users.id', 'tenant_members.user_id')
+        .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.tenantId]));
+    })
+    .where('users.is_active', true)
+    .modify((q) => { if (authorUserId) q.whereNot('users.id', authorUserId); })
+    .select('users.id');
+
+  for (const u of users) {
+    await tryCreateNotification(u.id, req.tenantId, 'family_comment', {
+      title: authorName,
+      body: `${post.uuid}|${preview}`,
+      link: `/?post=${post.uuid}`,
+    }, {
+      contactId: authorLinkedContactId,
+      authorUserId,
+      authorIsGuest,
+      postAuthorUserId: post.created_by || null,
+    });
+  }
+  sendDigestsForTenant(req.tenantId).catch(() => {});
+}
 
 // DELETE /api/posts/:uuid/comments/:id
 router.delete('/:uuid/comments/:commentId', async (req, res, next) => {

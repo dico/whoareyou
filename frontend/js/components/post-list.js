@@ -31,11 +31,11 @@ function formatLikeNames(names, count) {
 
 let currentLimit = {};
 
-export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false, companyUuid = null } = {}) {
+export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false, companyUuid = null, endpoint = '/posts' } = {}) {
   const el = document.getElementById(containerId);
   if (!el) return;
 
-  const key = containerId + (contactUuid || companyUuid || '');
+  const key = containerId + (contactUuid || companyUuid || endpoint || '');
   if (loadMore) currentLimit[key] = (currentLimit[key] || 20) + 20;
   else if (!keepLimit) currentLimit[key] = 20;
 
@@ -45,7 +45,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     if (companyUuid) params.set('company', companyUuid);
     params.set('limit', currentLimit[key]);
 
-    const data = await api.get(`/posts?${params}`);
+    const data = await api.get(`${endpoint}?${params}`);
 
     if (data.posts.length === 0) {
       el.innerHTML = `
@@ -142,7 +142,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             let html = '';
             if (images.length) {
               html += `<div class="post-media post-media-grid-${Math.min(images.length, 4)}" data-post-uuid="${p.uuid}">
-                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.thumbnail_path || m.file_path)}" alt="" loading="lazy"></div>`).join('')}
+                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.file_path)}" alt="" loading="lazy"></div>`).join('')}
               </div>`;
             }
             if (videos.length) {
@@ -212,7 +212,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         </button>
       `);
       el.querySelector('.load-more-btn').addEventListener('click', () => {
-        renderPostList(containerId, contactUuid, onChanged, { loadMore: true });
+        renderPostList(containerId, contactUuid, onChanged, { loadMore: true, companyUuid, endpoint });
       });
     }
 

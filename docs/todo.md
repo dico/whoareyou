@@ -4,6 +4,55 @@
 
 ## High Priority
 
+### Memories / "this day in history" — Phase 2
+**Status:** Phase 1 + notification delivered ✅ — `/memories` page live, `GET /api/posts/memories` returns posts from the same MM-DD in previous years grouped by year. `memory` notification type fires only on **milestone anniversaries** ({1, 5, 10, 15, 20, 25, 30, 40, 50} years ago) to avoid yearly repeats. The email digest expands the memory row into individual post cards with inline CID thumbnails.
+
+**Remaining for Phase 2:**
+- Promote to main wall (`/`) — highlighted "På denne dagen"-card at top of timeline when matches exist, with thumbnail + "for N år siden" (skipped until we see how the notification feels in real use).
+
+### Medium-size image variant for inline post display
+**Status:** Not started — workaround in place
+**Why:** `post_media.thumbnail_path` is 200×200 (square crop). Inline post display in `renderPostList` previously used the thumbnail, which stretched heavily on wide cards (memories, full-width timelines) and looked pixelated. Current workaround: use `file_path` (up to 1920px wide) for inline display too. Lazy loading mitigates bandwidth, but 20 full-res WebPs × ~300KB = ~6MB per timeline page is heavy on mobile.
+
+**Plan:**
+- Add a `medium` variant in `services/image.js` (~800-1024px max width, WebP).
+- Store path in a new `post_media.medium_path` column (nullable — legacy rows fall back to `file_path`).
+- Migration script to generate `medium_*.webp` from existing `file_path`s for active posts.
+- Change `renderPostList` to prefer `medium_path || file_path`.
+- Same pattern for `contact_photos` (currently same 200px thumb problem on wide galleries).
+
+### Notification filtering and coverage — Phase 1 delivered ✅
+Three-layer model shipped: per-type global rule (scope + app/email channels) + per-contact `always`/`never` override + favorites-aware scope. Types: `birthday`, `anniversary`, `reminder`, `memory`, `family_post`, `family_comment`. Tables: `user_notification_prefs`, `user_notification_overrides`. Filter helper: [utils/notification-prefs.js](../backend/src/utils/notification-prefs.js). UI: [/settings/notifications](../frontend/js/pages/settings-notifications.js), link in navbar user dropdown.
+
+**Phase 2 — open items:**
+- **Cron-driven generation** — `/notifications/generate` currently runs on navbar load. Email digest also piggybacks on the same trigger. For reliable delivery when no one opens the app, move to a server-side cron (entrypoint pattern or node-cron). Hourly would match the digest throttle.
+- **Labels as scope source** — today `favorites` is the only "curated subset". Add label-based scope once we see whether favorites alone is enough.
+- **Mute a post** — per-post override so a single chatty thread doesn't spam `family_comment` notifications.
+- **Notifications for reactions** — currently no notification when someone likes your post.
+
+### Portal/guest notifications
+**Status:** Not started — guests currently receive no notifications at all.
+**Why:** When a family member posts or comments, portal guests with access to that contact don't know about it. Also no way for a guest to subscribe to "new posts about Child X".
+
+**Plan:**
+- Separate `portal_guest_notification_prefs` table (different from user prefs — guests have different access model)
+- Toggles per guest: "email me when there's a new post about X" (using their `portal_guest_contacts` access)
+- Send to `portal_guests.email` only, and only for contacts the guest already has access to
+- Explicitly exclude from the existing `sendDigestsForTenant()` path (which is for tenant **users** only)
+- Same 1-hour digest throttle pattern
+- Out of scope: push notifications, SMS, or in-portal bell (portal UI is minimal by design)
+
+### Email delivery — Phase 1 delivered ✅
+Hourly-throttled digest email implemented ([services/notification-email.js](../backend/src/services/notification-email.js)). `sendDigestsForTenant()` fires from `/notifications/generate`, family_post, and family_comment hooks. Throttle = 60 minutes per recipient, checked via `MAX(email_sent_at)` on their notifications. Defense-in-depth: `sendDigestFor()` verifies the recipient is an active member of the tenant before sending — never emails contacts, never emails outside the tenant.
+
+### Web Push — Phase 1 delivered ✅
+Immediate push via `web-push` library ([services/notification-push.js](../backend/src/services/notification-push.js)). Service worker at [frontend/sw.js](../frontend/sw.js) handles `push` + `notificationclick`. Subscribe/unsubscribe/test endpoints and a push-status card on `/settings/notifications`. VAPID keys auto-generated and stored in `system_settings`. Expired subscriptions (404/410) are pruned. Three-layer prefs extended with `deliver_push` (default on).
+
+**Open items:**
+- iOS PWA testing — push only works when installed from home screen (16.4+). Needs a real-device test before shipping to family.
+- Rich notifications (action buttons like "Open post" or "Dismiss") — web-push supports this but not in the MVP.
+- Badge API for unread count on the PWA icon (Chrome desktop/Android only).
+
 ### Standardize contact search component
 **Status:** In progress — 9/12 refactored
 **Remaining (complex — custom selection flows):**
