@@ -35,24 +35,23 @@ Three-layer model shipped: per-type global rule (scope + app/email channels) + p
 **Also done in Phase 1 (portal side):** `notifyPortalPost()` + `notifyPortalComment()` added to `portal.js` — tenant users are notified when a portal guest posts or comments.
 
 ### Portal/guest notifications
-**Status:** Not started — guests receive no notifications. (Tenant users already get notified when guests post — see Phase 1 above.)
-**Why:** When a family member posts or comments, portal guests with access to that contact don't know about it.
+**Status:** Phase 1 (email) delivered ✅ — guests can now receive email digests when posts/comments appear on contacts they have access to.
+
+**What was done (Phase 1):**
+- Migration `079_portal_guest_notifications`: `portal_guests.notifications_enabled` (boolean, default false) + `portal_guest_notification_prefs` table (guest_id, type, enabled)
+- `services/portal-notification-email.js`: `sendPortalDigestsForTenant()` — finds eligible guests (notifications_enabled + email set + pref enabled for type), 6-hour throttle per guest, sends grouped digest email
+- `routes/portal.js`: `POST /posts` and `POST /posts/:uuid/comments` trigger portal digests after response. Guest preferences endpoints: `GET /notifications/prefs`, `PUT /notifications/prefs/:type`
+- `routes/portal-admin.js`: `notifications_enabled` field in guest CRUD (GET/PUT)
+- Admin edit-guest modal: "Varsler aktivert"-toggle (off by default)
+- Portal header: 🔔 bell icon opens preferences modal (new_post on by default, new_comment off)
 
 #### Control model
 Two layers — both must be "on" for a guest to receive notifications:
 
-1. **Admin-side toggle** (per guest, in the edit-guest modal): "Varsler aktivert". Default **off** — admin enables it explicitly when the guest has been onboarded. Stored in `portal_guests.notifications_enabled` (new boolean column, default false).
+1. **Admin-side toggle** (per guest, in the edit-guest modal): "Varsler aktivert". Default **off** — admin enables it explicitly when the guest has been onboarded. Stored in `portal_guests.notifications_enabled`.
 2. **Guest-side preferences** (in the portal, behind a 🔔 bell icon in the header): guest can turn off types they don't want. Stored in `portal_guest_notification_prefs`.
 
 If `notifications_enabled = false` on the guest row, no notifications are sent regardless of guest prefs.
-
-#### Phase 1 — Email
-- New column: `portal_guests.notifications_enabled` (boolean, default false)
-- New table: `portal_guest_notification_prefs` — guest_id, type (`new_post` / `new_comment`), enabled (bool). Defaults: `new_post = true`, `new_comment = false` (comments can be noisy).
-- Trigger: when a post/comment is created for a contact, notify portal guests who have access to that contact, `notifications_enabled = true`, and have the relevant pref enabled.
-- Send to `portal_guests.email` only, and only if email is set. Never use `sendDigestsForTenant()` (that path is for tenant users).
-- Throttle: 6-hour digest window per guest (guests are passive consumers, not active users — hourly would be too frequent).
-- Admin edit-guest modal: add "Varsler aktivert"-toggle (off by default).
 
 #### Phase 2 — Push (PWA)
 - Show "Legg til på hjemskjerm"-banner in portal after first login (dismissible, stored in localStorage). Platform-specific instructions (Safari: Del → Legg til; Chrome: Meny → Installer).
@@ -240,8 +239,8 @@ The flip-view slide animation was dropped along with the lazy-mount rewrite — 
 **Why:** `admin-tenant.js` reuses `.product-picker-dropdown` CSS class for contact search dropdowns (member invite, MG mapping, etc.). Should use `.contact-search-dropdown` / `attachContactSearch()` from `components/contact-search.js` for consistency. See [admin-tenant.js:879,893,1000,1084](../frontend/js/pages/admin-tenant.js).
 
 ### Standardize company search component
-**Status:** Not started
-**Why:** Company search in `contact-detail.js` has its own implementation. Should follow the same pattern as contact search.
+**Status:** Partially done — `groupSearchDialog()` added to `dialogs.js` (used by post move). `contact-detail.js` still has its own inline company search implementation.
+**Why:** Company search in `contact-detail.js` has its own implementation. Should use `groupSearchDialog()` or a shared inline pattern.
 
 ### Performance: relationship suggestions at scale
 **Status:** Monitoring — currently 38ms for 450 contacts / 308 suggestions
