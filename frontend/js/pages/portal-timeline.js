@@ -207,7 +207,10 @@ export async function renderPortalTimeline() {
           <img src="/img/logo-v3-people-circle.svg" alt="" class="portal-header-logo">
           <span class="portal-header-name">${esc(guest.display_name || t('portal.title'))}</span>
         </div>
-        <button class="portal-logout-btn" id="portal-logout"><i class="bi bi-box-arrow-right"></i> ${t('nav.logout')}</button>
+        <div class="portal-header-actions">
+          <button class="portal-header-btn" id="portal-notif-btn" title="${t('nav.notifications')}"><i class="bi bi-bell"></i></button>
+          <button class="portal-logout-btn" id="portal-logout"><i class="bi bi-box-arrow-right"></i> ${t('nav.logout')}</button>
+        </div>
       </div>
       <div id="portal-contacts" class="portal-contacts"></div>
       <div class="portal-view-tabs filter-tabs mb-3" id="portal-view-tabs">
@@ -220,6 +223,8 @@ export async function renderPortalTimeline() {
       <div id="portal-gallery" class="d-none"></div>
     </div>
   `;
+
+  document.getElementById('portal-notif-btn').addEventListener('click', () => showPortalNotifPrefs());
 
   document.getElementById('portal-logout').addEventListener('click', async () => {
     const mid = 'portal-logout-' + Date.now();
@@ -707,6 +712,85 @@ async function loadPortalComments(postUuid, section) {
     });
   } catch (err) {
     section.innerHTML = `<div class="text-danger small">${err.message}</div>`;
+  }
+}
+
+async function showPortalNotifPrefs() {
+  const mid = 'portal-notif-' + Date.now();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-bell me-2"></i>${t('portal.notificationsTitle')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="${mid}-body">
+            <div class="loading">${t('app.loading')}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
+
+  try {
+    const { enabled, has_email, prefs } = await portalApi.get('/notification-prefs');
+    const body = document.getElementById(`${mid}-body`);
+    if (!enabled) {
+      body.innerHTML = `
+        <div class="alert alert-info mb-0">
+          <i class="bi bi-info-circle me-2"></i>
+          ${t('portal.notificationsDisabledByAdmin')}
+        </div>
+      `;
+      return;
+    }
+    if (!has_email) {
+      body.innerHTML = `
+        <div class="alert alert-warning mb-0">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          ${t('portal.notificationsNoEmail')}
+        </div>
+      `;
+      return;
+    }
+    body.innerHTML = `
+      <p class="text-muted small">${t('portal.notificationsIntro')}</p>
+      <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" id="${mid}-new-post" ${prefs.new_post ? 'checked' : ''}>
+        <label class="form-check-label" for="${mid}-new-post">${t('portal.notifyNewPost')}</label>
+      </div>
+      <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" id="${mid}-new-comment" ${prefs.new_comment ? 'checked' : ''}>
+        <label class="form-check-label" for="${mid}-new-comment">${t('portal.notifyNewComment')}</label>
+      </div>
+      <div id="${mid}-status" class="text-muted small"></div>
+    `;
+
+    const save = async () => {
+      const status = document.getElementById(`${mid}-status`);
+      status.textContent = '...';
+      try {
+        await portalApi.put('/notification-prefs', {
+          new_post: document.getElementById(`${mid}-new-post`).checked,
+          new_comment: document.getElementById(`${mid}-new-comment`).checked,
+        });
+        status.textContent = '✓';
+        setTimeout(() => { status.textContent = ''; }, 1500);
+      } catch (err) {
+        status.textContent = err.message;
+      }
+    };
+    document.getElementById(`${mid}-new-post`).addEventListener('change', save);
+    document.getElementById(`${mid}-new-comment`).addEventListener('change', save);
+  } catch (err) {
+    document.getElementById(`${mid}-body`).innerHTML = `
+      <div class="alert alert-danger mb-0">${err.message}</div>
+    `;
   }
 }
 

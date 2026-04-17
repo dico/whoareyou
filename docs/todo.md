@@ -36,15 +36,34 @@ Three-layer model shipped: per-type global rule (scope + app/email channels) + p
 
 ### Portal/guest notifications
 **Status:** Not started — guests receive no notifications. (Tenant users already get notified when guests post — see Phase 1 above.)
-**Why:** When a family member posts or comments, portal guests with access to that contact don't know about it. Also no way for a guest to subscribe to "new posts about Child X".
+**Why:** When a family member posts or comments, portal guests with access to that contact don't know about it.
 
-**Plan:**
-- Separate `portal_guest_notification_prefs` table (different from user prefs — guests have different access model)
-- Toggles per guest: "email me when there's a new post about X" (using their `portal_guest_contacts` access)
-- Send to `portal_guests.email` only, and only for contacts the guest already has access to
-- Explicitly exclude from the existing `sendDigestsForTenant()` path (which is for tenant **users** only)
-- Same 1-hour digest throttle pattern
-- Out of scope: push notifications, SMS, or in-portal bell (portal UI is minimal by design)
+#### Control model
+Two layers — both must be "on" for a guest to receive notifications:
+
+1. **Admin-side toggle** (per guest, in the edit-guest modal): "Varsler aktivert". Default **off** — admin enables it explicitly when the guest has been onboarded. Stored in `portal_guests.notifications_enabled` (new boolean column, default false).
+2. **Guest-side preferences** (in the portal, behind a 🔔 bell icon in the header): guest can turn off types they don't want. Stored in `portal_guest_notification_prefs`.
+
+If `notifications_enabled = false` on the guest row, no notifications are sent regardless of guest prefs.
+
+#### Phase 1 — Email
+- New column: `portal_guests.notifications_enabled` (boolean, default false)
+- New table: `portal_guest_notification_prefs` — guest_id, type (`new_post` / `new_comment`), enabled (bool). Defaults: `new_post = true`, `new_comment = false` (comments can be noisy).
+- Trigger: when a post/comment is created for a contact, notify portal guests who have access to that contact, `notifications_enabled = true`, and have the relevant pref enabled.
+- Send to `portal_guests.email` only, and only if email is set. Never use `sendDigestsForTenant()` (that path is for tenant users).
+- Throttle: 6-hour digest window per guest (guests are passive consumers, not active users — hourly would be too frequent).
+- Admin edit-guest modal: add "Varsler aktivert"-toggle (off by default).
+
+#### Phase 2 — Push (PWA)
+- Show "Legg til på hjemskjerm"-banner in portal after first login (dismissible, stored in localStorage). Platform-specific instructions (Safari: Del → Legg til; Chrome: Meny → Installer).
+- Bell icon in portal header opens a simple preferences modal: email on/off per type + push opt-in button (shown only if PWA is detected via `window.matchMedia('(display-mode: standalone)')`).
+- Reuse existing VAPID/web-push infrastructure from `services/notification-push.js`. New `portal_push_subscriptions` table (same shape as `push_subscriptions` but keyed to `portal_guest_id`).
+- Push fires immediately on post/comment (same as tenant user push); email digest remains the fallback.
+
+#### Out of scope
+- SMS
+- In-portal notification bell/unread count (portal UI stays minimal)
+- Notifications about contacts the guest does not have access to
 
 ### Email delivery — Phase 1 delivered ✅
 Hourly-throttled digest email implemented ([services/notification-email.js](../backend/src/services/notification-email.js)). `sendDigestsForTenant()` fires from `/notifications/generate`, family_post, and family_comment hooks. Throttle = 60 minutes per recipient, checked via `MAX(email_sent_at)` on their notifications. Defense-in-depth: `sendDigestFor()` verifies the recipient is an active member of the tenant before sending — never emails contacts, never emails outside the tenant.

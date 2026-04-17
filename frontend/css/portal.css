@@ -64,6 +64,13 @@
   font-size: 1rem;
 }
 
+.portal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.portal-header-btn,
 .portal-logout-btn {
   border: none;
   background: none;
@@ -78,6 +85,12 @@
   transition: var(--transition-fast);
 }
 
+.portal-header-btn {
+  font-size: 1.1rem;
+  padding: var(--space-xs);
+}
+
+.portal-header-btn:hover,
 .portal-logout-btn:hover {
   background: rgba(0, 0, 0, 0.04);
   color: var(--color-text);

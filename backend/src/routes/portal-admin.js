@@ -29,13 +29,33 @@ router.get('/guests', async (req, res, next) => {
       .select(
         'portal_guests.uuid', 'portal_guests.display_name', 'portal_guests.email',
         'portal_guests.is_active', 'portal_guests.last_login_at', 'portal_guests.created_at',
-        'lc.uuid as linked_contact_uuid', 'lc.first_name as contact_first_name',
+        'portal_guests.notifications_enabled',
+        'lc.id as _linked_id', 'lc.uuid as linked_contact_uuid',
+        'lc.first_name as contact_first_name', 'lc.last_name as contact_last_name',
         'cp.thumbnail_path as avatar'
       )
       .orderBy('portal_guests.display_name');
 
+    // Batch-fetch email fields for all linked contacts
+    const linkedIds = guests.map(g => g._linked_id).filter(Boolean);
+    const emailsByContact = new Map();
+    if (linkedIds.length) {
+      const emailFields = await db('contact_fields')
+        .join('contact_field_types', 'contact_fields.field_type_id', 'contact_field_types.id')
+        .whereIn('contact_fields.contact_id', linkedIds)
+        .where('contact_field_types.name', 'email')
+        .select('contact_fields.contact_id', 'contact_fields.value')
+        .orderBy('contact_fields.sort_order');
+      for (const f of emailFields) {
+        if (!emailsByContact.has(f.contact_id)) emailsByContact.set(f.contact_id, []);
+        emailsByContact.get(f.contact_id).push(f.value);
+      }
+    }
+
     // Get accessible contacts + session count for each guest
     for (const g of guests) {
+      g.linked_contact_emails = emailsByContact.get(g._linked_id) || [];
+      delete g._linked_id;
       const guestRow = await db('portal_guests').where({ uuid: g.uuid }).first();
       g.contacts = await db('portal_guest_contacts')
         .where({ portal_guest_id: guestRow.id })
@@ -111,6 +131,7 @@ router.put('/guests/:uuid', async (req, res, next) => {
     if (req.body.email !== undefined) updates.email = req.body.email?.trim().toLowerCase() || null;
     if (req.body.password) updates.password_hash = await bcrypt.hash(req.body.password, 12);
     if (req.body.is_active !== undefined) updates.is_active = !!req.body.is_active;
+    if (req.body.notifications_enabled !== undefined) updates.notifications_enabled = !!req.body.notifications_enabled;
     if (req.body.linked_contact_uuid !== undefined) {
       if (req.body.linked_contact_uuid) {
         const contact = await db('contacts').where({ uuid: req.body.linked_contact_uuid, tenant_id: req.tenantId }).first();

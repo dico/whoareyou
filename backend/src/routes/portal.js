@@ -166,6 +166,39 @@ router.get('/me', portalAuthenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/portal/notification-prefs — guest's own notification preferences
+router.get('/notification-prefs', portalAuthenticate, async (req, res, next) => {
+  try {
+    const guest = await db('portal_guests').where({ id: req.portal.guestId })
+      .select('notifications_enabled', 'notify_new_post', 'notify_new_comment', 'email')
+      .first();
+    if (!guest) throw new AppError('Not found', 404);
+    res.json({
+      enabled: !!guest.notifications_enabled,
+      has_email: !!guest.email,
+      prefs: {
+        new_post: !!guest.notify_new_post,
+        new_comment: !!guest.notify_new_comment,
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/portal/notification-prefs — guest updates their own per-type toggles
+// Guest can only toggle per-type prefs — the master `notifications_enabled`
+// switch is admin-controlled (portal-admin route).
+router.put('/notification-prefs', portalAuthenticate, async (req, res, next) => {
+  try {
+    const updates = {};
+    if (req.body.new_post !== undefined) updates.notify_new_post = !!req.body.new_post;
+    if (req.body.new_comment !== undefined) updates.notify_new_comment = !!req.body.new_comment;
+    if (Object.keys(updates).length) {
+      await db('portal_guests').where({ id: req.portal.guestId }).update(updates);
+    }
+    res.json({ message: 'Prefs updated' });
+  } catch (err) { next(err); }
+});
+
 // GET /api/portal/contacts — contacts this guest can see
 router.get('/contacts', portalAuthenticate, async (req, res, next) => {
   try {

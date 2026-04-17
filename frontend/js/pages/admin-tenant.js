@@ -693,7 +693,7 @@ async function loadPortalGuests() {
             <div class="dropdown">
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" data-bs-display="static"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown" style="z-index:1050">
-                <li><a class="dropdown-item btn-edit-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}" data-email="${g.email || ''}" data-linked="${g.linked_contact_uuid || ''}" data-contacts='${JSON.stringify(g.contacts.map(c=>c.uuid))}'><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+                <li><a class="dropdown-item btn-edit-guest" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}" data-email="${g.email || ''}" data-linked="${g.linked_contact_uuid || ''}" data-linked-name="${[g.contact_first_name, g.contact_last_name].filter(Boolean).join(' ')}" data-linked-avatar="${g.avatar || ''}" data-linked-emails='${JSON.stringify(g.linked_contact_emails || [])}' data-contacts='${JSON.stringify(g.contacts.map(c=>c.uuid))}' data-notifications-enabled="${g.notifications_enabled ? '1' : '0'}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
                 <li><a class="dropdown-item btn-create-guest-link" href="#" data-uuid="${g.uuid}" data-name="${g.display_name}"><i class="bi bi-link-45deg me-2"></i>${t('portal.shareLinks')}</a></li>
                 <li><a class="dropdown-item btn-toggle-guest" href="#" data-uuid="${g.uuid}" data-active="${g.is_active ? '1' : '0'}"><i class="bi bi-${g.is_active ? 'pause' : 'play'} me-2"></i>${g.is_active ? t('admin.deactivate') : t('admin.activate')}</a></li>
                 <li><hr class="dropdown-divider"></li>
@@ -976,7 +976,36 @@ function showAddGuestModal() {
 function showEditGuestModal(data) {
   const mid = 'edit-guest-' + Date.now();
   const existingContactUuids = JSON.parse(data.contacts || '[]');
+  const linkedEmails = JSON.parse(data.linkedEmails || '[]');
   const selectedContacts = [];
+
+  // Linked contact chip (read-only)
+  const linkedChipHtml = data.linked ? `
+    <div class="mb-3">
+      <label class="form-label text-muted small">${t('portal.whoIsGuest')}</label>
+      <div>
+        <a href="/contacts/${data.linked}" class="contact-chip text-decoration-none">
+          <span class="contact-chip-avatar">${data.linkedAvatar ? `<img src="${authUrl(data.linkedAvatar)}" alt="">` : `<span>${(data.linkedName?.[0] || '')}</span>`}</span>
+          ${data.linkedName}
+        </a>
+      </div>
+    </div>` : '';
+
+  // Email field: select with contact emails if available, else plain input
+  const emailFieldHtml = linkedEmails.length ? `
+    <div class="mb-3">
+      <label class="form-label">${t('auth.email')}</label>
+      <select class="form-select" id="${mid}-email-select">
+        <option value="">${t('portal.noEmail')}</option>
+        ${linkedEmails.map(e => `<option value="${e}" ${data.email === e ? 'selected' : ''}>${e}</option>`).join('')}
+        <option value="__custom__" ${data.email && !linkedEmails.includes(data.email) ? 'selected' : ''}>${t('portal.customEmail')}</option>
+      </select>
+      <input type="email" class="form-control mt-2 ${data.email && !linkedEmails.includes(data.email) ? '' : 'd-none'}" id="${mid}-email-custom" value="${data.email && !linkedEmails.includes(data.email) ? data.email : ''}" placeholder="${t('auth.email')}">
+    </div>` : `
+    <div class="form-floating mb-3">
+      <input type="email" class="form-control" id="${mid}-email" value="${data.email}">
+      <label>${t('auth.email')}</label>
+    </div>`;
 
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${mid}" tabindex="-1">
@@ -988,6 +1017,7 @@ function showEditGuestModal(data) {
           </div>
           <form id="${mid}-form">
             <div class="modal-body">
+              ${linkedChipHtml}
               <div class="form-floating mb-3">
                 <input type="text" class="form-control" id="${mid}-name" value="${data.name}" required>
                 <label>${t('portal.guestName')}</label>
@@ -1000,13 +1030,15 @@ function showEditGuestModal(data) {
                   <div class="product-picker-dropdown d-none" id="${mid}-results"></div>
                 </div>
               </div>
-              <div class="form-floating mb-3">
-                <input type="email" class="form-control" id="${mid}-email" value="${data.email}">
-                <label>${t('auth.email')}</label>
-              </div>
+              ${emailFieldHtml}
               <div class="form-floating mb-3">
                 <input type="password" class="form-control" id="${mid}-password" placeholder=" ">
                 <label>${t('admin.newPassword')} <span class="text-muted fw-normal">(${t('admin.newPasswordHint')})</span></label>
+              </div>
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="${mid}-notif" ${data.notificationsEnabled === '1' ? 'checked' : ''}>
+                <label class="form-check-label" for="${mid}-notif">${t('portal.notificationsEnabled')}</label>
+                <div class="form-text">${t('portal.notificationsEnabledHint')}</div>
               </div>
               <div id="${mid}-error" class="alert alert-danger d-none"></div>
             </div>
@@ -1038,14 +1070,38 @@ function showEditGuestModal(data) {
 
   setupPortalContactSearch(`${mid}-search`, `${mid}-results`, `${mid}-chips`, selectedContacts);
 
+  // Toggle custom email input when "Annen e-post..." is selected
+  const emailSelect = document.getElementById(`${mid}-email-select`);
+  if (emailSelect) {
+    emailSelect.addEventListener('change', () => {
+      const customInput = document.getElementById(`${mid}-email-custom`);
+      if (emailSelect.value === '__custom__') {
+        customInput.classList.remove('d-none');
+        customInput.focus();
+      } else {
+        customInput.classList.add('d-none');
+        customInput.value = '';
+      }
+    });
+  }
+
   document.getElementById(`${mid}-form`).addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById(`${mid}-error`);
     errorEl.classList.add('d-none');
     try {
+      let email;
+      if (emailSelect) {
+        email = emailSelect.value === '__custom__'
+          ? (document.getElementById(`${mid}-email-custom`).value.trim() || null)
+          : (emailSelect.value || null);
+      } else {
+        email = document.getElementById(`${mid}-email`).value.trim() || null;
+      }
       const payload = {
         display_name: document.getElementById(`${mid}-name`).value.trim(),
-        email: document.getElementById(`${mid}-email`).value.trim() || null,
+        email,
+        notifications_enabled: document.getElementById(`${mid}-notif`).checked,
       };
       const pw = document.getElementById(`${mid}-password`).value;
       if (pw) payload.password = pw;
