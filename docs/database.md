@@ -134,7 +134,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 77 migrations
+- Currently 82 migrations
 
 ### Creating a New Migration
 ```bash

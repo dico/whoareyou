@@ -998,11 +998,12 @@ a.post-comment-author:hover {
 .edit-tag {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 8px;
-  background: rgba(0, 122, 255, 0.1);
-  color: var(--color-primary);
+  gap: 6px;
+  padding: 2px 10px 2px 2px;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
 }
@@ -1013,7 +1014,8 @@ a.post-comment-author:hover {
   background: none;
   border: none;
   padding: 0;
-  color: var(--color-primary);
+  margin-left: -2px;
+  color: var(--color-text-secondary);
   cursor: pointer;
   opacity: 0.5;
   font-size: 12px;
@@ -1065,6 +1067,20 @@ a.post-comment-author:hover {
 
 .edit-actions {
   display: flex;
+  align-items: center;
   gap: 2px;
   flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .edit-bar {
+    flex-wrap: wrap;
+  }
+  .edit-actions {
+    width: 100%;
+    justify-content: flex-end;
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-xs);
+    margin-top: var(--space-xs);
+  }
 }

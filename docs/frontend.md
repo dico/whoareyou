@@ -9,7 +9,8 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `contactRowHtml()` | `contact-row.js` | Standardized contact row: avatar + name + meta. Used in search, sidebar, dialogs. |
 | `confirmDialog()` | `dialogs.js` | Replaces `window.confirm()`. Returns Promise\<boolean\>. Options: `title`, `confirmText`, `confirmClass`, `size`. |
 | `contactSearchDialog()` | `dialogs.js` | Modal contact search. **Never call from inside another modal** — use inline search instead. |
-| `renderPostList()` | `post-list.js` | Timeline post list with edit, delete, comments, reactions, media lightbox. Supports `portalMode`. |
+| `groupSearchDialog()` | `dialogs.js` | Modal group/company search. Same pattern as `contactSearchDialog`. Returns `{ uuid, name, logo_path }`. |
+| `renderPostList()` | `post-list.js` | Timeline post list with edit, delete, move, comments, reactions, media lightbox. Supports `portalMode`. Post dropdown includes "Move post" section for moving between contact walls, group walls, and main timeline. |
 | `addContactModalHtml()` / `initAddContactModal()` / `showAddContactModal()` | `add-contact-modal.js` | Reusable new-contact modal. Used on timeline and contacts page. |
 | `renderNavbar()` | `navbar.js` | Main navigation bar with search, notifications, user dropdown. |
 | `showPhotoViewer()` | `photo-viewer.js` | Lightbox for contact photos. Navigate, set primary, delete, drag-and-drop upload. |

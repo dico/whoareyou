@@ -65,6 +65,7 @@ async function initInput(input) {
     altInput: true,
     altFormat: locale === 'nb' ? 'd.m.Y' : 'd/m/Y',
     allowInput: true,
+    disableMobile: true,
     defaultDate: val || null,
   });
 

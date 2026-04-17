@@ -78,7 +78,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 | DELETE | `/permanent/:uuid` | Permanently delete post and files |
 | GET | `/gallery` | Photo gallery for a contact |
 | POST | `/` | Create post |
-| PUT | `/:uuid` | Update post |
+| PUT | `/:uuid` | Update post (supports `about_contact_uuid` and `company_uuid` for moving between walls — mutually exclusive, setting one clears the other) |
 | DELETE | `/:uuid` | Delete post |
 | GET | `/:uuid/comments` | List comments |
 | POST | `/:uuid/comments` | Add comment |

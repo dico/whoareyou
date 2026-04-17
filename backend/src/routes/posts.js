@@ -10,6 +10,7 @@ import { getLinkedContactId } from '../utils/tenant.js';
 import { filterSensitivePosts, filterSensitiveContacts, parseSensitiveFlag, stripSensitiveContacts } from '../utils/sensitive.js';
 import { tryCreateNotification } from '../utils/notification-prefs.js';
 import { sendDigestsForTenant } from '../services/notification-email.js';
+import { sendPortalDigestsForTenant } from '../services/portal-notification-email.js';
 
 const router = Router();
 
@@ -719,6 +720,11 @@ async function notifyFamilyPost(req, post, created) {
     }, { contactId: authorLinkedContactId, authorUserId, authorIsGuest: false });
   }
   sendDigestsForTenant(req.tenantId).catch(() => {});
+  // Portal guests have a separate digest flow with its own 6h throttle and
+  // per-guest access check — never emails guests outside their contact scope.
+  if (created.visibility === 'shared') {
+    sendPortalDigestsForTenant(req.tenantId).catch(() => {});
+  }
 }
 
 // PUT /api/posts/:uuid — update post
@@ -747,7 +753,7 @@ router.put('/:uuid', async (req, res, next) => {
       if (req.body.visibility !== undefined) updates.visibility = ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared';
       if (req.body.is_sensitive !== undefined) updates.is_sensitive = parseSensitiveFlag(req.body.is_sensitive);
 
-      // Change "about" contact (profile post)
+      // Change "about" contact (profile post) — clears company_id (mutually exclusive)
       if (req.body.about_contact_uuid !== undefined) {
         if (req.body.about_contact_uuid === null) {
           updates.contact_id = null;
@@ -756,7 +762,25 @@ router.put('/:uuid', async (req, res, next) => {
             .where({ uuid: req.body.about_contact_uuid, tenant_id: req.tenantId })
             .whereNull('deleted_at')
             .first();
-          if (aboutContact) updates.contact_id = aboutContact.id;
+          if (aboutContact) {
+            updates.contact_id = aboutContact.id;
+            updates.company_id = null;
+          }
+        }
+      }
+
+      // Change "about" company/group — clears contact_id (mutually exclusive)
+      if (req.body.company_uuid !== undefined) {
+        if (req.body.company_uuid === null) {
+          updates.company_id = null;
+        } else {
+          const companyRow = await trx('companies')
+            .where({ uuid: req.body.company_uuid, tenant_id: req.tenantId })
+            .first();
+          if (companyRow) {
+            updates.company_id = companyRow.id;
+            updates.contact_id = null;
+          }
         }
       }
 
@@ -1038,6 +1062,11 @@ async function notifyFamilyComment(req, post, comment, { commentBody, authorIsGu
     });
   }
   sendDigestsForTenant(req.tenantId).catch(() => {});
+  // Portal guests with notify_new_comment enabled (and access to the post's
+  // contact) get a 6h-throttled digest. Shared-only — never family posts.
+  if (post.visibility === 'shared') {
+    sendPortalDigestsForTenant(req.tenantId).catch(() => {});
+  }
 }
 
 // DELETE /api/posts/:uuid/comments/:id

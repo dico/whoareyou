@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import { confirmDialog, contactSearchDialog } from './dialogs.js';
+import { confirmDialog, contactSearchDialog, groupSearchDialog } from './dialogs.js';
 import { attachMention } from './mention.js';
 import { t, formatDate, timeAgo, formatDateTime } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
@@ -103,6 +103,11 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
                 <li><a class="dropdown-item btn-edit-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><h6 class="dropdown-header">${t('posts.movePost')}</h6></li>
+                <li><a class="dropdown-item btn-move-to-contact" href="#" data-uuid="${p.uuid}"><i class="bi bi-person me-2"></i>${t('posts.moveToContact')}</a></li>
+                <li><a class="dropdown-item btn-move-to-group" href="#" data-uuid="${p.uuid}"><i class="bi bi-people me-2"></i>${t('posts.moveToGroup')}</a></li>
+                ${p.about || p.company ? `<li><a class="dropdown-item btn-move-to-timeline" href="#" data-uuid="${p.uuid}"><i class="bi bi-house me-2"></i>${t('posts.moveToTimeline')}</a></li>` : ''}
                 <li><hr class="dropdown-divider"></li>
                 <li><h6 class="dropdown-header">${t('visibility.title')}</h6></li>
                 <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="shared">
@@ -261,6 +266,12 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             <div class="edit-tags-list">
               ${p.contacts.map(c => `
                 <span class="edit-tag" data-uuid="${c.uuid}">
+                  <span class="contact-chip-avatar">
+                    ${c.avatar
+                      ? `<img src="${authUrl(c.avatar)}" alt="">`
+                      : `<span>${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>`
+                    }
+                  </span>
                   ${escapeHtml(c.first_name)} ${escapeHtml(c.last_name || '')}
                   <button type="button" class="btn-remove-tag" data-uuid="${c.uuid}"><i class="bi bi-x"></i></button>
                 </span>
@@ -321,7 +332,11 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             const tag = document.createElement('span');
             tag.className = 'edit-tag';
             tag.dataset.uuid = contact.uuid;
-            tag.innerHTML = `${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
+            const initials = (contact.first_name[0] || '') + (contact.last_name?.[0] || '');
+            const avatarHtml = contact.avatar
+              ? `<img src="${authUrl(contact.avatar)}" alt="">`
+              : `<span>${initials}</span>`;
+            tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
             tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
             tagsList.insertBefore(tag, btn);
           } catch {}
@@ -468,7 +483,11 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             const tag = document.createElement('span');
             tag.className = 'edit-tag';
             tag.dataset.uuid = contact.uuid;
-            tag.innerHTML = `${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
+            const initials = (contact.first_name[0] || '') + (contact.last_name?.[0] || '');
+            const avatarHtml = contact.avatar
+              ? `<img src="${authUrl(contact.avatar)}" alt="">`
+              : `<span>${initials}</span>`;
+            tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
             tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
             const addBtn = tagsList.querySelector('.btn-add-tag-edit');
             tagsList.insertBefore(tag, addBtn);
@@ -597,6 +616,37 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             `;
           }
         }
+      });
+    });
+
+    // Move post to contact wall
+    el.querySelectorAll('.btn-move-to-contact').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const contact = await contactSearchDialog({ title: t('posts.moveToContact') });
+        if (!contact) return;
+        await api.put(`/posts/${btn.dataset.uuid}`, { about_contact_uuid: contact.uuid });
+        if (onChanged) onChanged();
+      });
+    });
+
+    // Move post to group wall
+    el.querySelectorAll('.btn-move-to-group').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const group = await groupSearchDialog({ title: t('posts.moveToGroup') });
+        if (!group) return;
+        await api.put(`/posts/${btn.dataset.uuid}`, { company_uuid: group.uuid });
+        if (onChanged) onChanged();
+      });
+    });
+
+    // Move post back to main timeline
+    el.querySelectorAll('.btn-move-to-timeline').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await api.put(`/posts/${btn.dataset.uuid}`, { about_contact_uuid: null, company_uuid: null });
+        if (onChanged) onChanged();
       });
     });
 

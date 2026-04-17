@@ -60,7 +60,7 @@ All dropdowns/search results use `background: var(--color-surface)` — no glass
 All lists showing contacts use `contactRowHtml()` from `components/contact-row.js`. 32px avatar, name, optional meta text. Same hover effect everywhere. Never build custom avatar+name structures.
 
 ### 7. Contact chips
-For inline contact references (tags, selections), use `.contact-chip` with `.contact-chip-avatar` + name + optional `.contact-chip-remove`. Same pattern for country tags with flags.
+For inline contact references (tags, selections), use `.contact-chip` with `.contact-chip-avatar` + name + optional `.contact-chip-remove`. Same pattern for country tags with flags. The `.edit-tag` class in post edit mode follows the same chip pattern (avatar + name + remove button) — never use plain text pills without avatars.
 
 **Always show profile photo** in the avatar slot when available. Backend must include `avatar` (thumbnail_path) in every response that feeds contact chips. Fallback to initials only when no photo exists:
 ```html
@@ -135,13 +135,13 @@ When a URL is typed/pasted in post compose or edit, a link preview card is fetch
 - Preview data saved to `post_link_previews` table (persists if URL goes offline)
 - Auto-fetched when editing old posts that have URLs but no saved preview
 
-### 23. Contact fields — auto-detect
+### 24. Contact fields — auto-detect
 When adding a contact field, the type select is hidden. A small "auto" badge shows instead. Pasting a URL auto-detects the platform (Facebook, Instagram, LinkedIn, YouTube, etc.), email addresses and phone numbers are also detected. Click the badge to manually override. Social media fields display the type name (e.g. "Facebook") rather than extracted usernames.
 
-### 24. Duplicate detection and merge
+### 25. Duplicate detection and merge
 `/admin/duplicates` finds potential duplicates by scoring name similarity, birthday, email, and phone matches. Merge transfers all data (posts, relationships, photos, fields, addresses, companies) to the kept contact and soft-deletes the other. Routes under `/contacts/tools/*` to avoid `/:uuid` collision.
 
-### 25. Contact search component (`components/contact-search.js`)
+### 26. Contact search component (`components/contact-search.js`)
 Reusable floating contact search dropdown. Use `attachContactSearch(inputElement, options)` instead of writing inline search logic.
 
 **Usage:**
@@ -169,7 +169,7 @@ const search = attachContactSearch(inputEl, {
 
 **CSS classes:** `.contact-search-dropdown`, `.contact-search-item`, `.contact-search-empty`
 
-### 26. Detail header pattern (CSS in `base.css`)
+### 27. Detail header pattern (CSS in `base.css`)
 Reusable header for detail pages that need an icon + title/meta + actions, with a toolbar row below. Used by gift events and groups.
 
 ```html
@@ -193,14 +193,14 @@ Reusable header for detail pages that need an icon + title/meta + actions, with 
 
 **Refactoring status:** See [TODO](todo.md) for remaining files.
 
-### 26. Submit loading state
+### 28. Submit loading state
 When submitting actions that may take time (post with media upload, export, etc.), the submit button must:
 - Disable immediately on click (prevent double-submit)
 - Show a spinner (`<span class="spinner-border spinner-border-sm">`) replacing button text
 - Re-enable after completion (success or error)
 - Restore original button text
 
-### 27. Fade-out on delete
+### 29. Fade-out on delete
 When removing items from a list (posts, trash items), use a fade-out animation before removing from DOM:
 ```javascript
 el.style.transition = 'opacity 0.3s, transform 0.3s';
@@ -211,16 +211,20 @@ el.remove();
 ```
 This provides visual confirmation that the item was removed, especially when identical items are adjacent.
 
-### 28. Date picker (`utils/datepicker.js`)
+### 30. Mobile-responsive action bars
+On narrow screens (≤480px), action bars with multiple items (tags + date + buttons) should wrap to multiple rows rather than cramming everything on one line. The post edit bar uses `flex-wrap` with a `border-top` separator on the actions row at this breakpoint. Apply the same pattern to any toolbar that combines inputs and buttons.
+
+### 31. Date picker (`utils/datepicker.js`)
 All date inputs use flatpickr (CDN) for locale-aware formatting. **No manual initialization needed** — a MutationObserver automatically converts any `<input type="date">` that appears in the DOM.
 
 - Norwegian: `dd.mm.yyyy`, English: `dd/mm/yyyy`
 - Internal value is always `YYYY-MM-DD` (altInput mode)
+- `disableMobile: true` — forces flatpickr's own picker on all devices. Without this, iOS shows its native datepicker which uses a localized format (e.g. "15. apr 2026") and doesn't sync changes back to flatpickr's hidden input.
 - Compact width via `.fp-date` class (`width: 120px`)
 - Lazy-loaded: flatpickr JS/CSS only fetched on first date input
 - Just use `<input type="date">` — it works everywhere (pages, modals, dynamic forms)
 
-### 29. Performance: avoid MutationObserver with subtree
+### 32. Performance: avoid MutationObserver with subtree
 **Never** use `MutationObserver` with `{ childList: true, subtree: true }` on `document.body` for scanning/initializing elements. It fires on EVERY DOM change in the entire app — with large renders (e.g. 20 posts × many child elements), this causes thousands of synchronous callbacks that freeze the browser or trigger Chrome's "Out of Memory" crash.
 
 **Instead:**
@@ -229,7 +233,7 @@ All date inputs use flatpickr (CDN) for locale-aware formatting. **No manual ini
 - Only observe specific containers, never the entire body
 - This lesson was learned when flatpickr's auto-init observer crashed Chrome at ~1900 posts in production
 
-### 30. Portal post creation
+### 33. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 
 ## i18n
