@@ -1293,5 +1293,16 @@
     "empty": "No images found",
     "countAvailable": "{n} images available",
     "nSelected": "{n} selected"
+  },
+  "mg": {
+    "authorsTitle": "Change author",
+    "authorsDesc": "Change who is registered as author on imported MomentGarden posts. Select a person in the quick-select, then click \"Assign\" on the posts.",
+    "authorsLinkDesc": "Correct who originally posted imported photos",
+    "openAuthors": "Change authors",
+    "quickSelect": "Select author",
+    "importedPosts": "imported posts",
+    "unknownAuthor": "Unknown",
+    "assignAuthor": "Assign author",
+    "assign": "Assign"
   }
 }

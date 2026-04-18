@@ -31,6 +31,19 @@ export async function renderMomentGarden() {
         </ol>
       </div>
 
+      <!-- Author reassignment -->
+      <div class="settings-section glass-card mt-3">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <h4 class="mb-1">${t('mg.authorsTitle')}</h4>
+            <p class="text-muted small mb-0">${t('mg.authorsLinkDesc')}</p>
+          </div>
+          <a href="/admin/integrations/momentgarden/authors" data-link class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-people me-1"></i>${t('mg.openAuthors')}
+          </a>
+        </div>
+      </div>
+
       <!-- Select contact -->
       <div class="settings-section glass-card mt-3">
         <h4>${t('integrations.targetContact')}</h4>

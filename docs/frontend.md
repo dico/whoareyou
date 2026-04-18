@@ -95,6 +95,7 @@ The dedicated **Editor view** was removed — its job (per-post weight, image in
 | System Admin | `/admin/system` | `renderSystemAdmin()` — 4 tabs: Tenants, Settings, Email, IP Security |
 | Integrations | `/admin/integrations` | `renderIntegrations()` |
 | MomentGarden | `/admin/integrations/momentgarden` | `renderMomentGarden()` |
+| MG Authors | `/admin/integrations/momentgarden/authors` | `renderMgAuthors()` — bulk reassign post authors for MG-imported posts. Inline avatar picks per row for family members + portal guests, plus contact search (+) button for any contact. Uses `PUT /posts/:uuid/author` with `contact_uuid`. |
 | Labels | `/admin/labels` | `renderLabelAdmin()` |
 | Addresses | `/admin/addresses` | `renderAddressMerge()` |
 | Relationships | `/admin/relationships` | `renderRelationshipSuggestions()` |

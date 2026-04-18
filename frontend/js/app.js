@@ -23,6 +23,7 @@ import { renderLabelAdmin } from './pages/admin-labels.js';
 import { renderRelationshipSuggestions } from './pages/admin-relationships.js';
 import { renderIntegrations } from './pages/admin-integrations.js';
 import { renderMomentGarden } from './pages/admin-momentgarden.js';
+import { renderMgAuthors } from './pages/admin-mg-authors.js';
 import { renderGifts, renderGiftEvents } from './pages/gifts.js';
 import { renderGiftEventDetail } from './pages/gift-event-detail.js';
 import { renderGiftProducts } from './pages/gift-products.js';
@@ -63,6 +64,7 @@ const routes = {
   '/admin/relationships': () => renderRelationshipSuggestions(),
   '/admin/integrations': () => renderIntegrations(),
   '/admin/integrations/momentgarden': () => renderMomentGarden(),
+  '/admin/integrations/momentgarden/authors': () => renderMgAuthors(),
   '/gifts': () => renderGifts(),
   '/gifts/events': () => renderGiftEvents(),
   '/gifts/events/:uuid': (params) => renderGiftEventDetail(params.uuid),

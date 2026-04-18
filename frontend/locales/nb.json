@@ -1293,5 +1293,16 @@
     "empty": "Ingen bilder funnet",
     "countAvailable": "{n} bilder tilgjengelig",
     "nSelected": "{n} valgt"
+  },
+  "mg": {
+    "authorsTitle": "Endre forfatter",
+    "authorsDesc": "Endre hvem som er registrert som forfatter på importerte MomentGarden-innlegg. Velg en person i hurtigvalget, deretter klikk «Tildel» på innleggene.",
+    "authorsLinkDesc": "Korrigér hvem som opprinnelig la ut importerte bilder",
+    "openAuthors": "Endre forfattere",
+    "quickSelect": "Velg forfatter",
+    "importedPosts": "importerte innlegg",
+    "unknownAuthor": "Ukjent",
+    "assignAuthor": "Tildel forfatter",
+    "assign": "Tildel"
   }
 }
