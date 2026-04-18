@@ -126,8 +126,8 @@ SET @post_id = LAST_INSERT_ID();
 
 -- Add a dummy media entry so MG-authors page shows it (optional)
 -- Only needed if you want the post to appear in MG sync flow
-INSERT INTO post_media (post_id, tenant_id, file_path, file_type, external_id, sort_order)
-VALUES (@post_id, 1, '', 'text/plain', 'mg:MOMENT_ID', 0);
+INSERT INTO post_media (post_id, tenant_id, file_path, file_type, external_id, sort_order, file_size)
+VALUES (@post_id, 1, '', 'text/plain', 'mg:MOMENT_ID', 0, 0);
 ```
 
 ### 3. Add likes (reactions)

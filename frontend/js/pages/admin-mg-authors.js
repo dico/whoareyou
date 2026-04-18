@@ -116,8 +116,12 @@ function renderList(container, data) {
       const bodyPreview = post.body ? post.body.slice(0, 60) + (post.body.length > 60 ? '…' : '') : '';
       const dateStr = post.post_date ? new Date(post.post_date).toLocaleDateString('nb-NO') : '';
 
+      // Check if current author is outside the people list
+      const author = post.author; // { name, uuid, avatar } or null
+      const authorInPeople = author && people.some(p => p.contact_uuid === author.uuid);
+
       const avatarPicks = people.map(p => {
-        const isActive = post.author === p.name;
+        const isActive = author && p.contact_uuid === author.uuid;
         return `<div class="mg-avatar-pick ${isActive ? 'is-active' : ''}" data-contact-uuid="${p.contact_uuid}" title="${p.name}">
           ${p.avatar
             ? `<img src="${authUrl(p.avatar)}" alt="">`
@@ -125,6 +129,16 @@ function renderList(container, data) {
           }
         </div>`;
       }).join('');
+
+      // If author is set but not in the people list, add an extra avatar
+      const extraAuthor = (author && !authorInPeople)
+        ? `<div class="mg-avatar-pick is-active" data-contact-uuid="${author.uuid}" title="${author.name}">
+            ${author.avatar
+              ? `<img src="${authUrl(author.avatar)}" alt="">`
+              : `<span>${author.name[0]}</span>`
+            }
+          </div>`
+        : '';
 
       row.innerHTML = `
         ${thumb}
@@ -137,6 +151,7 @@ function renderList(container, data) {
         </div>
         <div class="mg-avatar-picks">
           ${avatarPicks}
+          ${extraAuthor}
           <div class="mg-avatar-pick mg-avatar-search" title="${t('common.search')}"><span>+</span></div>
         </div>
       `;

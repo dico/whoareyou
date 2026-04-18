@@ -630,13 +630,18 @@ router.get('/mg-imported', async (req, res, next) => {
       for (const c of contacts) contactMap.set(c.id, c.first_name);
     }
 
-    // Current author names via author_contact_id
+    // Current author info via author_contact_id (name + uuid + avatar)
     const authorCids = [...new Set(posts.map(p => p.author_contact_id).filter(Boolean))];
     const authorMap = new Map();
     if (authorCids.length) {
-      const authors = await db('contacts').whereIn('id', authorCids)
-        .where({ tenant_id: req.tenantId }).select('id', 'first_name');
-      for (const a of authors) authorMap.set(a.id, a.first_name);
+      const authors = await db('contacts').whereIn('contacts.id', authorCids)
+        .leftJoin('contact_photos', function () {
+          this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('1'));
+        })
+        .where('contacts.tenant_id', req.tenantId)
+        .select('contacts.id', 'contacts.first_name', 'contacts.uuid',
+          'contact_photos.thumbnail_path as avatar');
+      for (const a of authors) authorMap.set(a.id, { name: a.first_name, uuid: a.uuid, avatar: a.avatar || null });
     }
 
     // Tenant members + portal guests for the quick-select
