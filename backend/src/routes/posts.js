@@ -647,7 +647,7 @@ router.get('/mg-imported', async (req, res, next) => {
         this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('1'));
       })
       .where('tenant_members.tenant_id', req.tenantId)
-      .where('users.is_active', true)
+      .whereNotNull('tenant_members.linked_contact_id')
       .select('users.id as user_id', 'contacts.id as linked_contact_id',
         'contacts.first_name', 'contacts.uuid as contact_uuid',
         'contact_photos.thumbnail_path as avatar');
