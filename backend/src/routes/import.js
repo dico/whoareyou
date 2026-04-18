@@ -8,6 +8,7 @@ import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
 import { config } from '../config/index.js';
+import { getLinkedContactId } from '../utils/tenant.js';
 
 const router = Router();
 
@@ -82,10 +83,23 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
       .select('post_media.original_name');
     const importedNames = new Set(existingMedia.map(m => m.original_name));
 
+    // Find orphaned posts (have caption text but no media — failed previous import)
+    const orphanedPosts = await db('posts')
+      .where({ contact_id: contact.id, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .whereNotExists(db('post_media').whereRaw('post_media.post_id = posts.id'))
+      .select('id', 'body', 'post_date');
+    const orphanByCaption = new Map();
+    for (const op of orphanedPosts) {
+      if (op.body) orphanByCaption.set(op.body.trim(), op);
+    }
+
     let postsCreated = 0;
     let mediaImported = 0;
+    let repaired = 0;
     let skipped = 0;
     let duplicates = 0;
+    const skippedFiles = [];
 
     for (const moment of moments) {
       const ext = path.extname(moment.filename).toLowerCase();
@@ -93,18 +107,18 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
       const isVideo = VIDEO_EXTS.includes(ext);
 
       if (!isImage && !isVideo) {
-        console.log(`MomentGarden import: skipping unsupported file type "${ext}" for ${moment.filename}`);
+        skippedFiles.push({ file: moment.filename, reason: 'unsupported' });
         skipped++;
         continue;
       }
 
-      // Skip duplicates (already imported)
+      // Skip duplicates (already imported with media)
       if (importedNames.has(moment.filename)) { duplicates++; continue; }
 
       // Find the file in the ZIP
       const fileEntry = fileMap.get(moment.filename);
       if (!fileEntry) {
-        console.log(`MomentGarden import: file not found in ZIP: ${moment.filename}`);
+        skippedFiles.push({ file: moment.filename, reason: 'not_in_zip', caption: moment.caption?.slice(0, 60) });
         skipped++;
         continue;
       }
@@ -112,19 +126,32 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
       // Mark as imported to prevent duplicates within same batch
       importedNames.add(moment.filename);
 
-      // Create the post
-      const postUuid = uuidv4();
-      const [postId] = await db('posts').insert({
-        uuid: postUuid,
-        tenant_id: req.tenantId,
-        created_by: req.user.id,
-        contact_id: contact.id,
-        body: moment.caption || '',
-        post_date: moment.date,
-        visibility: 'shared',
-      });
+      // Check if an orphaned post exists with the same caption — repair it
+      const orphan = orphanByCaption.get((moment.caption || '').trim());
+      let postId, postUuid;
 
-      postsCreated++;
+      if (orphan) {
+        postId = orphan.id;
+        const existing = await db('posts').where({ id: postId }).first();
+        postUuid = existing.uuid;
+        orphanByCaption.delete((moment.caption || '').trim());
+        repaired++;
+      } else {
+        // Create new post
+        postUuid = uuidv4();
+        const authorContactId = await getLinkedContactId(req.user.id, req.tenantId);
+        [postId] = await db('posts').insert({
+          uuid: postUuid,
+          tenant_id: req.tenantId,
+          created_by: req.user.id,
+          author_contact_id: authorContactId,
+          contact_id: contact.id,
+          body: moment.caption || '',
+          post_date: moment.date,
+          visibility: 'shared',
+        });
+        postsCreated++;
+      }
 
       // Extract file to temp, then process
       const tempPath = path.join(config.uploads.dir, 'temp', `mg_${Date.now()}_${moment.filename}`);
@@ -169,9 +196,16 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
 
         mediaImported++;
       } catch (err) {
-        // Clean up temp file on error
+        // Clean up temp file; only delete post if we created it (not repaired)
         await fs.unlink(tempPath).catch(() => {});
+        if (!orphan) {
+          await db('posts').where({ id: postId }).del().catch(() => {});
+          postsCreated--;
+        } else {
+          repaired--;
+        }
         console.error(`MomentGarden import: failed to process ${moment.filename}:`, err.message);
+        skippedFiles.push({ file: moment.filename, reason: 'processing_error', caption: moment.caption?.slice(0, 60), error: err.message });
         skipped++;
       }
     }
@@ -184,7 +218,7 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
     // Clean up uploaded ZIP
     await fs.unlink(req.file.path).catch(() => {});
 
-    res.json({ posts_created: postsCreated, media_imported: mediaImported, skipped, duplicates });
+    res.json({ posts_created: postsCreated, media_imported: mediaImported, repaired, skipped, duplicates, skipped_files: skippedFiles });
   } catch (err) {
     // Clean up on error
     if (req.file?.path) await fs.unlink(req.file.path).catch(() => {});

@@ -31,21 +31,22 @@ export async function processImage(inputPath, subDir, filename, { keepOriginal =
   const thumbPath = path.join(outDir, thumbFile);
 
   // Main image: resize + webp + strip metadata
-  await sharp(inputPath)
+  // failOn:'none' tolerates partially corrupted JPEGs (e.g. invalid SOS headers)
+  await sharp(inputPath, { failOn: 'none' })
     .rotate() // auto-rotate based on EXIF
     .resize(imageConfig.maxWidth, null, { withoutEnlargement: true })
     .webp({ quality: imageConfig.quality })
     .toFile(mainPath);
 
   // Medium variant: ~800px wide, good for inline timeline display
-  await sharp(inputPath)
+  await sharp(inputPath, { failOn: 'none' })
     .rotate()
     .resize(MEDIUM_WIDTH, null, { withoutEnlargement: true })
     .webp({ quality: imageConfig.quality })
     .toFile(mediumPath);
 
   // Thumbnail: square crop + webp
-  await sharp(inputPath)
+  await sharp(inputPath, { failOn: 'none' })
     .rotate()
     .resize(imageConfig.thumbnailSize, imageConfig.thumbnailSize, { fit: 'cover' })
     .webp({ quality: imageConfig.quality })
@@ -81,18 +82,18 @@ export async function rotateImage(filePath) {
 
   // Read file into memory first so sharp releases the file handle before we overwrite
   const mainInput = await fs.readFile(absPath);
-  const mainBuf = await sharp(mainInput).rotate(90).webp({ quality: imageConfig.quality }).toBuffer();
+  const mainBuf = await sharp(mainInput, { failOn: 'none' }).rotate(90).webp({ quality: imageConfig.quality }).toBuffer();
   await fs.writeFile(absPath, mainBuf);
 
   // Rotate medium (if exists)
   try {
     const medInput = await fs.readFile(mediumPath);
-    const medBuf = await sharp(medInput).rotate(90).webp({ quality: imageConfig.quality }).toBuffer();
+    const medBuf = await sharp(medInput, { failOn: 'none' }).rotate(90).webp({ quality: imageConfig.quality }).toBuffer();
     await fs.writeFile(mediumPath, medBuf);
   } catch {}
 
   // Regenerate thumbnail from rotated main
-  await sharp(mainBuf)
+  await sharp(mainBuf, { failOn: 'none' })
     .resize(imageConfig.thumbnailSize, imageConfig.thumbnailSize, { fit: 'cover' })
     .webp({ quality: imageConfig.quality })
     .toFile(thumbPath);
@@ -106,7 +107,7 @@ export async function rotateImage(filePath) {
  */
 export async function extractImageMetadata(inputPath) {
   try {
-    const meta = await sharp(inputPath).metadata();
+    const meta = await sharp(inputPath, { failOn: 'none' }).metadata();
     if (!meta.exif) return { date: null, latitude: null, longitude: null };
 
     const exif = exifReader(meta.exif);

@@ -266,8 +266,16 @@ export async function renderMomentGarden() {
       progressText.textContent = '';
       const lines = [];
       if (result.posts_created) lines.push(`<strong>${result.posts_created}</strong> ${t('integrations.newPostsCreated')}`);
+      if (result.repaired) lines.push(`<strong>${result.repaired}</strong> ${t('integrations.repaired')}`);
       if (result.duplicates) lines.push(`${result.duplicates} ${t('integrations.alreadyImported')}`);
-      if (result.skipped) lines.push(`${result.skipped} ${t('integrations.unsupported')}`);
+      const failures = (result.skipped_files || []).filter(f => f.reason !== 'unsupported');
+      if (failures.length) {
+        lines.push(`<strong>${failures.length} ${t('integrations.failed')}:</strong>`);
+        for (const f of failures) {
+          const reason = f.reason === 'not_in_zip' ? t('integrations.notInZip') : (f.error || t('common.error'));
+          lines.push(`<small class="text-muted ms-3">• ${f.file}${f.caption ? ` — "${f.caption}"` : ''} (${reason})</small>`);
+        }
+      }
       resultEl.innerHTML = `<div class="alert ${result.posts_created ? 'alert-success' : 'alert-info'}">
         ${lines.length ? lines.join('<br>') : t('integrations.nothingNew')}
       </div>`;
