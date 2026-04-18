@@ -96,11 +96,11 @@ For posts that weren't included in the ZIP export (text-only posts, corrupted im
 ```sql
 -- Find the contact (whose wall the post goes on)
 SELECT id, uuid, first_name, last_name FROM contacts
-WHERE tenant_id = 1 AND first_name = 'Ailo';
+WHERE tenant_id = 1 AND first_name = 'Emma';
 
 -- Find the author contact (who posted it)
 SELECT id, uuid, first_name, last_name FROM contacts
-WHERE tenant_id = 1 AND first_name = 'Christine';
+WHERE tenant_id = 1 AND first_name = 'Grandma';
 ```
 
 ### 2. Insert a post
