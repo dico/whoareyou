@@ -235,10 +235,11 @@ function renderFeed(data) {
 
   for (const post of visiblePosts) {
     const card = document.createElement('div');
-    card.className = 'signage-feed-card';
+    const images = post.images || [];
+    const isTextOnly = !images.length;
+    card.className = `signage-feed-card${isTextOnly ? ' text-only' : ''}`;
 
     // Image area
-    const images = post.images || [];
     if (images.length) {
       const imgWrap = document.createElement('div');
       imgWrap.className = 'signage-feed-card-img';
@@ -278,6 +279,13 @@ function renderFeed(data) {
     if (config.show_body && post.body) {
       const el = document.createElement('div');
       el.className = 'signage-feed-card-text';
+      // Scale font for text-only cards based on content length
+      if (isTextOnly) {
+        const len = post.body.length;
+        if (len < 80) el.style.fontSize = '3.5vmin';
+        else if (len < 200) el.style.fontSize = '2.8vmin';
+        else if (len < 500) el.style.fontSize = '2.2vmin';
+      }
       el.textContent = post.body;
       body.appendChild(el);
     }
