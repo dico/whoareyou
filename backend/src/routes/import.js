@@ -551,6 +551,51 @@ router.post('/momentgarden/discover-users', async (req, res, next) => {
 });
 
 // POST /api/import/momentgarden/cleanup — remove old MG reactions/comments without contact_id (before re-sync)
+// POST /api/import/momentgarden/manual — add a single MG post manually
+router.post('/momentgarden/manual', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+      throw new AppError('Admin access required', 403);
+    }
+
+    const { contact_uuid, author_contact_uuid, post_date, body, mg_moment_id } = req.body;
+    if (!contact_uuid || !author_contact_uuid) throw new AppError('contact_uuid and author_contact_uuid required', 400);
+
+    const contact = await db('contacts').where({ uuid: contact_uuid, tenant_id: req.tenantId }).whereNull('deleted_at').first();
+    if (!contact) throw new AppError('Contact not found', 404);
+
+    const authorContact = await db('contacts').where({ uuid: author_contact_uuid, tenant_id: req.tenantId }).first();
+    if (!authorContact) throw new AppError('Author contact not found', 404);
+
+    const uuid = uuidv4();
+    const [postId] = await db('posts').insert({
+      uuid,
+      tenant_id: req.tenantId,
+      created_by: req.user.id,
+      author_contact_id: authorContact.id,
+      contact_id: contact.id,
+      body: (body || '').trim(),
+      post_date: post_date || new Date(),
+      visibility: 'shared',
+    });
+
+    // Add MG marker so sync can pick up likes/comments
+    if (mg_moment_id) {
+      await db('post_media').insert({
+        post_id: postId,
+        tenant_id: req.tenantId,
+        file_path: '',
+        file_type: 'text/plain',
+        file_size: 0,
+        external_id: `mg:${mg_moment_id}`,
+        sort_order: 0,
+      });
+    }
+
+    res.status(201).json({ uuid, post_id: postId });
+  } catch (err) { next(err); }
+});
+
 router.post('/momentgarden/cleanup', async (req, res, next) => {
   try {
     const deletedReactions = await db('post_reactions')

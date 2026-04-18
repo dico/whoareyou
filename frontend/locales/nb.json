@@ -1316,6 +1316,16 @@
     "updated": "oppdatert",
     "filterByContact": "Filtrer på kontakt",
     "allPosts": "Alle",
-    "noContact": "Uten kontakt"
+    "noContact": "Uten kontakt",
+    "toolsTab": "Verktøy",
+    "manualAddTitle": "Legg til innlegg manuelt",
+    "manualAddDesc": "For innlegg som ikke ble eksportert i ZIP (tekst-only, korrupte bilder)",
+    "manualAdd": "Legg til manuelt",
+    "wallContact": "Kontaktens vegg",
+    "authorContact": "Publisert av",
+    "momentId": "MomentGarden ID (for synk av likes/kommentarer)",
+    "postDate": "Dato",
+    "postBody": "Innleggstekst",
+    "manualAdded": "Innlegg lagt til"
   }
 }

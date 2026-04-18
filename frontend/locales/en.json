@@ -1316,6 +1316,16 @@
     "updated": "updated",
     "filterByContact": "Filter by contact",
     "allPosts": "All",
-    "noContact": "No contact"
+    "noContact": "No contact",
+    "toolsTab": "Tools",
+    "manualAddTitle": "Add post manually",
+    "manualAddDesc": "For posts not exported in ZIP (text-only, corrupted images)",
+    "manualAdd": "Add manually",
+    "wallContact": "Contact wall",
+    "authorContact": "Posted by",
+    "momentId": "MomentGarden ID (for syncing likes/comments)",
+    "postDate": "Date",
+    "postBody": "Post text",
+    "manualAdded": "Post added"
   }
 }

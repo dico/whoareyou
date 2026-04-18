@@ -20,32 +20,8 @@ export async function renderMomentGarden() {
         <h2><i class="bi bi-flower3 me-2"></i>MomentGarden</h2>
       </div>
 
-      <!-- How-to -->
+      <!-- Contact selector — shared across all tabs -->
       <div class="settings-section glass-card">
-        <h4><i class="bi bi-info-circle me-2"></i>${t('integrations.howTo')}</h4>
-        <ol class="small text-muted mb-0">
-          <li>${t('integrations.step1')}</li>
-          <li>${t('integrations.step2')}</li>
-          <li>${t('integrations.step3')}</li>
-          <li>${t('integrations.step4')}</li>
-        </ol>
-      </div>
-
-      <!-- Author reassignment -->
-      <div class="settings-section glass-card mt-3">
-        <div class="d-flex align-items-center justify-content-between">
-          <div>
-            <h4 class="mb-1">${t('mg.authorsTitle')}</h4>
-            <p class="text-muted small mb-0">${t('mg.authorsLinkDesc')}</p>
-          </div>
-          <a href="/admin/integrations/momentgarden/authors" data-link class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-people me-1"></i>${t('mg.openAuthors')}
-          </a>
-        </div>
-      </div>
-
-      <!-- Select contact -->
-      <div class="settings-section glass-card mt-3">
         <h4>${t('integrations.targetContact')}</h4>
         <div class="row g-3">
           <div class="col-md-6">
@@ -56,82 +32,260 @@ export async function renderMomentGarden() {
         </div>
       </div>
 
-      <!-- Step 2: Import ZIP -->
-      <div class="settings-section glass-card mt-3">
-        <h4><i class="bi bi-cloud-arrow-down me-2"></i>${t('integrations.importZip')}</h4>
-        <p class="text-muted small">${t('integrations.momentgardenDesc')}</p>
-
-        <div class="mb-3">
-          <input type="file" class="form-control" id="mg-zip-input" accept=".zip">
-          <div class="form-text">${t('integrations.zipHint')}</div>
-        </div>
-
-        <div id="mg-preview" class="d-none mb-3">
-          <h5>${t('integrations.preview')}</h5>
-          <div id="mg-preview-content" class="small" style="max-height:200px;overflow-y:auto"></div>
-        </div>
-
-        <div class="d-flex gap-2 align-items-center">
-          <button class="btn btn-primary btn-sm" id="mg-import-btn" disabled>
-            <i class="bi bi-cloud-arrow-down me-1"></i>${t('integrations.import')}
-          </button>
-          <div id="mg-progress" class="d-none flex-grow-1">
-            <div class="progress" style="height:6px">
-              <div class="progress-bar" id="mg-progress-bar" style="width:0%"></div>
-            </div>
-            <span class="small text-muted" id="mg-progress-text"></span>
-          </div>
-        </div>
-        <div id="mg-result" class="mt-3 d-none"></div>
+      <!-- Tabs -->
+      <div class="filter-tabs mt-3 mb-3">
+        <button class="filter-tab active" data-tab="import"><i class="bi bi-cloud-arrow-down me-1"></i>${t('integrations.importZip')}</button>
+        <button class="filter-tab" data-tab="sync"><i class="bi bi-chat-heart me-1"></i>${t('integrations.syncTitle')}</button>
+        <button class="filter-tab" data-tab="tools"><i class="bi bi-tools me-1"></i>${t('mg.toolsTab')}</button>
       </div>
 
-      <!-- Step 3: Sync loves + comments -->
-      <div class="settings-section glass-card mt-3">
-        <h4><i class="bi bi-chat-heart me-2"></i>${t('integrations.syncTitle')}</h4>
-        <p class="text-muted small">${t('integrations.syncDesc')}</p>
+      <!-- Tab: Import ZIP -->
+      <div id="tab-import">
+        <div class="settings-section glass-card">
+          <p class="text-muted small">${t('integrations.momentgardenDesc')}</p>
 
-        <div class="mb-3">
-          <label class="form-label small">${t('integrations.sessionCookie')}</label>
-          <textarea class="form-control form-control-sm" id="mg-cookie" rows="2" placeholder="${t('integrations.cookiePlaceholder')}"></textarea>
-          <div class="form-text">${t('integrations.cookieHint')}</div>
+          <div class="mb-3">
+            <input type="file" class="form-control" id="mg-zip-input" accept=".zip">
+            <div class="form-text">${t('integrations.zipHint')}</div>
+          </div>
+
+          <div id="mg-preview" class="d-none mb-3">
+            <h5>${t('integrations.preview')}</h5>
+            <div id="mg-preview-content" class="small" style="max-height:200px;overflow-y:auto"></div>
+          </div>
+
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-primary btn-sm" id="mg-import-btn" disabled>
+              <i class="bi bi-cloud-arrow-down me-1"></i>${t('integrations.import')}
+            </button>
+            <div id="mg-progress" class="d-none flex-grow-1">
+              <div class="progress" style="height:6px">
+                <div class="progress-bar" id="mg-progress-bar" style="width:0%"></div>
+              </div>
+              <span class="small text-muted" id="mg-progress-text"></span>
+            </div>
+          </div>
+          <div id="mg-result" class="mt-3 d-none"></div>
         </div>
 
-        <div id="mg-sync-status" class="mb-3 d-none"></div>
+        <!-- How-to -->
+        <div class="settings-section glass-card mt-3">
+          <h4><i class="bi bi-info-circle me-2"></i>${t('integrations.howTo')}</h4>
+          <ol class="small text-muted mb-0">
+            <li>${t('integrations.step1')}</li>
+            <li>${t('integrations.step2')}</li>
+            <li>${t('integrations.step3')}</li>
+            <li>${t('integrations.step4')}</li>
+          </ol>
+        </div>
+      </div>
 
-        <div class="d-flex gap-3 align-items-center mb-3">
-          <div class="d-flex align-items-center gap-2">
-            <label class="form-label mb-0 small text-muted">${t('integrations.batchSize')}</label>
-            <input type="number" class="form-control form-control-sm" id="mg-batch-size" value="20" min="1" max="500" style="width:80px">
+      <!-- Tab: Sync loves + comments -->
+      <div class="d-none" id="tab-sync">
+        <div class="settings-section glass-card">
+          <p class="text-muted small">${t('integrations.syncDesc')}</p>
+
+          <div class="mb-3">
+            <label class="form-label small">${t('integrations.sessionCookie')}</label>
+            <textarea class="form-control form-control-sm" id="mg-cookie" rows="2" placeholder="${t('integrations.cookiePlaceholder')}"></textarea>
+            <div class="form-text">${t('integrations.cookieHint')}</div>
           </div>
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="mg-resync-all">
-            <label class="form-check-label small" for="mg-resync-all">${t('integrations.resyncAll')}</label>
+
+          <div id="mg-sync-status" class="mb-3 d-none"></div>
+
+          <div class="d-flex gap-3 align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label mb-0 small text-muted">${t('integrations.batchSize')}</label>
+              <input type="number" class="form-control form-control-sm" id="mg-batch-size" value="20" min="1" max="500" style="width:80px">
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="mg-resync-all">
+              <label class="form-check-label small" for="mg-resync-all">${t('integrations.resyncAll')}</label>
+            </div>
+          </div>
+
+          <button class="btn btn-outline-primary btn-sm" id="mg-discover-btn" disabled>
+            <i class="bi bi-search me-1"></i>${t('integrations.discoverUsers')}
+          </button>
+
+          <div id="mg-user-map" class="mt-3 d-none"></div>
+
+          <button class="btn btn-primary btn-sm mt-3 d-none" id="mg-sync-btn">
+            <i class="bi bi-arrow-repeat me-1"></i>${t('integrations.syncLovesComments')}
+          </button>
+          <div id="mg-sync-result" class="mt-3 d-none"></div>
+
+          <hr class="my-3">
+          <h5 class="small text-muted">${t('integrations.cleanupTitle')}</h5>
+          <p class="small text-muted">${t('integrations.cleanupDesc')}</p>
+          <button class="btn btn-outline-danger btn-sm" id="mg-cleanup-btn">
+            <i class="bi bi-trash3 me-1"></i>${t('integrations.cleanupBtn')}
+          </button>
+          <div id="mg-cleanup-result" class="mt-2 d-none"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Tools -->
+      <div class="d-none" id="tab-tools">
+        <div class="settings-section glass-card">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h5 class="mb-1">${t('mg.authorsTitle')}</h5>
+              <p class="text-muted small mb-0">${t('mg.authorsLinkDesc')}</p>
+            </div>
+            <a href="/admin/integrations/momentgarden/authors" data-link class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-people me-1"></i>${t('mg.openAuthors')}
+            </a>
+          </div>
+          <hr>
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h5 class="mb-1">${t('mg.manualAddTitle')}</h5>
+              <p class="text-muted small mb-0">${t('mg.manualAddDesc')}</p>
+            </div>
+            <button class="btn btn-outline-primary btn-sm" id="mg-manual-add-btn">
+              <i class="bi bi-plus-lg me-1"></i>${t('mg.manualAdd')}
+            </button>
           </div>
         </div>
-
-        <button class="btn btn-outline-primary btn-sm" id="mg-discover-btn" disabled>
-          <i class="bi bi-search me-1"></i>${t('integrations.discoverUsers')}
-        </button>
-
-        <div id="mg-user-map" class="mt-3 d-none"></div>
-
-        <button class="btn btn-primary btn-sm mt-3 d-none" id="mg-sync-btn">
-          <i class="bi bi-arrow-repeat me-1"></i>${t('integrations.syncLovesComments')}
-        </button>
-        <div id="mg-sync-result" class="mt-3 d-none"></div>
-
-        <hr class="my-3">
-        <h5 class="small text-muted">${t('integrations.cleanupTitle')}</h5>
-        <p class="small text-muted">${t('integrations.cleanupDesc')}</p>
-        <button class="btn btn-outline-danger btn-sm" id="mg-cleanup-btn">
-          <i class="bi bi-trash3 me-1"></i>${t('integrations.cleanupBtn')}
-        </button>
-        <div id="mg-cleanup-result" class="mt-2 d-none"></div>
       </div>
     </div>
   `;
 
   document.getElementById('btn-back').addEventListener('click', () => navigate('/admin/integrations'));
+
+  // ── Tab switching ──
+  document.querySelector('.filter-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.filter-tab');
+    if (!tab) return;
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    ['import', 'sync', 'tools'].forEach(id => {
+      document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
+    });
+  });
+
+  // ── Manual post add modal ──
+  document.getElementById('mg-manual-add-btn').addEventListener('click', () => {
+    const id = 'mg-manual-' + Date.now();
+    function chipHtml(c, fieldId) {
+      const initials = (c.first_name[0] || '') + (c.last_name?.[0] || '');
+      const avatar = c.avatar
+        ? `<img src="${authUrl(c.avatar)}" alt="">`
+        : `<span>${initials}</span>`;
+      return `<span class="contact-chip">
+        <span class="contact-chip-avatar">${avatar}</span>
+        ${c.first_name} ${c.last_name || ''}
+        <button type="button" class="contact-chip-remove" data-field="${fieldId}"><i class="bi bi-x"></i></button>
+      </span>`;
+    }
+
+    const html = `
+      <div class="modal fade" id="${id}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">${t('mg.manualAddTitle')}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">${t('mg.wallContact')}</label>
+                <input type="text" class="form-control" id="${id}-wall" placeholder="${t('common.search')}">
+                <div id="${id}-wall-chip" class="mt-1"></div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">${t('mg.authorContact')}</label>
+                <input type="text" class="form-control" id="${id}-author" placeholder="${t('common.search')}">
+                <div id="${id}-author-chip" class="mt-1"></div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">${t('mg.postDate')}</label>
+                <input type="date" class="form-control" id="${id}-date">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">${t('mg.momentId')}</label>
+                <input type="text" class="form-control" id="${id}-mgid" placeholder="12204137">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">${t('mg.postBody')}</label>
+                <textarea class="form-control" id="${id}-body" rows="4"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+              <button type="button" class="btn btn-primary btn-sm" id="${id}-save">${t('common.save')}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modalEl = document.getElementById(id);
+    const modal = new bootstrap.Modal(modalEl);
+
+    let wallContact = selectedContact ? { ...selectedContact } : null;
+    let authorContact = null;
+
+    function showChip(contact, fieldId) {
+      const input = document.getElementById(`${id}-${fieldId}`);
+      const chipEl = document.getElementById(`${id}-${fieldId}-chip`);
+      input.classList.add('d-none');
+      chipEl.innerHTML = chipHtml(contact, fieldId);
+      chipEl.querySelector('.contact-chip-remove').addEventListener('click', () => {
+        if (fieldId === 'wall') wallContact = null;
+        else authorContact = null;
+        chipEl.innerHTML = '';
+        input.classList.remove('d-none');
+        input.value = '';
+        input.focus();
+      });
+    }
+
+    // Pre-fill wall contact if already selected
+    if (wallContact) showChip(wallContact, 'wall');
+
+    // Attach contact search
+    import('../components/contact-search.js').then(({ attachContactSearch }) => {
+      attachContactSearch(document.getElementById(`${id}-wall`), {
+        onSelect: (c) => { wallContact = c; showChip(c, 'wall'); },
+      });
+      attachContactSearch(document.getElementById(`${id}-author`), {
+        onSelect: (c) => { authorContact = c; showChip(c, 'author'); },
+      });
+    });
+
+    document.getElementById(`${id}-save`).addEventListener('click', async () => {
+      if (!wallContact || !authorContact) return;
+      const btn = document.getElementById(`${id}-save`);
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      try {
+        await api.post('/import/momentgarden/manual', {
+          contact_uuid: wallContact.uuid,
+          author_contact_uuid: authorContact.uuid,
+          post_date: document.getElementById(`${id}-date`).value || null,
+          body: document.getElementById(`${id}-body`).value || '',
+          mg_moment_id: document.getElementById(`${id}-mgid`).value.trim() || null,
+        });
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
+        btn.innerHTML = `<i class="bi bi-check me-1"></i>${t('mg.manualAdded')}`;
+        // Clear form for next entry
+        document.getElementById(`${id}-body`).value = '';
+        document.getElementById(`${id}-mgid`).value = '';
+        document.getElementById(`${id}-date`).value = '';
+        setTimeout(() => { btn.classList.remove('btn-success'); btn.classList.add('btn-primary'); btn.innerHTML = t('common.save'); btn.disabled = false; }, 1500);
+      } catch (err) {
+        btn.textContent = t('common.error');
+        btn.disabled = false;
+      }
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+    modal.show();
+  });
 
   // ── Contact search ──
   let selectedContact = null;
