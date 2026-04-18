@@ -1303,6 +1303,11 @@
     "importedPosts": "imported posts",
     "unknownAuthor": "Unknown",
     "assignAuthor": "Assign author",
-    "assign": "Assign"
+    "assign": "Assign",
+    "assignAll": "Change all",
+    "assignAllTitle": "Select author for all posts",
+    "assignAllConfirm": "Set {name} as author on all {count} imported posts?",
+    "assignAllBtn": "Change {count} posts",
+    "assigningAll": "Changing..."
   }
 }

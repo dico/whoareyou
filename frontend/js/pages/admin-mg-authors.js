@@ -2,7 +2,7 @@ import { api } from '../api/client.js';
 import { state } from '../app.js';
 import { t } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
-import { contactSearchDialog } from '../components/dialogs.js';
+import { contactSearchDialog, confirmDialog } from '../components/dialogs.js';
 
 export async function renderMgAuthors() {
   const content = document.getElementById('app-content');
@@ -59,11 +59,45 @@ function renderList(container, data) {
   guests.forEach(g => { if (g.contact_uuid) linkedIdToUuid.set(g.contact_uuid, g.contact_uuid); });
 
   container.innerHTML = `
-    <div class="small text-muted mb-2">${posts.length} ${t('mg.importedPosts')}</div>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="small text-muted">${posts.length} ${t('mg.importedPosts')}</span>
+      <button class="btn btn-outline-secondary btn-sm" id="mg-assign-all"><i class="bi bi-people me-1"></i>${t('mg.assignAll')}</button>
+    </div>
     <div id="mg-post-list"></div>
   `;
 
   const listEl = document.getElementById('mg-post-list');
+
+  // "Assign all" — opens contact search, then confirm, then bulk update
+  document.getElementById('mg-assign-all').addEventListener('click', async () => {
+    const contact = await contactSearchDialog({ title: t('mg.assignAllTitle') });
+    if (!contact) return;
+    const name = `${contact.first_name} ${contact.last_name || ''}`.trim();
+    const confirmed = await confirmDialog(
+      t('mg.assignAllConfirm', { name, count: posts.length }),
+      { title: t('mg.assignAll'), confirmText: t('mg.assignAllBtn', { count: posts.length }) },
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById('mg-assign-all');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${t('mg.assigningAll')}`;
+
+    let done = 0;
+    // Process in batches of 10 to avoid overwhelming the server
+    for (let i = 0; i < posts.length; i += 10) {
+      const batch = posts.slice(i, i + 10);
+      await Promise.all(batch.map(p =>
+        api.put(`/posts/${p.uuid}/author`, { contact_uuid: contact.uuid }).catch(() => {})
+      ));
+      done += batch.length;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${done} / ${posts.length}`;
+    }
+
+    // Reload page to show updated state
+    const { renderMgAuthors } = await import('./admin-mg-authors.js');
+    renderMgAuthors();
+  });
 
   for (const post of posts) {
     const row = document.createElement('div');

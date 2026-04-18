@@ -1303,6 +1303,11 @@
     "importedPosts": "importerte innlegg",
     "unknownAuthor": "Ukjent",
     "assignAuthor": "Tildel forfatter",
-    "assign": "Tildel"
+    "assign": "Tildel",
+    "assignAll": "Endre alle",
+    "assignAllTitle": "Velg forfatter for alle innlegg",
+    "assignAllConfirm": "Vil du sette {name} som forfatter på alle {count} importerte innlegg?",
+    "assignAllBtn": "Endre {count} innlegg",
+    "assigningAll": "Endrer..."
   }
 }
