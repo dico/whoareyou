@@ -43,39 +43,155 @@ export async function renderMgAuthors() {
 function renderList(container, data) {
   const { posts, members, guests } = data;
 
-  // Build people list with contact_uuid for matching
+  // Build people list with contact_uuid
   const people = [
     ...members.map(m => ({ contact_uuid: m.contact_uuid, name: m.name, avatar: m.avatar })),
     ...guests.filter(g => g.contact_uuid).map(g => ({ contact_uuid: g.contact_uuid, name: g.name, avatar: g.avatar })),
   ];
 
-  // Map contact_uuid → people index for active matching
-  const contactUuidToIdx = new Map();
-  people.forEach((p, i) => { if (p.contact_uuid) contactUuidToIdx.set(p.contact_uuid, i); });
+  // Group posts by about-contact for the filter tabs
+  const byContact = new Map();
+  for (const post of posts) {
+    const key = post.contact_name || '_none';
+    if (!byContact.has(key)) byContact.set(key, []);
+    byContact.get(key).push(post);
+  }
 
-  // Map author_contact_id → contact_uuid for matching (need to look up from members/guests)
-  const linkedIdToUuid = new Map();
-  members.forEach(m => { if (m.contact_uuid) linkedIdToUuid.set(m.contact_uuid, m.contact_uuid); });
-  guests.forEach(g => { if (g.contact_uuid) linkedIdToUuid.set(g.contact_uuid, g.contact_uuid); });
+  const filterTabs = [...byContact.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([name, list]) =>
+      `<button class="btn btn-outline-secondary btn-sm mg-filter-tab" data-contact="${name}">${name === '_none' ? t('mg.noContact') : name} (${list.length})</button>`
+    ).join('');
 
   container.innerHTML = `
+    <div class="glass-card mb-3 p-3">
+      <label class="form-label fw-medium mb-2">${t('mg.filterByContact')}</label>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary btn-sm mg-filter-tab is-active-filter" data-contact="">${t('mg.allPosts')} (${posts.length})</button>
+        ${filterTabs}
+      </div>
+    </div>
     <div class="d-flex justify-content-between align-items-center mb-2">
-      <span class="small text-muted">${posts.length} ${t('mg.importedPosts')}</span>
+      <span class="small text-muted" id="mg-post-count">${posts.length} ${t('mg.importedPosts')}</span>
       <button class="btn btn-outline-secondary btn-sm" id="mg-assign-all"><i class="bi bi-people me-1"></i>${t('mg.assignAll')}</button>
     </div>
     <div id="mg-post-list"></div>
   `;
 
   const listEl = document.getElementById('mg-post-list');
+  let filteredContact = null; // null = all
 
-  // "Assign all" — opens contact search, then confirm, then bulk update
+  // Filter tabs
+  container.querySelectorAll('.mg-filter-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      container.querySelectorAll('.mg-filter-tab').forEach(t => {
+        t.classList.remove('btn-primary', 'is-active-filter');
+        t.classList.add('btn-outline-secondary');
+      });
+      tab.classList.remove('btn-outline-secondary');
+      tab.classList.add('btn-primary', 'is-active-filter');
+      filteredContact = tab.dataset.contact || null;
+      renderPostRows();
+    });
+  });
+
+  function getVisiblePosts() {
+    if (!filteredContact) return posts;
+    return posts.filter(p => (p.contact_name || '_none') === filteredContact);
+  }
+
+  function renderPostRows() {
+    const visible = getVisiblePosts();
+    document.getElementById('mg-post-count').textContent = `${visible.length} ${t('mg.importedPosts')}`;
+    listEl.innerHTML = '';
+
+    for (const post of visible) {
+      const row = document.createElement('div');
+      row.className = 'mg-author-row glass-card mb-2';
+
+      const thumb = post.thumbnail
+        ? `<img src="${authUrl(post.thumbnail)}" alt="" class="mg-author-thumb">`
+        : `<div class="mg-author-thumb mg-author-no-img"><i class="bi bi-card-text"></i></div>`;
+
+      const bodyPreview = post.body ? post.body.slice(0, 60) + (post.body.length > 60 ? '…' : '') : '';
+      const dateStr = post.post_date ? new Date(post.post_date).toLocaleDateString('nb-NO') : '';
+
+      const avatarPicks = people.map(p => {
+        const isActive = post.author === p.name;
+        return `<div class="mg-avatar-pick ${isActive ? 'is-active' : ''}" data-contact-uuid="${p.contact_uuid}" title="${p.name}">
+          ${p.avatar
+            ? `<img src="${authUrl(p.avatar)}" alt="">`
+            : `<span>${p.name[0]}</span>`
+          }
+        </div>`;
+      }).join('');
+
+      row.innerHTML = `
+        ${thumb}
+        <div class="mg-author-info">
+          <div class="mg-author-meta">
+            ${post.contact_name ? `<span class="fw-medium">${post.contact_name}</span> · ` : ''}
+            <span class="text-muted">${dateStr}</span>
+          </div>
+          <div class="mg-author-body text-muted small">${bodyPreview}</div>
+        </div>
+        <div class="mg-avatar-picks">
+          ${avatarPicks}
+          <div class="mg-avatar-pick mg-avatar-search" title="${t('common.search')}"><span>+</span></div>
+        </div>
+      `;
+
+      // Individual avatar picks
+      row.querySelectorAll('.mg-avatar-pick:not(.mg-avatar-search)').forEach(pick => {
+        pick.addEventListener('click', () => {
+          if (pick.classList.contains('is-active') || pick.classList.contains('is-saving')) return;
+          assignSingle(row, pick, post.uuid, pick.dataset.contactUuid);
+        });
+      });
+
+      row.querySelector('.mg-avatar-search').addEventListener('click', async () => {
+        const contact = await contactSearchDialog({ title: t('mg.assignAuthor') });
+        if (!contact) return;
+        const existing = row.querySelector(`.mg-avatar-pick[data-contact-uuid="${contact.uuid}"]`);
+        if (existing) {
+          assignSingle(row, existing, post.uuid, contact.uuid);
+        } else {
+          const pick = document.createElement('div');
+          pick.className = 'mg-avatar-pick';
+          pick.dataset.contactUuid = contact.uuid;
+          pick.title = `${contact.first_name} ${contact.last_name || ''}`.trim();
+          pick.innerHTML = contact.avatar
+            ? `<img src="${authUrl(contact.avatar)}" alt="">`
+            : `<span>${contact.first_name[0]}</span>`;
+          row.querySelector('.mg-avatar-search').before(pick);
+          assignSingle(row, pick, post.uuid, contact.uuid);
+        }
+      });
+
+      listEl.appendChild(row);
+    }
+  }
+
+  async function assignSingle(row, pick, postUuid, contactUuid) {
+    pick.classList.add('is-saving');
+    try {
+      await api.put(`/posts/${postUuid}/author`, { contact_uuid: contactUuid });
+      row.querySelectorAll('.mg-avatar-pick').forEach(p => p.classList.remove('is-active'));
+      pick.classList.add('is-active');
+    } catch {}
+    pick.classList.remove('is-saving');
+  }
+
+  // "Assign all" — uses bulk endpoint, filtered by current contact tab
   document.getElementById('mg-assign-all').addEventListener('click', async () => {
     const contact = await contactSearchDialog({ title: t('mg.assignAllTitle') });
     if (!contact) return;
     const name = `${contact.first_name} ${contact.last_name || ''}`.trim();
+    const visible = getVisiblePosts();
+    const label = filteredContact && filteredContact !== '_none' ? filteredContact : t('mg.allPosts').toLowerCase();
     const confirmed = await confirmDialog(
-      t('mg.assignAllConfirm', { name, count: posts.length }),
-      { title: t('mg.assignAll'), confirmText: t('mg.assignAllBtn', { count: posts.length }) },
+      t('mg.assignAllConfirm', { name, count: visible.length, label }),
+      { title: t('mg.assignAll'), confirmText: t('mg.assignAllBtn', { count: visible.length }) },
     );
     if (!confirmed) return;
 
@@ -83,102 +199,29 @@ function renderList(container, data) {
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${t('mg.assigningAll')}`;
 
-    let done = 0;
-    // Process in batches of 10 to avoid overwhelming the server
-    for (let i = 0; i < posts.length; i += 10) {
-      const batch = posts.slice(i, i + 10);
-      await Promise.all(batch.map(p =>
-        api.put(`/posts/${p.uuid}/author`, { contact_uuid: contact.uuid }).catch(() => {})
-      ));
-      done += batch.length;
-      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${done} / ${posts.length}`;
+    try {
+      const payload = { contact_uuid: contact.uuid };
+      // If filtered by contact, pass the about_contact_uuid so backend filters too
+      if (filteredContact && filteredContact !== '_none') {
+        const aboutPost = visible.find(p => p.contact_name === filteredContact);
+        // Get about contact UUID from the posts data — need to find it
+        // Use the mg-imported endpoint's contact_uuid filter approach
+        const aboutContact = await api.get(`/contacts?search=${encodeURIComponent(filteredContact)}&limit=1`);
+        if (aboutContact.contacts?.[0]) {
+          payload.about_contact_uuid = aboutContact.contacts[0].uuid;
+        }
+      }
+      const result = await api.put('/posts/mg-bulk-author', payload);
+      btn.innerHTML = `<i class="bi bi-check me-1"></i>${result.updated} ${t('mg.updated')}`;
+      btn.classList.remove('btn-outline-secondary');
+      btn.classList.add('btn-success');
+      // Reload after short delay
+      setTimeout(() => renderMgAuthors(), 1500);
+    } catch (err) {
+      btn.innerHTML = `<i class="bi bi-x me-1"></i>${t('common.error')}`;
+      btn.disabled = false;
     }
-
-    // Reload page to show updated state
-    const { renderMgAuthors } = await import('./admin-mg-authors.js');
-    renderMgAuthors();
   });
 
-  for (const post of posts) {
-    const row = document.createElement('div');
-    row.className = 'mg-author-row glass-card mb-2';
-
-    const thumb = post.thumbnail
-      ? `<img src="${authUrl(post.thumbnail)}" alt="" class="mg-author-thumb">`
-      : `<div class="mg-author-thumb mg-author-no-img"><i class="bi bi-card-text"></i></div>`;
-
-    const bodyPreview = post.body ? post.body.slice(0, 60) + (post.body.length > 60 ? '…' : '') : '';
-    const dateStr = post.post_date ? new Date(post.post_date).toLocaleDateString('nb-NO') : '';
-
-    const avatarPicks = people.map((p, idx) => {
-      // Match by checking if this person's linked_contact_id matches the post's author
-      const isActive = post.author === p.name;
-      return `<div class="mg-avatar-pick ${isActive ? 'is-active' : ''}" data-idx="${idx}" data-contact-uuid="${p.contact_uuid}" title="${p.name}">
-        ${p.avatar
-          ? `<img src="${authUrl(p.avatar)}" alt="">`
-          : `<span>${p.name[0]}</span>`
-        }
-      </div>`;
-    }).join('');
-
-    row.innerHTML = `
-      ${thumb}
-      <div class="mg-author-info">
-        <div class="mg-author-meta">
-          ${post.contact_name ? `<span class="fw-medium">${post.contact_name}</span> · ` : ''}
-          <span class="text-muted">${dateStr}</span>
-        </div>
-        <div class="mg-author-body text-muted small">${bodyPreview}</div>
-      </div>
-      <div class="mg-avatar-picks">
-        ${avatarPicks}
-        <div class="mg-avatar-pick mg-avatar-search" title="${t('common.search')}">
-          <span>+</span>
-        </div>
-      </div>
-    `;
-
-    async function assignAuthor(pick, contactUuid) {
-      if (pick.classList.contains('is-saving')) return;
-      pick.classList.add('is-saving');
-      try {
-        await api.put(`/posts/${post.uuid}/author`, { contact_uuid: contactUuid });
-        row.querySelectorAll('.mg-avatar-pick').forEach(p => p.classList.remove('is-active'));
-        pick.classList.add('is-active');
-      } catch {}
-      pick.classList.remove('is-saving');
-    }
-
-    // Avatar pick clicks
-    row.querySelectorAll('.mg-avatar-pick:not(.mg-avatar-search)').forEach(pick => {
-      pick.addEventListener('click', () => {
-        if (pick.classList.contains('is-active')) return;
-        assignAuthor(pick, pick.dataset.contactUuid);
-      });
-    });
-
-    // Search button — opens contact search dialog
-    row.querySelector('.mg-avatar-search').addEventListener('click', async () => {
-      const contact = await contactSearchDialog({ title: t('mg.assignAuthor') });
-      if (!contact) return;
-      // Check if this contact is already in the picks
-      const existing = row.querySelector(`.mg-avatar-pick[data-contact-uuid="${contact.uuid}"]`);
-      if (existing) {
-        assignAuthor(existing, contact.uuid);
-      } else {
-        // Add a temporary avatar pick and assign
-        const pick = document.createElement('div');
-        pick.className = 'mg-avatar-pick';
-        pick.dataset.contactUuid = contact.uuid;
-        pick.title = `${contact.first_name} ${contact.last_name || ''}`.trim();
-        pick.innerHTML = contact.avatar
-          ? `<img src="${authUrl(contact.avatar)}" alt="">`
-          : `<span>${contact.first_name[0]}</span>`;
-        row.querySelector('.mg-avatar-search').before(pick);
-        assignAuthor(pick, contact.uuid);
-      }
-    });
-
-    listEl.appendChild(row);
-  }
+  renderPostRows();
 }

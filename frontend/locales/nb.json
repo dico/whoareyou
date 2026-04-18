@@ -1306,8 +1306,12 @@
     "assign": "Tildel",
     "assignAll": "Endre alle",
     "assignAllTitle": "Velg forfatter for alle innlegg",
-    "assignAllConfirm": "Vil du sette {name} som forfatter på alle {count} importerte innlegg?",
+    "assignAllConfirm": "Vil du sette {name} som forfatter på {count} innlegg ({label})?",
     "assignAllBtn": "Endre {count} innlegg",
-    "assigningAll": "Endrer..."
+    "assigningAll": "Endrer...",
+    "updated": "oppdatert",
+    "filterByContact": "Filtrer på kontakt",
+    "allPosts": "Alle",
+    "noContact": "Uten kontakt"
   }
 }

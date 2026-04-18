@@ -735,6 +735,41 @@ router.put('/:uuid/author', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PUT /api/posts/mg-bulk-author — bulk reassign author on MG-imported posts (admin only)
+router.put('/mg-bulk-author', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+      throw new AppError('Admin required', 403);
+    }
+    const { contact_uuid, about_contact_uuid } = req.body;
+    if (!contact_uuid) throw new AppError('contact_uuid required', 400);
+
+    // Resolve the author contact
+    const authorContact = await db('contacts')
+      .where({ uuid: contact_uuid, tenant_id: req.tenantId }).first();
+    if (!authorContact) throw new AppError('Contact not found', 400);
+
+    // Build query for MG-imported posts in this tenant
+    let query = db('posts')
+      .where('posts.tenant_id', req.tenantId)
+      .whereNull('posts.deleted_at')
+      .whereExists(
+        db('post_media').whereRaw('post_media.post_id = posts.id')
+          .whereRaw("post_media.external_id LIKE 'mg:%'"),
+      );
+
+    // Optional: filter by about-contact (which contact's wall)
+    if (about_contact_uuid) {
+      const aboutContact = await db('contacts')
+        .where({ uuid: about_contact_uuid, tenant_id: req.tenantId }).first();
+      if (aboutContact) query = query.where('posts.contact_id', aboutContact.id);
+    }
+
+    const updated = await query.update({ author_contact_id: authorContact.id });
+    res.json({ updated });
+  } catch (err) { next(err); }
+});
+
 // POST /api/posts — create post
 router.post('/', async (req, res, next) => {
   try {

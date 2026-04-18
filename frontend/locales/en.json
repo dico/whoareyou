@@ -1306,8 +1306,12 @@
     "assign": "Assign",
     "assignAll": "Change all",
     "assignAllTitle": "Select author for all posts",
-    "assignAllConfirm": "Set {name} as author on all {count} imported posts?",
+    "assignAllConfirm": "Set {name} as author on {count} posts ({label})?",
     "assignAllBtn": "Change {count} posts",
-    "assigningAll": "Changing..."
+    "assigningAll": "Changing...",
+    "updated": "updated",
+    "filterByContact": "Filter by contact",
+    "allPosts": "All",
+    "noContact": "No contact"
   }
 }
