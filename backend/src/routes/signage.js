@@ -296,7 +296,7 @@ router.get('/feed/:token', async (req, res, next) => {
       : Math.min(200, screen.days_back ? 200 : 100);
 
     const posts = await query.clone()
-      .select('posts.id', 'posts.body', 'posts.post_date', 'posts.contact_id')
+      .select('posts.id', 'posts.body', 'posts.post_date', 'posts.contact_id', 'posts.created_by', 'posts.portal_guest_id')
       .orderBy(orderCol, orderDir)
       .limit(limit);
 
@@ -331,6 +331,29 @@ router.get('/feed/:token', async (req, res, next) => {
     for (const t of tags) {
       if (!tagsByPost.has(t.post_id)) tagsByPost.set(t.post_id, []);
       tagsByPost.get(t.post_id).push({ first_name: t.first_name, last_name: t.last_name });
+    }
+
+    // Author names (created_by → tenant_members → contacts)
+    const authorIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
+    const authorMap = new Map();
+    if (authorIds.length && screen.show_contact_name) {
+      const authors = await db('tenant_members')
+        .join('contacts', 'tenant_members.linked_contact_id', 'contacts.id')
+        .where('tenant_members.tenant_id', screen.tenant_id)
+        .whereIn('tenant_members.user_id', authorIds)
+        .select('tenant_members.user_id', 'contacts.first_name');
+      for (const a of authors) authorMap.set(a.user_id, a.first_name);
+    }
+
+    // Portal guest author names
+    const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
+    const guestMap = new Map();
+    if (guestIds.length && screen.show_contact_name) {
+      const guests = await db('portal_guests')
+        .where('tenant_id', screen.tenant_id)
+        .whereIn('id', guestIds)
+        .select('id', 'display_name');
+      for (const g of guests) guestMap.set(g.id, g.display_name);
     }
 
     // Reactions count
@@ -381,6 +404,7 @@ router.get('/feed/:token', async (req, res, next) => {
         body: screen.show_body ? p.body : null,
         post_date: screen.show_date ? p.post_date : null,
         contact_names: screen.show_contact_name ? names : null,
+        author_name: screen.show_contact_name ? (authorMap.get(p.created_by) || guestMap.get(p.portal_guest_id) || null) : null,
         images: mediaByPost.get(p.id) || [],
         reactions: screen.show_reactions ? (reactionsByPost.get(p.id) || 0) : null,
         comments: screen.show_comments ? (commentsByPost.get(p.id) || []) : null,

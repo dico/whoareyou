@@ -116,36 +116,23 @@ function renderSlideshow(data) {
       div.appendChild(collage);
     }
 
-    // Overlay
-    if (config.show_contact_name || config.show_body || config.show_date || config.show_reactions || config.show_comments) {
+    // Date badge — top-right corner
+    if (config.show_date && post.post_date) {
+      const badge = document.createElement('div');
+      badge.className = 'signage-date-badge';
+      badge.textContent = formatDate(post.post_date);
+      div.appendChild(badge);
+    }
+
+    // Bottom overlay
+    if (config.show_contact_name || config.show_body || config.show_reactions || config.show_comments) {
       const overlay = document.createElement('div');
       overlay.className = 'signage-overlay';
-
-      if (config.show_contact_name && post.contact_names?.length) {
-        const el = document.createElement('div');
-        el.className = 'signage-overlay-names';
-        el.textContent = post.contact_names.join(', ');
-        overlay.appendChild(el);
-      }
 
       if (config.show_body && post.body) {
         const el = document.createElement('div');
         el.className = 'signage-overlay-body';
         el.textContent = post.body;
-        overlay.appendChild(el);
-      }
-
-      const meta = [];
-      if (config.show_date && post.post_date) {
-        meta.push(formatDate(post.post_date));
-      }
-      if (config.show_reactions && post.reactions) {
-        meta.push(`❤ ${post.reactions}`);
-      }
-      if (meta.length) {
-        const el = document.createElement('div');
-        el.className = 'signage-overlay-meta';
-        el.innerHTML = meta.map(m => `<span>${esc(m)}</span>`).join('');
         overlay.appendChild(el);
       }
 
@@ -158,6 +145,32 @@ function renderSlideshow(data) {
           row.innerHTML = `<strong>${esc(c.author)}</strong>${esc(c.body)}`;
           el.appendChild(row);
         }
+        overlay.appendChild(el);
+      }
+
+      // Author/contact line — below text, smaller
+      if (config.show_contact_name) {
+        const nameParts = [];
+        if (post.contact_names?.length) nameParts.push(post.contact_names.join(', '));
+        if (post.author_name && post.author_name !== nameParts[0]) {
+          nameParts.push(`Publisert av ${post.author_name}`);
+        }
+        if (nameParts.length) {
+          const el = document.createElement('div');
+          el.className = 'signage-overlay-names';
+          el.textContent = nameParts.join(' · ');
+          overlay.appendChild(el);
+        }
+      }
+
+      const meta = [];
+      if (config.show_reactions && post.reactions) {
+        meta.push(`❤ ${post.reactions}`);
+      }
+      if (meta.length) {
+        const el = document.createElement('div');
+        el.className = 'signage-overlay-meta';
+        el.innerHTML = meta.map(m => `<span>${m}</span>`).join('');
         overlay.appendChild(el);
       }
 
@@ -250,31 +263,22 @@ function renderFeed(data) {
       card.appendChild(imgWrap);
     }
 
+    // Date badge — top-right of card
+    if (config.show_date && post.post_date) {
+      const badge = document.createElement('div');
+      badge.className = 'signage-date-badge';
+      badge.textContent = formatDate(post.post_date);
+      card.appendChild(badge);
+    }
+
     // Body area
     const body = document.createElement('div');
     body.className = 'signage-feed-card-body';
-
-    if (config.show_contact_name && post.contact_names?.length) {
-      const el = document.createElement('div');
-      el.className = 'signage-feed-card-names';
-      el.textContent = post.contact_names.join(', ');
-      body.appendChild(el);
-    }
 
     if (config.show_body && post.body) {
       const el = document.createElement('div');
       el.className = 'signage-feed-card-text';
       el.textContent = post.body;
-      body.appendChild(el);
-    }
-
-    const meta = [];
-    if (config.show_date && post.post_date) meta.push(formatDate(post.post_date));
-    if (config.show_reactions && post.reactions) meta.push(`❤ ${post.reactions}`);
-    if (meta.length) {
-      const el = document.createElement('div');
-      el.className = 'signage-feed-card-meta';
-      el.innerHTML = meta.map(m => `<span>${esc(m)}</span>`).join('');
       body.appendChild(el);
     }
 
@@ -286,6 +290,30 @@ function renderFeed(data) {
         row.innerHTML = `<strong>${esc(c.author)}</strong>${esc(c.body)}`;
         el.appendChild(row);
       }
+      body.appendChild(el);
+    }
+
+    // Author/contact line — below text, small and subtle
+    if (config.show_contact_name) {
+      const nameParts = [];
+      if (post.contact_names?.length) nameParts.push(post.contact_names.join(', '));
+      if (post.author_name && post.author_name !== nameParts[0]) {
+        nameParts.push(`Publisert av ${post.author_name}`);
+      }
+      if (nameParts.length) {
+        const el = document.createElement('div');
+        el.className = 'signage-feed-card-names';
+        el.textContent = nameParts.join(' · ');
+        body.appendChild(el);
+      }
+    }
+
+    const meta = [];
+    if (config.show_reactions && post.reactions) meta.push(`❤ ${post.reactions}`);
+    if (meta.length) {
+      const el = document.createElement('div');
+      el.className = 'signage-feed-card-meta';
+      el.innerHTML = meta.map(m => `<span>${m}</span>`).join('');
       body.appendChild(el);
     }
 
