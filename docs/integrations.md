@@ -166,6 +166,7 @@ VALUES (
 - `contact_id` on posts is the "about" contact (whose wall), not the author
 - All IDs are internal integer IDs, not UUIDs (use the SELECT queries to find them)
 - `tenant_id` must match across all tables
+- **Likes and comments are synced automatically** — when `external_id` is set to `mg:MOMENT_ID` (without `:synced`), the "Sync loves & comments" function on the MG admin page will fetch them from MomentGarden. No need to insert reactions/comments manually unless MomentGarden is no longer accessible.
 
 ## Monica CRM Import
 
