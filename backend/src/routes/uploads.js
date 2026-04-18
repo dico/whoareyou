@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
-import { processImage, extractImageMetadata } from '../services/image.js';
+import { processImage, extractImageMetadata, rotateImage } from '../services/image.js';
 import { config } from '../config/index.js';
 
 const router = Router();
@@ -279,6 +279,26 @@ router.delete('/posts/:uuid/media/:mediaId', async (req, res, next) => {
 
     await db('post_media').where({ id: media.id }).del();
     res.json({ message: 'Media deleted' });
+  } catch (err) { next(err); }
+});
+
+// POST /api/posts/:uuid/media/:mediaId/rotate — rotate image 90° clockwise on disk
+router.post('/posts/:uuid/media/:mediaId/rotate', async (req, res, next) => {
+  try {
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const media = await db('post_media')
+      .where({ id: req.params.mediaId, post_id: post.id })
+      .first();
+    if (!media) throw new AppError('Media not found', 404);
+    if (!media.file_type?.startsWith('image/')) throw new AppError('Not an image', 400);
+
+    await rotateImage(media.file_path);
+    res.json({ message: 'Rotated' });
   } catch (err) { next(err); }
 });
 

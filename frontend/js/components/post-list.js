@@ -147,7 +147,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             let html = '';
             if (images.length) {
               html += `<div class="post-media post-media-grid-${Math.min(images.length, 4)}" data-post-uuid="${p.uuid}">
-                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}"><img src="${authUrl(m.medium_path || m.file_path)}" alt="" loading="lazy"></div>`).join('')}
+                ${images.map((m, mi) => `<div class="post-media-item" data-index="${mi}" data-src="${authUrl(m.file_path)}" data-media-id="${m.id}"><img src="${authUrl(m.medium_path || m.file_path)}" alt="" loading="lazy"></div>`).join('')}
               </div>`;
             }
             if (videos.length) {
@@ -654,10 +654,11 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     el.querySelectorAll('.post-media-item').forEach((item) => {
       item.addEventListener('click', () => {
         const grid = item.closest('.post-media');
+        const postUuid = grid.dataset.postUuid;
         const items = [...grid.querySelectorAll('.post-media-item')];
         const index = parseInt(item.dataset.index);
-        const images = items.map(i => ({ file_path: i.dataset.src }));
-        showMediaLightbox(images, index);
+        const images = items.map(i => ({ file_path: i.dataset.src, media_id: i.dataset.mediaId }));
+        showMediaLightbox(images, index, { postUuid, onRotated: onChanged });
       });
     });
     // Document preview (PDF, text)
@@ -949,17 +950,20 @@ function renderLifeEventCard(e, currentContactUuid) {
   `;
 }
 
-function showMediaLightbox(images, startIndex) {
+function showMediaLightbox(images, startIndex, opts = {}) {
+  const { postUuid, onRotated } = opts;
   let current = startIndex;
+  let rotating = false;
   const id = 'lightbox-' + Date.now();
+  const canRotate = postUuid && images.some(i => i.media_id);
 
   function render() {
     return `
       <div class="modal fade" id="${id}" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-centered">
           <div class="modal-content" style="background:#000;border:none;overflow:hidden;border-radius:var(--radius-lg)">
-            <div class="photo-viewer" style="position:relative;text-align:center">
-              <img src="${authUrl(images[current].file_path)}" alt="" id="${id}-img" style="max-width:100%;max-height:70vh;object-fit:contain">
+            <div class="photo-viewer" style="position:relative;text-align:center;overflow:hidden">
+              <img src="${images[current].file_path}" alt="" id="${id}-img" style="max-width:100%;max-height:70vh;object-fit:contain;transition:transform 0.3s">
               ${images.length > 1 ? `
                 <button type="button" class="photo-viewer-nav photo-viewer-prev" id="${id}-prev"><i class="bi bi-chevron-left"></i></button>
                 <button type="button" class="photo-viewer-nav photo-viewer-next" id="${id}-next"><i class="bi bi-chevron-right"></i></button>
@@ -967,6 +971,7 @@ function showMediaLightbox(images, startIndex) {
             </div>
             <div class="photo-viewer-footer" style="background:var(--color-surface)">
               <span id="${id}-caption" class="photo-viewer-caption">${current + 1} / ${images.length}</span>
+              ${canRotate ? `<button type="button" class="btn btn-link btn-sm" id="${id}-rotate" title="${t('common.rotate')}" style="color:var(--color-text-secondary);font-size:1.1rem"><i class="bi bi-arrow-clockwise"></i></button>` : ''}
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
           </div>
@@ -980,7 +985,10 @@ function showMediaLightbox(images, startIndex) {
   const modal = new bootstrap.Modal(modalEl);
 
   function update() {
-    document.getElementById(`${id}-img`).src = authUrl(images[current].file_path);
+    visualRotation = 0;
+    const img = document.getElementById(`${id}-img`);
+    img.src = images[current].file_path;
+    img.style.transform = '';
     document.getElementById(`${id}-caption`).textContent = `${current + 1} / ${images.length}`;
   }
 
@@ -994,6 +1002,24 @@ function showMediaLightbox(images, startIndex) {
     update();
   });
 
+  let didRotate = false;
+  let visualRotation = 0;
+  modalEl.querySelector(`#${id}-rotate`)?.addEventListener('click', async () => {
+    const mediaId = images[current].media_id;
+    if (!mediaId || rotating) return;
+    rotating = true;
+    didRotate = true;
+
+    // Smooth CSS rotation — no image swap while viewing
+    const img = document.getElementById(`${id}-img`);
+    visualRotation = (visualRotation + 90) % 360;
+    img.style.transform = `rotate(${visualRotation}deg)`;
+
+    // Persist to disk silently
+    try { await api.post(`/posts/${postUuid}/media/${mediaId}/rotate`); } catch {}
+    rotating = false;
+  });
+
   // Keyboard nav
   const keyHandler = (e) => {
     if (e.key === 'ArrowLeft') { current = (current - 1 + images.length) % images.length; update(); }
@@ -1004,6 +1030,7 @@ function showMediaLightbox(images, startIndex) {
   modalEl.addEventListener('hidden.bs.modal', () => {
     document.removeEventListener('keydown', keyHandler);
     modalEl.remove();
+    if (didRotate && onRotated) onRotated();
   }, { once: true });
 
   modal.show();

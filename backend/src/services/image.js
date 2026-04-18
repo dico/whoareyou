@@ -65,6 +65,40 @@ export async function processImage(inputPath, subDir, filename, { keepOriginal =
 }
 
 /**
+ * Rotate an image 90° clockwise on disk — overwrites all variants (full, medium, thumb).
+ * @param {string} filePath - Web path e.g. /uploads/posts/uuid/media_0.webp
+ */
+export async function rotateImage(filePath) {
+  const rel = filePath.replace(/^\/uploads\//, '');
+  const absPath = path.join(uploadsDir, rel);
+
+  // Derive variant paths from the main file
+  const dir = path.dirname(absPath);
+  const ext = path.extname(absPath);
+  const base = path.basename(absPath, ext);
+  const mediumPath = path.join(dir, `${base}_medium${ext}`);
+  const thumbPath = path.join(dir, `${base}_thumb${ext}`);
+
+  // Read file into memory first so sharp releases the file handle before we overwrite
+  const mainInput = await fs.readFile(absPath);
+  const mainBuf = await sharp(mainInput).rotate(90).webp({ quality: imageConfig.quality }).toBuffer();
+  await fs.writeFile(absPath, mainBuf);
+
+  // Rotate medium (if exists)
+  try {
+    const medInput = await fs.readFile(mediumPath);
+    const medBuf = await sharp(medInput).rotate(90).webp({ quality: imageConfig.quality }).toBuffer();
+    await fs.writeFile(mediumPath, medBuf);
+  } catch {}
+
+  // Regenerate thumbnail from rotated main
+  await sharp(mainBuf)
+    .resize(imageConfig.thumbnailSize, imageConfig.thumbnailSize, { fit: 'cover' })
+    .webp({ quality: imageConfig.quality })
+    .toFile(thumbPath);
+}
+
+/**
  * Extract date and GPS from image EXIF metadata.
  * Uses exif-reader for full EXIF parsing including GPS coordinates.
  * @param {string} inputPath - Path to image file
