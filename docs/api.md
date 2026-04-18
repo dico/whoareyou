@@ -79,6 +79,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 | GET | `/gallery` | Photo gallery for a contact |
 | POST | `/` | Create post |
 | PUT | `/:uuid` | Update post (supports `about_contact_uuid` and `company_uuid` for moving between walls — mutually exclusive, setting one clears the other) |
+| PUT | `/:uuid/author` | Admin: reassign post author. Accepts `{ contact_uuid }` (any contact), `{ user_id }`, or `{ guest_id }`. Sets `author_contact_id` directly — works for contacts without user/guest accounts. |
 | DELETE | `/:uuid` | Delete post |
 | GET | `/:uuid/comments` | List comments |
 | POST | `/:uuid/comments` | Add comment |

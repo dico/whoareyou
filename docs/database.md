@@ -41,7 +41,8 @@ Universal timeline entries (replaces Monica's notes/activities/diary).
 - `post_date` — when the event happened
 - `visibility` — shared/family/private
 - `is_sensitive` — orthogonal to visibility; when true the post is hidden from every session unless that session has sensitive mode on. See [security.md](security.md#sensitive-content-mode).
-- `portal_guest_id` — set when created by portal guest
+- `author_contact_id` — FK → contacts. The primary source of author identity for display. Points directly to a contact, independent of user/guest/membership status. Set on creation, survives membership changes. `created_by` and `portal_guest_id` are kept for audit only.
+- `portal_guest_id` — set when created by portal guest (audit field)
 
 ### post_media
 Images, videos, documents attached to posts.
@@ -134,7 +135,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 82 migrations
+- Currently 83 migrations
 
 ### Creating a New Migration
 ```bash

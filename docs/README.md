@@ -59,7 +59,7 @@ whoareyou/
 │       ├── routes/               # 18 route modules
 │       ├── services/             # Email, image, geocoding, geolocation
 │       ├── utils/                # Errors, validation, sessions, IP, settings
-│       └── migrations/           # 82 Knex migrations
+│       └── migrations/           # 83 Knex migrations
 ├── frontend/
 │   ├── index.html                # SPA entry point
 │   ├── portal.html               # Portal entry point (planned)

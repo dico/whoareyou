@@ -104,44 +104,22 @@ async function assemblePosts(req, posts) {
     }
   }
 
-  const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
-  const authorUserIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
+  // Author resolution via author_contact_id (single source of truth)
+  const authorContactIds = [...new Set(posts.map(p => p.author_contact_id).filter(Boolean))];
   const postAuthorMap = new Map();
-
-  if (guestIds.length) {
-    const guests = await db('portal_guests').whereIn('portal_guests.id', guestIds)
-      .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
-      .select('portal_guests.id', 'portal_guests.display_name', 'portal_guests.linked_contact_id',
-        'gc.uuid as contact_uuid', 'gc.first_name as contact_first', 'gc.last_name as contact_last');
-    const guestContactIds = guests.map(g => g.linked_contact_id).filter(Boolean);
-    const guestAvatars = new Map();
-    if (guestContactIds.length) {
-      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(guestContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
-      for (const p of photos) guestAvatars.set(p.contact_id, p.thumbnail_path);
-    }
-    for (const g of guests) {
-      const name = g.contact_first ? `${g.contact_first} ${g.contact_last || ''}`.trim() : g.display_name;
-      postAuthorMap.set(`guest_${g.id}`, { name, contact_uuid: g.contact_uuid, avatar: guestAvatars.get(g.linked_contact_id) || null });
-    }
-  }
-  if (authorUserIds.length) {
-    const users = await db('users').whereIn('users.id', authorUserIds)
-      .leftJoin('tenant_members as tm', function () {
-        this.on('users.id', 'tm.user_id').andOn('tm.tenant_id', '=', db.raw('?', [req.tenantId]));
-      })
-      .leftJoin('contacts as uc', 'tm.linked_contact_id', 'uc.id')
-      .select('users.id', 'users.first_name',
-        'tm.linked_contact_id',
-        'uc.uuid as contact_uuid', 'uc.first_name as contact_first', 'uc.last_name as contact_last');
-    const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
-    const userAvatars = new Map();
-    if (userContactIds.length) {
-      const photos = await db('contact_photos').whereIn('contact_id', [...new Set(userContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
-      for (const p of photos) userAvatars.set(p.contact_id, p.thumbnail_path);
-    }
-    for (const u of users) {
-      const name = u.contact_first ? `${u.contact_first} ${u.contact_last || ''}`.trim() : u.first_name;
-      postAuthorMap.set(`user_${u.id}`, { name, contact_uuid: u.contact_uuid, avatar: userAvatars.get(u.linked_contact_id) || null });
+  if (authorContactIds.length) {
+    const authors = await db('contacts').whereIn('contacts.id', authorContactIds)
+      .select('contacts.id', 'contacts.uuid', 'contacts.first_name', 'contacts.last_name');
+    const authorAvatars = new Map();
+    const photos = await db('contact_photos').whereIn('contact_id', authorContactIds)
+      .where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+    for (const p of photos) authorAvatars.set(p.contact_id, p.thumbnail_path);
+    for (const a of authors) {
+      postAuthorMap.set(a.id, {
+        name: `${a.first_name} ${a.last_name || ''}`.trim(),
+        contact_uuid: a.uuid,
+        avatar: authorAvatars.get(a.id) || null,
+      });
     }
   }
 
@@ -209,10 +187,7 @@ async function assemblePosts(req, posts) {
       reaction_count: reactionsByPost[p.id]?.count || 0,
       reaction_names: reactionsByPost[p.id]?.names || [],
       reacted: reactionsByPost[p.id]?.reacted || false,
-      posted_by: (() => {
-        const key = p.portal_guest_id ? `guest_${p.portal_guest_id}` : p.created_by ? `user_${p.created_by}` : null;
-        return key ? postAuthorMap.get(key) || null : null;
-      })(),
+      posted_by: p.author_contact_id ? postAuthorMap.get(p.author_contact_id) || null : null,
     };
   });
 }
@@ -264,7 +239,7 @@ router.get('/', async (req, res, next) => {
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
         'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
-        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by'
+        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by', 'posts.author_contact_id'
       )
       .groupBy('posts.id')
       .orderBy('posts.post_date', 'desc')
@@ -377,7 +352,7 @@ router.get('/memories', async (req, res, next) => {
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
         'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
-        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by'
+        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by', 'posts.author_contact_id'
       )
       .orderBy('posts.post_date', 'desc');
 
@@ -606,6 +581,160 @@ router.get('/link-preview', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/posts/mg-imported — list MomentGarden-imported posts for author reassignment
+router.get('/mg-imported', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+      throw new AppError('Admin required', 403);
+    }
+    const contactUuid = req.query.contact_uuid;
+
+    let query = db('posts')
+      .where('posts.tenant_id', req.tenantId)
+      .whereNull('posts.deleted_at')
+      .whereExists(
+        db('post_media')
+          .whereRaw('post_media.post_id = posts.id')
+          .whereRaw("post_media.external_id LIKE 'mg:%'"),
+      );
+
+    if (contactUuid) {
+      const contact = await db('contacts').where({ uuid: contactUuid, tenant_id: req.tenantId }).first();
+      if (contact) query = query.where('posts.contact_id', contact.id);
+    }
+
+    const posts = await query
+      .select('posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
+        'posts.created_by', 'posts.portal_guest_id', 'posts.contact_id', 'posts.author_contact_id')
+      .orderBy('posts.post_date', 'desc');
+
+    const postIds = posts.map(p => p.id);
+
+    // Thumbnails (first image per post)
+    const thumbs = postIds.length ? await db('post_media')
+      .whereIn('post_id', postIds)
+      .where('file_type', 'like', 'image/%')
+      .orderBy('sort_order')
+      .select('post_id', 'thumbnail_path') : [];
+    const thumbByPost = new Map();
+    for (const t of thumbs) {
+      if (!thumbByPost.has(t.post_id)) thumbByPost.set(t.post_id, t.thumbnail_path);
+    }
+
+    // About-contact names
+    const contactIds = [...new Set(posts.map(p => p.contact_id).filter(Boolean))];
+    const contactMap = new Map();
+    if (contactIds.length) {
+      const contacts = await db('contacts').whereIn('id', contactIds)
+        .where({ tenant_id: req.tenantId }).select('id', 'first_name');
+      for (const c of contacts) contactMap.set(c.id, c.first_name);
+    }
+
+    // Current author names via author_contact_id
+    const authorCids = [...new Set(posts.map(p => p.author_contact_id).filter(Boolean))];
+    const authorMap = new Map();
+    if (authorCids.length) {
+      const authors = await db('contacts').whereIn('id', authorCids)
+        .where({ tenant_id: req.tenantId }).select('id', 'first_name');
+      for (const a of authors) authorMap.set(a.id, a.first_name);
+    }
+
+    // Tenant members + portal guests for the quick-select
+    const members = await db('tenant_members')
+      .join('users', 'tenant_members.user_id', 'users.id')
+      .join('contacts', 'tenant_members.linked_contact_id', 'contacts.id')
+      .leftJoin('contact_photos', function () {
+        this.on('contact_photos.contact_id', 'contacts.id').andOn('contact_photos.is_primary', db.raw('1'));
+      })
+      .where('tenant_members.tenant_id', req.tenantId)
+      .where('users.is_active', true)
+      .select('users.id as user_id', 'contacts.id as linked_contact_id',
+        'contacts.first_name', 'contacts.uuid as contact_uuid',
+        'contact_photos.thumbnail_path as avatar');
+
+    const guests = await db('portal_guests')
+      .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
+      .leftJoin('contact_photos as gcp', function () {
+        this.on('gcp.contact_id', 'gc.id').andOn('gcp.is_primary', db.raw('1'));
+      })
+      .where({ 'portal_guests.tenant_id': req.tenantId, 'portal_guests.is_active': true })
+      .select('portal_guests.id', 'portal_guests.display_name', 'portal_guests.linked_contact_id',
+        'gc.first_name as contact_name', 'gc.uuid as contact_uuid', 'gcp.thumbnail_path as avatar');
+
+    res.json({
+      posts: posts.map(p => ({
+        uuid: p.uuid,
+        body: p.body?.slice(0, 100) || '',
+        post_date: p.post_date,
+        thumbnail: thumbByPost.get(p.id) || null,
+        contact_name: contactMap.get(p.contact_id) || null,
+        author: authorMap.get(p.author_contact_id) || null,
+        author_contact_id: p.author_contact_id,
+      })),
+      members: members.map(m => ({ contact_uuid: m.contact_uuid, name: m.first_name, avatar: m.avatar })),
+      guests: guests.map(g => ({
+        contact_uuid: g.contact_uuid || null,
+        name: g.contact_name || g.display_name,
+        avatar: g.avatar || null,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/posts/:uuid/author — reassign post author (admin only)
+router.put('/:uuid/author', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+      throw new AppError('Admin required', 403);
+    }
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!post) throw new AppError('Post not found', 404);
+
+    const { user_id, guest_id, contact_uuid } = req.body;
+    const updates = {};
+
+    if (contact_uuid) {
+      // Direct contact assignment — works for any contact (user, guest, or neither)
+      const contact = await db('contacts')
+        .where({ uuid: contact_uuid, tenant_id: req.tenantId })
+        .first();
+      if (!contact) throw new AppError('Contact not found', 400);
+      updates.author_contact_id = contact.id;
+      // Also update audit fields if the contact is linked to a user/guest
+      const member = await db('tenant_members')
+        .where({ linked_contact_id: contact.id, tenant_id: req.tenantId }).first();
+      if (member) { updates.created_by = member.user_id; updates.portal_guest_id = null; }
+      else {
+        const guest = await db('portal_guests')
+          .where({ linked_contact_id: contact.id, tenant_id: req.tenantId }).first();
+        if (guest) { updates.portal_guest_id = guest.id; updates.created_by = null; }
+      }
+    } else if (user_id) {
+      const member = await db('tenant_members')
+        .where({ user_id, tenant_id: req.tenantId }).first();
+      if (!member) throw new AppError('User is not a tenant member', 400);
+      updates.created_by = user_id;
+      updates.portal_guest_id = null;
+      updates.author_contact_id = member.linked_contact_id;
+    } else if (guest_id) {
+      const guest = await db('portal_guests')
+        .where({ id: guest_id, tenant_id: req.tenantId }).first();
+      if (!guest) throw new AppError('Guest not found', 400);
+      updates.portal_guest_id = guest_id;
+      updates.created_by = null;
+      updates.author_contact_id = guest.linked_contact_id;
+    } else {
+      throw new AppError('user_id, guest_id, or contact_uuid required', 400);
+    }
+
+    await db('posts').where({ id: post.id }).update(updates);
+    res.json({ message: 'Author updated' });
+  } catch (err) { next(err); }
+});
+
 // POST /api/posts — create post
 router.post('/', async (req, res, next) => {
   try {
@@ -634,11 +763,14 @@ router.post('/', async (req, res, next) => {
       if (companyRow) companyId = companyRow.id;
     }
 
+    const authorContactId = await getLinkedContactId(req.user.id, req.tenantId);
+
     const post = await db.transaction(async (trx) => {
       const [postId] = await trx('posts').insert({
         uuid,
         tenant_id: req.tenantId,
         created_by: req.user.id,
+        author_contact_id: authorContactId,
         body: body.trim(),
         post_date: post_date || new Date(),
         contact_id: aboutContactId,

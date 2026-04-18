@@ -334,57 +334,34 @@ router.get('/contacts/:uuid/timeline', portalAuthenticate, async (req, res, next
       }
     }
 
-    // Resolve post authors: portal guests or users
-    const guestIds = [...new Set(posts.map(p => p.portal_guest_id).filter(Boolean))];
-    const userIds = [...new Set(posts.map(p => p.created_by).filter(Boolean))];
-    const authorMap = new Map(); // id -> { name, avatar }
-    if (guestIds.length) {
-      const guests = await db('portal_guests').whereIn('portal_guests.id', guestIds)
-        .leftJoin('contacts as gc', 'portal_guests.linked_contact_id', 'gc.id')
-        .select('portal_guests.id', 'portal_guests.display_name',
-          'gc.first_name as contact_first', 'gc.last_name as contact_last', 'gc.id as contact_id');
-      // Get avatars for guest-linked contacts
-      const guestContactIds = guests.map(g => g.contact_id).filter(Boolean);
-      const guestAvatarMap = new Map();
-      if (guestContactIds.length) {
-        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(guestContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
-        for (const p of photos) guestAvatarMap.set(p.contact_id, p.thumbnail_path);
-      }
-      for (const g of guests) {
-        const name = g.contact_first ? `${g.display_name} ${g.contact_first}` : g.display_name;
-        authorMap.set(`guest_${g.id}`, { name, avatar: guestAvatarMap.get(g.contact_id) || null });
-      }
-    }
-    if (userIds.length) {
-      const users = await db('users').whereIn('users.id', userIds)
-        .leftJoin('contacts as uc', 'users.linked_contact_id', 'uc.id')
-        .select('users.id', 'users.first_name', 'users.linked_contact_id',
-          'uc.first_name as contact_first', 'uc.last_name as contact_last');
-      const userContactIds = users.map(u => u.linked_contact_id).filter(Boolean);
-      const userAvatarMap = new Map();
-      if (userContactIds.length) {
-        const photos = await db('contact_photos').whereIn('contact_id', [...new Set(userContactIds)]).where({ is_primary: true }).select('contact_id', 'thumbnail_path');
-        for (const p of photos) userAvatarMap.set(p.contact_id, p.thumbnail_path);
-      }
-      for (const u of users) {
-        authorMap.set(`user_${u.id}`, { name: u.contact_first || u.first_name, avatar: userAvatarMap.get(u.linked_contact_id) || null });
+    // Resolve post authors via author_contact_id
+    const authorContactIds = [...new Set(posts.map(p => p.author_contact_id).filter(Boolean))];
+    const authorMap = new Map();
+    if (authorContactIds.length) {
+      const authors = await db('contacts').whereIn('contacts.id', authorContactIds)
+        .select('contacts.id', 'contacts.first_name', 'contacts.last_name');
+      const authorAvatars = new Map();
+      const photos = await db('contact_photos').whereIn('contact_id', authorContactIds)
+        .where({ is_primary: true }).select('contact_id', 'thumbnail_path');
+      for (const p of photos) authorAvatars.set(p.contact_id, p.thumbnail_path);
+      for (const a of authors) {
+        authorMap.set(a.id, {
+          name: `${a.first_name} ${a.last_name || ''}`.trim(),
+          avatar: authorAvatars.get(a.id) || null,
+        });
       }
     }
 
     res.json({
-      posts: posts.map(p => {
-        const authorKey = p.portal_guest_id ? `guest_${p.portal_guest_id}` : p.created_by ? `user_${p.created_by}` : null;
-        const author = authorKey ? authorMap.get(authorKey) : null;
-        return {
-          uuid: p.uuid, body: p.body, post_date: p.post_date,
-          about: p.about || null, contacts: p.contacts, media: p.media,
-          reaction_count: p.reaction_count, reacted: p.reacted,
-          reaction_names: p.reaction_names || [],
-          comment_count: p.comment_count,
-          author: author || null,
-          is_own: p.portal_guest_id === req.portal.guestId,
-        };
-      }),
+      posts: posts.map(p => ({
+        uuid: p.uuid, body: p.body, post_date: p.post_date,
+        about: p.about || null, contacts: p.contacts, media: p.media,
+        reaction_count: p.reaction_count, reacted: p.reacted,
+        reaction_names: p.reaction_names || [],
+        comment_count: p.comment_count,
+        author: p.author_contact_id ? authorMap.get(p.author_contact_id) || null : null,
+        is_own: p.portal_guest_id === req.portal.guestId,
+      })),
       hasMore: posts.length === limit,
     });
   } catch (err) { next(err); }
@@ -411,6 +388,7 @@ router.post('/posts', portalAuthenticate, async (req, res, next) => {
       uuid,
       tenant_id: req.portal.tenantId,
       created_by: null,
+      author_contact_id: guest?.linked_contact_id || null,
       body: (body || '').trim(),
       post_date: new Date(),
       contact_id: contact.id,
