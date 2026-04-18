@@ -87,6 +87,86 @@ Norwegian Business Register lookup for auto-populating company data.
 - `routes/companies.js` — Brreg lookup endpoint with SSRF protection
 - `frontend/js/pages/company-detail.js` — UI button and auto-fill logic
 
+## MomentGarden — Manual Post Insert
+
+For posts that weren't included in the ZIP export (text-only posts, corrupted images), use these SQL templates via dev-tools database or container exec.
+
+### 1. Find contact and author IDs
+
+```sql
+-- Find the contact (whose wall the post goes on)
+SELECT id, uuid, first_name, last_name FROM contacts
+WHERE tenant_id = 1 AND first_name = 'Ailo';
+
+-- Find the author contact (who posted it)
+SELECT id, uuid, first_name, last_name FROM contacts
+WHERE tenant_id = 1 AND first_name = 'Christine';
+```
+
+### 2. Insert a post
+
+```sql
+INSERT INTO posts (uuid, tenant_id, body, post_date, contact_id, author_contact_id, visibility, created_at, updated_at)
+VALUES (
+  UUID(),                          -- auto-generated UUID
+  1,                               -- tenant_id
+  'Post text here',                -- body
+  '2020-03-08',                    -- post_date (YYYY-MM-DD)
+  870,                             -- contact_id (whose wall — from step 1)
+  425,                             -- author_contact_id (who posted — from step 1)
+  'shared',                        -- visibility
+  NOW(), NOW()
+);
+```
+
+To include in MG author management and sync, add an external_id marker:
+```sql
+-- Get the post ID just inserted
+SET @post_id = LAST_INSERT_ID();
+
+-- Add a dummy media entry so MG-authors page shows it (optional)
+-- Only needed if you want the post to appear in MG sync flow
+INSERT INTO post_media (post_id, tenant_id, file_path, file_type, external_id, sort_order)
+VALUES (@post_id, 1, '', 'text/plain', 'mg:MOMENT_ID', 0);
+```
+
+### 3. Add likes (reactions)
+
+```sql
+-- Find post_id first
+SELECT id FROM posts WHERE tenant_id = 1 AND body LIKE '%text fragment%' LIMIT 1;
+
+-- Add a like from a specific contact
+INSERT INTO post_reactions (post_id, tenant_id, emoji, contact_id, created_at)
+VALUES (
+  POST_ID,                         -- post_id from above
+  1,                               -- tenant_id
+  '❤️',                            -- emoji
+  CONTACT_ID,                      -- contact_id of the person who liked
+  '2020-03-08 10:18:20'            -- created_at (from MG loves API)
+);
+```
+
+### 4. Add comments
+
+```sql
+INSERT INTO post_comments (post_id, tenant_id, body, contact_id, created_at, updated_at)
+VALUES (
+  POST_ID,                         -- post_id
+  1,                               -- tenant_id
+  'Comment text here',             -- body
+  CONTACT_ID,                      -- contact_id of commenter
+  '2020-03-08 19:43:33',           -- created_at
+  '2020-03-08 19:43:33'            -- updated_at
+);
+```
+
+### Notes
+- `author_contact_id` is the display author — use this instead of `created_by`
+- `contact_id` on posts is the "about" contact (whose wall), not the author
+- All IDs are internal integer IDs, not UUIDs (use the SELECT queries to find them)
+- `tenant_id` must match across all tables
+
 ## Monica CRM Import
 
 One-time migration script for users coming from Monica.
