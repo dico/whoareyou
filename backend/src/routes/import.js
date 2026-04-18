@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AdmZip from 'adm-zip';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
-import { processImage } from '../services/image.js';
+import { processImage, extractImageMetadata } from '../services/image.js';
 import { config } from '../config/index.js';
 import { getLinkedContactId } from '../utils/tenant.js';
 
@@ -55,16 +55,29 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
     const captionsText = captionsEntry.getData().toString('utf8');
     const lines = captionsText.trim().split('\n').filter(l => l.trim());
 
-    // Parse captions: "DATE TIME : FILENAME : CAPTION"
+    // Parse captions: "DATE TIME : FILENAME : CAPTION" (caption may be empty)
     const moments = [];
     for (const line of lines) {
       const parts = line.split(' : ');
-      if (parts.length >= 3) {
+      if (parts.length >= 2) {
         moments.push({
           date: parts[0].trim(),
           filename: parts[1].trim(),
-          caption: parts.slice(2).join(' : ').trim(),
+          caption: parts.length >= 3 ? parts.slice(2).join(' : ').trim() : '',
         });
+      }
+    }
+
+    // Check for files in ZIP not listed in captions.txt
+    const captionedFiles = new Set(moments.map(m => m.filename));
+    const uncaptionedFiles = [];
+    for (const entry of entries) {
+      const name = entry.entryName.split('/').pop();
+      if (!name || entry.isDirectory || name === 'captions.txt') continue;
+      const ext = name.split('.').pop().toLowerCase();
+      if (!['jpg','jpeg','png','gif','webp','mp4','mov','avi'].includes(ext)) continue;
+      if (!captionedFiles.has(name)) {
+        uncaptionedFiles.push(name);
       }
     }
 
@@ -210,6 +223,110 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
       }
     }
 
+    // Import uncaptioned files (images in ZIP but not in captions.txt)
+    // Build a sorted list of MG-ID → date from captioned moments for neighbor estimation
+    const mgIdDates = moments
+      .map(m => { const match = m.filename.match(/^(\d+)_/); return match ? { id: parseInt(match[1]), date: m.date } : null; })
+      .filter(Boolean)
+      .sort((a, b) => a.id - b.id);
+
+    function estimateDateFromNeighbors(mgId) {
+      if (!mgIdDates.length) return null;
+      // Find nearest before and after
+      let before = null, after = null;
+      for (const m of mgIdDates) {
+        if (m.id <= mgId) before = m;
+        if (m.id >= mgId && !after) after = m;
+      }
+      if (before && after && before !== after) {
+        // Interpolate between neighbors
+        const ratio = (mgId - before.id) / (after.id - before.id);
+        const t1 = new Date(before.date).getTime();
+        const t2 = new Date(after.date).getTime();
+        return new Date(t1 + ratio * (t2 - t1)).toISOString().split('T')[0];
+      }
+      return (before || after)?.date || null;
+    }
+
+    let uncaptionedImported = 0;
+    for (const filename of uncaptionedFiles) {
+      if (importedNames.has(filename)) continue;
+      const fileEntry = fileMap.get(filename);
+      if (!fileEntry) continue;
+
+      const ext = path.extname(filename).toLowerCase();
+      const isImage = IMAGE_EXTS.includes(ext);
+      const isVideo = VIDEO_EXTS.includes(ext);
+      if (!isImage && !isVideo) continue;
+
+      importedNames.add(filename);
+      const postUuid = uuidv4();
+      const authorContactId = await getLinkedContactId(req.user.id, req.tenantId);
+
+      const buffer = fileEntry.getData();
+      const tempPath = path.join(config.uploads.dir, 'temp', `mg_${Date.now()}_${filename}`);
+      await fs.mkdir(path.dirname(tempPath), { recursive: true });
+      await fs.writeFile(tempPath, buffer);
+
+      // Date priority: EXIF → neighbor estimation → today
+      let postDate = null;
+      if (isImage) {
+        try {
+          const meta = await extractImageMetadata(tempPath);
+          if (meta.date) postDate = meta.date;
+        } catch {}
+      }
+      if (!postDate) {
+        const mgMatch = filename.match(/^(\d+)_/);
+        if (mgMatch) postDate = estimateDateFromNeighbors(parseInt(mgMatch[1]));
+      }
+      if (!postDate) postDate = new Date();
+
+      const [postId] = await db('posts').insert({
+        uuid: postUuid, tenant_id: req.tenantId, created_by: req.user.id,
+        author_contact_id: authorContactId, contact_id: contact.id,
+        body: '', post_date: postDate, visibility: 'shared',
+      });
+
+      try {
+        let filePath, thumbnailPath, fileType;
+        const outDir = `posts/${postUuid}`;
+        if (isImage) {
+          const processed = await processImage(tempPath, outDir, 'media_0');
+          filePath = processed.filePath;
+          thumbnailPath = processed.thumbnailPath;
+          fileType = 'image/webp';
+        } else {
+          const destDir = path.join(config.uploads.dir, outDir);
+          await fs.mkdir(destDir, { recursive: true });
+          const destName = `video_0${ext}`;
+          await fs.rename(tempPath, path.join(destDir, destName));
+          filePath = `/uploads/${outDir}/${destName}`;
+          thumbnailPath = null;
+          fileType = `video/${ext.slice(1) === 'mov' ? 'quicktime' : ext.slice(1)}`;
+        }
+
+        const momentIdMatch = filename.match(/^(\d+)_/);
+        const externalId = momentIdMatch ? `mg:${momentIdMatch[1]}` : null;
+
+        await db('post_media').insert({
+          post_id: postId, tenant_id: req.tenantId,
+          file_path: filePath, thumbnail_path: thumbnailPath,
+          file_type: fileType, file_size: buffer.length,
+          original_name: filename, external_id: externalId, sort_order: 0,
+        });
+
+        uncaptionedImported++;
+        postsCreated++;
+        mediaImported++;
+      } catch (err) {
+        await fs.unlink(tempPath).catch(() => {});
+        await db('posts').where({ id: postId }).del().catch(() => {});
+        skippedFiles.push({ file: filename, reason: 'processing_error', caption: '', error: err.message });
+        skipped++;
+      }
+    }
+
     // Update last_contacted_at on the contact
     if (postsCreated) {
       await db('contacts').where({ id: contact.id }).update({ last_contacted_at: db.fn.now() });
@@ -218,7 +335,7 @@ router.post('/momentgarden', uploadZip.single('zip'), async (req, res, next) => 
     // Clean up uploaded ZIP
     await fs.unlink(req.file.path).catch(() => {});
 
-    res.json({ posts_created: postsCreated, media_imported: mediaImported, repaired, skipped, duplicates, skipped_files: skippedFiles });
+    res.json({ posts_created: postsCreated, media_imported: mediaImported, repaired, skipped, duplicates, skipped_files: skippedFiles, uncaptioned_imported: uncaptionedImported });
   } catch (err) {
     // Clean up on error
     if (req.file?.path) await fs.unlink(req.file.path).catch(() => {});
