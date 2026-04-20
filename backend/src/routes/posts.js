@@ -882,6 +882,10 @@ async function notifyFamilyPost(req, post, created) {
   }
   const firstImage = (created.media || []).find(m => m.file_type?.startsWith('image'));
   const thumb = firstImage?.thumbnail_path || '';
+  // Short body preview in the notification body so the bell dropdown and
+  // email digest can show it without re-fetching the post. Stripped of
+  // newlines to stay single-line.
+  const preview = (created.body || '').replace(/\s+/g, ' ').trim().slice(0, 120);
 
   const users = await db('users')
     .join('tenant_members', function () {
@@ -895,7 +899,7 @@ async function notifyFamilyPost(req, post, created) {
   for (const u of users) {
     await tryCreateNotification(u.id, req.tenantId, 'family_post', {
       title: authorName,
-      body: `${post.uuid}|${thumb}`,
+      body: `${post.uuid}|${thumb}|${preview}`,
       link: created.about?.uuid ? `/contacts/${created.about.uuid}?post=${post.uuid}` : `/?post=${post.uuid}`,
     }, { contactId: authorLinkedContactId, authorUserId, authorIsGuest: false });
   }

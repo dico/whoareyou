@@ -674,6 +674,7 @@
     "anniversary": "{name} — {event} ({years} år)",
     "memory": "{n} minner fra {years} år siden",
     "familyPost": "{name} la ut et innlegg",
+    "familyPostWithPreview": "{name}: {preview}",
     "familyComment": "{name} kommenterte: {preview}",
     "justNow": "Akkurat nå",
     "minutesAgo": "{n}m siden",

@@ -674,6 +674,7 @@
     "anniversary": "{name} — {event} ({years} years)",
     "memory": "{n} memories from {years} years ago",
     "familyPost": "{name} posted",
+    "familyPostWithPreview": "{name}: {preview}",
     "familyComment": "{name} commented: {preview}",
     "justNow": "Just now",
     "minutesAgo": "{n}m ago",

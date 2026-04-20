@@ -340,7 +340,11 @@ function renderTextLine(n) {
       ? `1 minne fra ${years} år siden`
       : `${count} minner fra i dag — det eldste fra ${years} år siden`;
   }
-  if (n.type === 'family_post') return `${n.title} la ut et innlegg`;
+  if (n.type === 'family_post') {
+    const parts = (n.body || '').split('|');
+    const preview = parts[2] || '';
+    return preview ? `${n.title}: ${preview}` : `${n.title} la ut et innlegg`;
+  }
   if (n.type === 'family_comment') {
     const parts = (n.body || '').split('|');
     return `${n.title} kommenterte: ${parts[1] || ''}`;

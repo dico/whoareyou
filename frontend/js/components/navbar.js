@@ -159,8 +159,10 @@ export function renderNavbar() {
           title = t('notifications.memory', { n: parseInt(count, 10) || 1, years });
           if (thumb) avatarHtml = `<div class="notification-thumb"><img src="${authUrl(thumb)}" alt=""></div>`;
         } else if (n.type === 'family_post') {
-          const [, thumb] = (n.body || '').split('|');
-          title = t('notifications.familyPost', { name: n.title });
+          const [, thumb, preview] = (n.body || '').split('|');
+          title = preview
+            ? t('notifications.familyPostWithPreview', { name: n.title, preview })
+            : t('notifications.familyPost', { name: n.title });
           if (thumb) avatarHtml = `<div class="notification-thumb"><img src="${authUrl(thumb)}" alt=""></div>`;
         } else if (n.type === 'family_comment') {
           const [, preview] = (n.body || '').split('|');
