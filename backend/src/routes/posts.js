@@ -871,7 +871,15 @@ async function notifyFamilyPost(req, post, created) {
   const authorLinkedContactId = await db('tenant_members')
     .where({ user_id: authorUserId, tenant_id: req.tenantId })
     .select('linked_contact_id').first().then(r => r?.linked_contact_id || null);
-  const authorName = created.posted_by?.name || 'Someone';
+  // Prefer the linked contact's name; fall back to the user's own name when
+  // no contact is linked yet (avoids the generic "Someone" notification).
+  let authorName = created.posted_by?.name;
+  if (!authorName) {
+    const u = await db('users').where({ id: authorUserId })
+      .select('first_name', 'last_name', 'email').first();
+    authorName = [u?.first_name, u?.last_name].filter(Boolean).join(' ').trim()
+      || u?.email || 'Someone';
+  }
   const firstImage = (created.media || []).find(m => m.file_type?.startsWith('image'));
   const thumb = firstImage?.thumbnail_path || '';
 
@@ -1050,6 +1058,25 @@ async function getPostWithDetails(postId, tenantId) {
       .first();
   }
 
+  // Get author via author_contact_id (same shape as assemblePosts → posted_by)
+  let posted_by = null;
+  if (post.author_contact_id) {
+    const author = await db('contacts')
+      .where({ id: post.author_contact_id, tenant_id: tenantId })
+      .select('uuid', 'first_name', 'last_name')
+      .first();
+    if (author) {
+      const photo = await db('contact_photos')
+        .where({ contact_id: post.author_contact_id, is_primary: true })
+        .select('thumbnail_path').first();
+      posted_by = {
+        name: `${author.first_name} ${author.last_name || ''}`.trim(),
+        contact_uuid: author.uuid,
+        avatar: photo?.thumbnail_path || null,
+      };
+    }
+  }
+
   return {
     uuid: post.uuid,
     body: post.body,
@@ -1060,6 +1087,7 @@ async function getPostWithDetails(postId, tenantId) {
     about,
     contacts,
     media,
+    posted_by,
     link_preview: linkPreview ? { url: linkPreview.url, title: linkPreview.title, description: linkPreview.description, image_url: linkPreview.image_url, site_name: linkPreview.site_name } : null,
   };
 }
@@ -1208,7 +1236,12 @@ async function notifyFamilyComment(req, post, comment, { commentBody, authorIsGu
         .where({ user_id: authorUserId, tenant_id: req.tenantId })
         .select('linked_contact_id').first().then(r => r?.linked_contact_id || null)
     : null;
-  const authorName = comment.first_name || 'Someone';
+  let authorName = comment.first_name;
+  if (!authorName && authorUserId) {
+    const u = await db('users').where({ id: authorUserId }).select('first_name', 'last_name', 'email').first();
+    authorName = [u?.first_name, u?.last_name].filter(Boolean).join(' ').trim() || u?.email;
+  }
+  if (!authorName) authorName = 'Someone';
   const preview = (commentBody || '').slice(0, 80);
 
   // Everyone who should get a notification: all active tenant users except the commenter.
