@@ -228,7 +228,20 @@ function renderSlideshow(data) {
 function renderFeed(data) {
   const { config, posts } = data;
   const container = document.createElement('div');
-  const visiblePosts = posts.slice(0, config.max_posts || 3);
+  // Defensive skip: drop posts that would render as empty cards given the
+  // current config (no image AND body hidden/missing). The backend already
+  // filters these out, but keep a second gate here so bad data can't turn
+  // the display into a wall of blank cards.
+  const displayable = posts.filter((p) => {
+    const hasImage = (p.images || []).length > 0;
+    const hasVisibleBody = config.show_body && p.body && p.body.trim();
+    return hasImage || hasVisibleBody;
+  });
+  const visiblePosts = displayable.slice(0, config.max_posts || 3);
+  if (!visiblePosts.length) {
+    root.innerHTML = '<div class="signage-center">No posts to display</div>';
+    return;
+  }
   container.className = `signage-feed layout-${config.feed_layout || 'horizontal'} count-${visiblePosts.length}`;
   root.innerHTML = '';
   root.appendChild(container);
@@ -243,6 +256,7 @@ function renderFeed(data) {
     if (images.length) {
       const imgWrap = document.createElement('div');
       imgWrap.className = 'signage-feed-card-img';
+      imgWrap.style.setProperty('--img-fit', config.image_fit || 'contain');
 
       if (images.length === 1 || config.multi_image === 'first') {
         const img = document.createElement('img');

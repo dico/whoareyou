@@ -277,13 +277,29 @@ router.get('/feed/:token', async (req, res, next) => {
       query = query.where('posts.post_date', '>=', since.toISOString().split('T')[0]);
     }
 
-    // For slideshow: only posts with images
-    if (screen.display_mode === 'slideshow') {
+    // Require something displayable:
+    // - Slideshow always needs an image (nothing to show otherwise).
+    // - Feed: if show_body is off, a text-only post would render as an
+    //   empty dark card with just a date/name — exclude those too.
+    const mustHaveImage = screen.display_mode === 'slideshow' || !screen.show_body;
+    if (mustHaveImage) {
       query = query.whereExists(
         db('post_media')
           .whereRaw('post_media.post_id = posts.id')
           .where('post_media.file_type', 'like', 'image/%'),
       );
+    } else {
+      // Feed + show_body on: keep image posts AND text posts with a body.
+      // Drop the rare post with neither.
+      query = query.where(function () {
+        this.whereExists(
+          db('post_media')
+            .whereRaw('post_media.post_id = posts.id')
+            .where('post_media.file_type', 'like', 'image/%'),
+        ).orWhere(function () {
+          this.whereNotNull('posts.body').andWhereNot('posts.body', '');
+        });
+      });
     }
 
     // Order + limit
