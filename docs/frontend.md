@@ -23,6 +23,7 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
 | `showMediaPicker()` | `media-picker.js` | Modal picker for selecting one or more existing images. Source-agnostic — currently supports `{ contactUuid }` (combines profile photos + post gallery) and `{ items }` (preloaded). Returns a Promise of selected items. Uses `.contact-gallery-grid` styling. New sources (groups, multi-contact, books) can be added in `loadFromSource`. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
+| `listRowHtml()` | `list-row.js` | Standardized list row: icon/thumb + title/meta + actions. Used by book list, signage screens, MG author reassignment. Handles dropdown z-index fix once for all consumers. See [design-guidelines.md](design-guidelines.md) rule 34. |
 
 ## Pages (28 files)
 

@@ -3,6 +3,7 @@ import { state } from '../app.js';
 import { t } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { contactSearchDialog, confirmDialog } from '../components/dialogs.js';
+import { listRowHtml } from '../components/list-row.js';
 
 export async function renderMgAuthors() {
   const content = document.getElementById('app-content');
@@ -106,12 +107,10 @@ function renderList(container, data) {
     listEl.innerHTML = '';
 
     for (const post of visible) {
-      const row = document.createElement('div');
-      row.className = 'mg-author-row glass-card mb-2';
-
-      const thumb = post.thumbnail
-        ? `<img src="${authUrl(post.thumbnail)}" alt="" class="mg-author-thumb">`
-        : `<div class="mg-author-thumb mg-author-no-img"><i class="bi bi-card-text"></i></div>`;
+      const hasThumb = !!post.thumbnail;
+      const iconHtml = hasThumb
+        ? `<img src="${authUrl(post.thumbnail)}" alt="">`
+        : `<i class="bi bi-card-text"></i>`;
 
       const bodyPreview = post.body ? post.body.slice(0, 60) + (post.body.length > 60 ? '…' : '') : '';
       const dateStr = post.post_date ? new Date(post.post_date).toLocaleDateString('nb-NO') : '';
@@ -140,21 +139,29 @@ function renderList(container, data) {
           </div>`
         : '';
 
-      row.innerHTML = `
-        ${thumb}
-        <div class="mg-author-info">
-          <div class="mg-author-meta">
-            ${post.contact_name ? `<span class="fw-medium">${post.contact_name}</span> · ` : ''}
-            <span class="text-muted">${dateStr}</span>
-          </div>
-          <div class="mg-author-body text-muted small">${bodyPreview}</div>
-        </div>
+      const titleHtml = post.contact_name
+        ? `${post.contact_name} <span class="text-muted fw-normal">· ${dateStr}</span>`
+        : `<span class="text-muted fw-normal">${dateStr}</span>`;
+
+      const actionsHtml = `
         <div class="mg-avatar-picks">
           ${avatarPicks}
           ${extraAuthor}
           <div class="mg-avatar-pick mg-avatar-search" title="${t('common.search')}"><span>+</span></div>
         </div>
       `;
+
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = listRowHtml({
+        iconHtml,
+        iconBg: hasThumb ? undefined : 'var(--color-bg)',
+        iconColor: hasThumb ? undefined : 'var(--color-text-secondary)',
+        title: titleHtml,
+        meta: `<span class="mg-author-body">${bodyPreview}</span>`,
+        actions: actionsHtml,
+        extraClass: 'glass-card mg-author-row mb-2',
+      }).trim();
+      const row = wrapper.firstElementChild;
 
       // Individual avatar picks
       row.querySelectorAll('.mg-avatar-pick:not(.mg-avatar-search)').forEach(pick => {

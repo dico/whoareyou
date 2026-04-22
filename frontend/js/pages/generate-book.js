@@ -9,6 +9,7 @@ import { t, getLocale, formatDateLong } from '../utils/i18n.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
+import { listRowHtml } from '../components/list-row.js';
 import { pageSizeOptionsHtml } from './book-preview.js';
 
 function showError(message) {
@@ -112,32 +113,33 @@ function wizardFormHtml() {
 
 function bookListItemHtml(book) {
   const created = book.created_at ? formatDateLong(book.created_at) : '';
-  return `
-    <div class="glass-card book-list-item" data-book-uuid="${book.uuid}">
-      <div class="book-list-icon"><i class="bi bi-book"></i></div>
-      <a href="/books/${book.uuid}/preview" data-link class="book-list-info">
-        <p class="book-list-title">${escapeHtml(book.title)}</p>
-        <p class="book-list-meta">
-          ${book.subtitle ? escapeHtml(book.subtitle) + ' · ' : ''}${escapeHtml(created)}
-        </p>
-      </a>
-      <div class="book-list-actions">
-        <a href="/books/${book.uuid}/preview" data-link class="btn btn-primary btn-sm">
-          <i class="bi bi-eye me-1"></i>${t('book.open')}
-        </a>
-        <div class="dropdown">
-          <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-three-dots"></i>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-            <li><button class="dropdown-item" data-book-action="edit" data-book-uuid="${escapeHtml(book.uuid)}"><i class="bi bi-pencil me-2"></i>${t('book.editInfo')}</button></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button class="dropdown-item text-danger" data-book-action="delete" data-book-uuid="${escapeHtml(book.uuid)}"><i class="bi bi-trash3 me-2"></i>${t('book.delete')}</button></li>
-          </ul>
-        </div>
-      </div>
+  const meta = `${book.subtitle ? escapeHtml(book.subtitle) + ' · ' : ''}${escapeHtml(created)}`;
+  const actions = `
+    <a href="/books/${book.uuid}/preview" data-link class="btn btn-primary btn-sm">
+      <i class="bi bi-eye me-1"></i>${t('book.open')}
+    </a>
+    <div class="dropdown">
+      <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-three-dots"></i>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+        <li><button class="dropdown-item" data-book-action="edit" data-book-uuid="${escapeHtml(book.uuid)}"><i class="bi bi-pencil me-2"></i>${t('book.editInfo')}</button></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><button class="dropdown-item text-danger" data-book-action="delete" data-book-uuid="${escapeHtml(book.uuid)}"><i class="bi bi-trash3 me-2"></i>${t('book.delete')}</button></li>
+      </ul>
     </div>
   `;
+  return listRowHtml({
+    icon: 'bi-book',
+    iconBg: 'rgba(200,139,58,0.12)',
+    iconColor: '#c88b3a',
+    title: escapeHtml(book.title),
+    meta,
+    actions,
+    href: `/books/${book.uuid}/preview`,
+    extraClass: 'glass-card book-list-item',
+    data: { bookUuid: book.uuid },
+  });
 }
 
 function renderList(books) {

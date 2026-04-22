@@ -488,40 +488,68 @@ a:hover {
   gap: var(--space-xs);
 }
 
-/* Signage screen list — follows the same icon + info + actions pattern as
- * the book list (book.css .book-list-item). */
-.signage-screen-row {
+/* ── List row ────────────────────────────────────────────────
+ * Shared layout for list rows with icon + info + optional actions.
+ * Used by the book list, signage screens, MG author reassignment, and any
+ * future list of items where each row shows: visual identifier, title/meta,
+ * and inline actions. See design-guidelines.md rule 34 and listRowHtml().
+ *
+ * Color customization via CSS custom properties on the row:
+ *   --list-row-icon-bg, --list-row-icon-color
+ *
+ * Typical usage: <div class="glass-card list-row" style="--list-row-icon-bg:...">
+ */
+.list-row {
   display: flex;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md);
   margin-bottom: var(--space-sm);
+  text-decoration: none;
+  color: inherit;
   transition: transform 0.12s, box-shadow 0.12s;
 }
-.signage-screen-row:hover {
+.list-row:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  color: inherit;
 }
-.signage-screen-icon {
+/* Elevate the row when its dropdown is open, so the menu paints above
+ * sibling glass-cards (each glass-card is its own stacking context).
+ * Bootstrap 5 adds .show to .dropdown-menu, not the .dropdown wrapper. */
+.list-row:has(.dropdown-menu.show) { position: relative; z-index: 10; }
+
+.list-row-icon {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-md, 8px);
-  background: rgba(99,102,241,0.12);
-  color: #6366f1;
+  background: var(--list-row-icon-bg, rgba(99,102,241,0.12));
+  color: var(--list-row-icon-color, #6366f1);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.4rem;
   flex-shrink: 0;
+  overflow: hidden;
 }
-.signage-screen-icon.is-inactive {
+.list-row-icon.is-inactive {
   background: rgba(142,142,147,0.1);
   color: #8e8e93;
 }
-.signage-screen-info { flex: 1; min-width: 0; }
-.signage-screen-title { font-weight: 600; margin: 0; }
-.signage-screen-meta { color: var(--color-text-muted, #6b6b6b); font-size: 0.85rem; margin: 0; }
-.signage-screen-actions { flex-shrink: 0; }
+.list-row-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.list-row-info { flex: 1; min-width: 0; }
+.list-row-title { font-weight: 600; margin: 0; }
+.list-row-meta { color: var(--color-text-muted, #6b6b6b); font-size: 0.85rem; margin: 0; }
+.list-row-actions { flex-shrink: 0; display: flex; gap: var(--space-xs); align-items: center; }
+
+/* Links used inside list-row (e.g. wrapping the info block) keep the row's
+ * inherit color and remove underline — otherwise the meta line looks like a link. */
+a.list-row-info,
+.list-row-info a { color: inherit; text-decoration: none; }
 
 /* Settings / admin pages */
 .settings-section {
@@ -1092,35 +1120,15 @@ a:hover {
   .pref-controls { justify-content: space-between; }
 }
 
-/* MG author reassignment rows */
-.mg-author-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-}
-.mg-author-thumb {
-  width: 48px; height: 48px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-.mg-author-no-img {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  font-size: 1.2rem;
-}
-.mg-author-info {
-  flex: 1;
-  min-width: 0;
-}
+/* MG author reassignment rows — uses the shared .list-row layout
+ * with an MG-specific avatar picker in the actions slot. Compact padding
+ * because these lists can be long (hundreds of rows). */
+.list-row.mg-author-row { padding: var(--space-sm) var(--space-md); }
 .mg-author-body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 .mg-avatar-picks {
   display: flex;
@@ -1159,6 +1167,6 @@ a:hover {
   pointer-events: none;
 }
 @media (max-width: 480px) {
-  .mg-author-row { flex-wrap: wrap; }
+  .list-row.mg-author-row { flex-wrap: wrap; }
   .mg-avatar-picks { width: 100%; justify-content: flex-end; }
 }

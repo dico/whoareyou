@@ -9,6 +9,31 @@
 - **Mobile-first** — responsive design, touch-friendly
 - **No build step** — vanilla JS, CSS custom properties, Bootstrap 5 as base
 
+## Standardization Principle
+
+**Shared visual patterns MUST live in one place.** If two pages render rows, cards, buttons, or layouts that look and behave the same, they share CSS classes and (where applicable) a JS/HTML helper. This applies to **CSS classes in the frontend, helper functions that build HTML, and backend helpers that shape responses**.
+
+### Why
+- **Bugs get fixed once, not N times.** A z-index fix, a hover shadow change, an accessibility tweak — one edit covers every consumer. If the same pattern lives in 5 files, 4 of them will silently drift out of sync.
+- **Visual/behavioral consistency is enforced by the codebase**, not by memory. A new contributor using the shared component automatically gets the current design.
+- **Smaller CSS + smaller JS.** Duplicated styles bloat the shipped bundle and make the CSS hard to reason about.
+- **Theme/design changes are tractable.** Changing icon size, padding, shadow, or color on a list row becomes a one-line edit in one file.
+
+### Rules for shared visual patterns
+1. **Before writing new CSS or HTML-generating code, check if an existing pattern covers it.** Grep the codebase for similar classes or HTML structure. Check [frontend.md](frontend.md) for existing components.
+2. **When you notice the same pattern in two places, extract it.** Don't wait for a third occurrence — the second one is the signal. Extract to a shared CSS class in `base.css` (if layout/styling) and/or a helper in `components/` (if HTML construction).
+3. **Customize via CSS custom properties or small modifier classes**, not by forking the pattern. E.g. `.list-row-icon` accepts `--list-row-icon-bg` / `--list-row-icon-color`, and `.mg-author-row` is a modifier class that adjusts padding — it doesn't reimplement the layout.
+4. **When you fix a bug in a shared pattern, verify every consumer benefits.** If the fix is conditional ("only apply when X"), make sure X is expressed in the shared component, not duplicated at each call site.
+5. **The same principle applies to backend and JS logic.** Duplicated query helpers, duplicated validation, duplicated API-response shaping — extract into `utils/` or `services/`. Same reasoning: bugs fixed once, behavior consistent everywhere.
+
+### When it's OK to fork
+Extraction has a cost: a new abstraction the reader has to learn. Keep patterns separate when:
+- The visual similarity is coincidental (two layouts that happen to use flex + gap, but serve unrelated purposes).
+- Two cases share layout today but are expected to diverge soon (an in-flight redesign).
+- The shared abstraction would accumulate so many conditional knobs that readers can't tell what a call produces without stepping through the helper.
+
+Three similar lines is better than a premature abstraction. But the moment you're tempted to copy-paste a block you can name ("list row", "detail header", "contact chip"), extract it.
+
 ## CSS Architecture
 
 ### File Structure
@@ -235,6 +260,37 @@ All date inputs use flatpickr (CDN) for locale-aware formatting. **No manual ini
 
 ### 33. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
+
+### 34. List row pattern (`.list-row` + `listRowHtml()`)
+Lists of items that follow the **icon/thumbnail + title/meta + actions** shape use the shared `.list-row` CSS base in [base.css](../frontend/css/base.css) and the [listRowHtml()](../frontend/js/components/list-row.js) helper. Current consumers: book list, signage screens, MG author reassignment.
+
+**Why shared:** these rows all need the same padding, hover behavior, dropdown z-index fix (each `.glass-card` creates its own stacking context via `backdrop-filter`, so sibling cards paint over an open dropdown unless the active row is elevated — `:has(.dropdown-menu.show)` handles this; note Bootstrap 5 adds `.show` to `.dropdown-menu`, not the `.dropdown` wrapper), and icon layout. One fix covers every consumer.
+
+**Usage:**
+```javascript
+import { listRowHtml } from '../components/list-row.js';
+
+listRowHtml({
+  icon: 'bi-tv',                      // Bootstrap icon name
+  iconBg: 'rgba(200,139,58,0.12)',    // optional — override palette per list
+  iconColor: '#c88b3a',
+  title: escapedTitle,                 // HTML — escape user input first
+  meta: escapedMeta,                   // HTML
+  actions: dropdownHtml,               // HTML — buttons, dropdowns, pickers
+  href: '/books/...',                  // optional — wraps info in <a>
+  extraClass: 'glass-card book-list-item',
+  data: { bookUuid: book.uuid },       // becomes data-book-uuid=""
+  clickable: true,                     // adds cursor:pointer
+});
+```
+
+**Alternative icon slots:** pass `iconHtml` instead of `icon` for a custom visual (e.g. a post thumbnail `<img>`) — the `.list-row-icon` container handles `overflow: hidden` and `object-fit: cover` for images.
+
+**Color customization:** set `--list-row-icon-bg` and `--list-row-icon-color` on the row (either inline via `iconBg`/`iconColor` props, or via a modifier class).
+
+**Typical container:** `class="glass-card list-row"` — the two are composable. `.list-row` handles layout; `.glass-card` handles the surface treatment. Combine them.
+
+**Do NOT** re-implement this layout in a new page. If the shape differs slightly, add a modifier class (e.g. `.mg-author-row` tightens padding) rather than forking the base layout.
 
 ## i18n
 

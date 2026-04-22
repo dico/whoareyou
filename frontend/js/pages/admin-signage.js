@@ -4,6 +4,7 @@ import { t } from '../utils/i18n.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { authUrl } from '../utils/auth-url.js';
+import { listRowHtml } from '../components/list-row.js';
 
 function esc(s) {
   if (s == null) return '';
@@ -13,40 +14,40 @@ function esc(s) {
 }
 
 function screenRowHtml(screen) {
-  return `
-    <div class="glass-card signage-screen-row" data-screen-uuid="${screen.uuid}" style="cursor:pointer">
-      <div class="signage-screen-icon ${screen.is_active ? '' : 'is-inactive'}">
-        <i class="bi bi-tv"></i>
-      </div>
-      <div class="signage-screen-info">
-        <p class="signage-screen-title">${esc(screen.name)}</p>
-        <p class="signage-screen-meta">
-          ${t('signage.mode_' + screen.display_mode)} ·
-          ${screen.contact_uuids.length} ${t('signage.contacts')} ·
-          ${screen.days_back ? t('signage.daysBack', { n: screen.days_back }) : t('signage.allTime')}
-          ${screen.last_accessed_at ? ` · ${t('signage.lastSeen')}: ${new Date(screen.last_accessed_at).toLocaleDateString()}` : ''}
-        </p>
-      </div>
-      <div class="signage-screen-actions">
-        <div class="dropdown">
-          <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-three-dots"></i>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-            <li><button class="dropdown-item btn-edit-screen" data-uuid="${screen.uuid}"><i class="bi bi-pencil me-2"></i>${t('signage.editScreen')}</button></li>
-            <li><button class="dropdown-item btn-toggle-active" data-uuid="${screen.uuid}" data-active="${screen.is_active ? '1' : '0'}">
-              <i class="bi bi-${screen.is_active ? 'pause-circle' : 'play-circle'} me-2"></i>${screen.is_active ? t('signage.deactivate') : t('signage.activate')}
-            </button></li>
-            <li><button class="dropdown-item btn-open-screen" data-uuid="${screen.uuid}"><i class="bi bi-box-arrow-up-right me-2"></i>${t('signage.openScreen')}</button></li>
-            <li><button class="dropdown-item btn-copy-url" data-uuid="${screen.uuid}"><i class="bi bi-link-45deg me-2"></i>${t('signage.copyUrl')}</button></li>
-            <li><button class="dropdown-item btn-regen-token" data-uuid="${screen.uuid}"><i class="bi bi-arrow-clockwise me-2"></i>${t('signage.regenToken')}</button></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button class="dropdown-item text-danger btn-delete-screen" data-uuid="${screen.uuid}"><i class="bi bi-trash3 me-2"></i>${t('signage.deleteScreen')}</button></li>
-          </ul>
-        </div>
-      </div>
+  const meta = `
+    ${t('signage.mode_' + screen.display_mode)} ·
+    ${screen.contact_uuids.length} ${t('signage.contacts')} ·
+    ${screen.days_back ? t('signage.daysBack', { n: screen.days_back }) : t('signage.allTime')}
+    ${screen.last_accessed_at ? ` · ${t('signage.lastSeen')}: ${new Date(screen.last_accessed_at).toLocaleDateString()}` : ''}
+  `;
+  const actions = `
+    <div class="dropdown">
+      <button class="btn btn-link btn-sm" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-three-dots"></i>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+        <li><button class="dropdown-item btn-edit-screen" data-uuid="${screen.uuid}"><i class="bi bi-pencil me-2"></i>${t('signage.editScreen')}</button></li>
+        <li><button class="dropdown-item btn-toggle-active" data-uuid="${screen.uuid}" data-active="${screen.is_active ? '1' : '0'}">
+          <i class="bi bi-${screen.is_active ? 'pause-circle' : 'play-circle'} me-2"></i>${screen.is_active ? t('signage.deactivate') : t('signage.activate')}
+        </button></li>
+        <li><button class="dropdown-item btn-open-screen" data-uuid="${screen.uuid}"><i class="bi bi-box-arrow-up-right me-2"></i>${t('signage.openScreen')}</button></li>
+        <li><button class="dropdown-item btn-copy-url" data-uuid="${screen.uuid}"><i class="bi bi-link-45deg me-2"></i>${t('signage.copyUrl')}</button></li>
+        <li><button class="dropdown-item btn-regen-token" data-uuid="${screen.uuid}"><i class="bi bi-arrow-clockwise me-2"></i>${t('signage.regenToken')}</button></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><button class="dropdown-item text-danger btn-delete-screen" data-uuid="${screen.uuid}"><i class="bi bi-trash3 me-2"></i>${t('signage.deleteScreen')}</button></li>
+      </ul>
     </div>
   `;
+  return listRowHtml({
+    icon: 'bi-tv',
+    iconClass: screen.is_active ? '' : 'is-inactive',
+    title: esc(screen.name),
+    meta,
+    actions,
+    extraClass: 'glass-card signage-screen-row',
+    data: { screenUuid: screen.uuid },
+    clickable: true,
+  });
 }
 
 function configFormHtml(screen = null) {

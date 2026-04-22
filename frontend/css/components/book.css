@@ -217,41 +217,12 @@
 /* Scaling handled dynamically via --book-scale CSS var set by JS. */
 
 /* ── Book list (in generate-book page) ──────────────────── */
+/* Rows use the shared .list-row pattern — see base.css. Row spacing comes
+ * from .list-row's own margin-bottom, so no flex gap here. */
 .book-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
 }
-.book-list-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md);
-  text-decoration: none;
-  color: inherit;
-  transition: transform 0.12s, box-shadow 0.12s;
-}
-.book-list-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  color: inherit;
-}
-.book-list-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md, 8px);
-  background: rgba(200,139,58,0.12);
-  color: #c88b3a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  flex-shrink: 0;
-}
-.book-list-info { flex: 1; min-width: 0; }
-.book-list-title { font-weight: 600; margin: 0; }
-.book-list-meta { color: var(--color-text-muted, #6b6b6b); font-size: 0.85rem; margin: 0; }
-.book-list-actions { flex-shrink: 0; display: flex; gap: var(--space-xs); }
 
 /* Segmented view-mode group */
 .book-viewmode-group .btn {
