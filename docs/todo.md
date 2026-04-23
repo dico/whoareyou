@@ -213,6 +213,44 @@ The flip-view slide animation was dropped along with the lazy-mount rewrite — 
 
 ---
 
+### Security hardening — architectural (round 10 follow-up)
+**Status:** Not started — triggered by round 10 where we discovered the IP/country whitelist only covered login routes. Individual bugs fixed in [security.md](security.md) round 10; the structural work below is deliberate deferral.
+
+**Why these are architectural, not "just more fixes":** the pattern that let those bugs in is *security checks implemented per-handler instead of as a consistent layer*. Each new route is a fresh chance to forget a check. The items below attack that pattern rather than individual symptoms.
+
+#### 1. Deny-by-default routing
+Today new routes are authenticated by remembering to add `authenticate, tenantScope` at mount time. If you forget, the route is public. Flip the default: a router-level "auth required" is on by default, and truly-public routes (`/api/health`, signage token endpoints, `/api/system/registration-status`) are an explicit whitelist. Crash at boot if a route has no registered auth policy. The current token-based public signage check (regex whitelist in index.js) is the seed of this pattern — generalize it.
+
+#### 2. Centralized resource-loader / policy layer
+For each resource type (post, contact, book, gift, etc.), a single `loadFor(req, uuid, { requireVisibility })` helper that:
+- filters by `tenant_id` (every call, always)
+- applies visibility rules consistent with the GET-side (`shared/family OR created_by`)
+- applies portal `contactIds` gating when `req.portal` is set
+- returns `null` for not-found so handlers get a uniform 404
+Route handlers use the loader; they cannot forget a check because the loader IS the check. Kills the class of bug that produced A2 (comments/reactions missing visibility filter) and B5 (MG contact lookup missing tenant_id).
+
+#### 3. Audit log vocabulary coverage
+Round 10 wired up eight action names (login.success / login.fail / access.blocked / session.revoke / tenant.switch / member.invite / member.update / password.change). Still missing and should be added to the same `utils/audit.js` taxonomy:
+- `twofa.enable` / `twofa.disable` — account security changes
+- `passkey.register` / `passkey.remove` — account security changes
+- `password.reset.request` / `password.reset.apply` — matters for incident forensics
+- `export.start` / `export.download` — PII egress
+- `tenant.security.update` — changes to trusted_ip_ranges
+- `system.security.update` — changes to IP/country whitelist or API key
+- `portal.login.success` / `portal.login.fail` — portal is a second authentication surface
+- `signage.feed.access` (throttled, 1/IP/5min) — needed for the "signage access log" feature below
+
+#### 4. Admin UI to query audit_log
+Table exists and gets written to now, but nothing surfaces it. Needs `/admin/audit` page with filters (action, date range, IP, user) and "recent suspicious activity" summary (failed logins, access.blocked spikes).
+
+#### 5. Session cap per user (DoS hardening)
+Users have a max of 10 sessions; access.blocked is not throttled per IP beyond the global rate limiter. Consider: automatic `audit_log`-backed detection of "30 access.blocked from IP X in 5 minutes" → auto-ban IP for 24h. Not urgent, but the audit log now makes it easy.
+
+#### 6. Per-user export / audit review
+A user should be able to see "what happened on my account" — their own login history, sessions, admin changes. Builds on the audit-log work. Privacy-positive.
+
+---
+
 ### Signage: access logging and online monitoring
 **Status:** Not started
 **Why:** A signage token grants unauthenticated read access to family posts/photos. If the token leaks, there's currently no way to know. Need:
