@@ -1,12 +1,18 @@
 const env = process.env.NODE_ENV || 'development';
 const isProd = env === 'production';
 
-// Fail-fast on required secrets in production. The app would boot with a
-// well-known default for JWT_SECRET ('change-me-in-production') and an
-// open-all CORS policy ('*'); either one is trivially exploitable if it
-// ships. Crashing at startup is a deliberate forcing function — ops must
-// set the env vars before the container starts serving traffic.
-if (isProd) {
+/**
+ * Assert that required production secrets are set. Called from index.js at
+ * server boot — NOT at module import time, because knex CLI (migrations,
+ * seeds) and other scripts import this file too, and they don't care about
+ * CORS / JWT. Throwing at import made the container crash-loop during
+ * migrations if CORS_ORIGIN wasn't set.
+ *
+ * The guards are only active in NODE_ENV=production. Dev keeps permissive
+ * defaults.
+ */
+export function assertProdSecrets() {
+  if (!isProd) return;
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-production') {
     throw new Error('JWT_SECRET must be set to a strong random value in production');
   }

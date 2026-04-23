@@ -2,7 +2,12 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { config } from './config/index.js';
+import { config, assertProdSecrets } from './config/index.js';
+
+// Fail-fast on missing/weak secrets before we touch Express. Only runs in
+// NODE_ENV=production — knex CLI and other tools can still import `config`
+// for its DB connection without tripping this.
+assertProdSecrets();
 import { db } from './db.js';
 import { errorHandler } from './utils/errors.js';
 import { authenticate } from './middleware/auth.js';
