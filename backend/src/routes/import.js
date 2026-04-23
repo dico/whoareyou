@@ -554,7 +554,7 @@ router.post('/momentgarden/discover-users', async (req, res, next) => {
 // POST /api/import/momentgarden/manual — add a single MG post manually
 router.post('/momentgarden/manual', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
       throw new AppError('Admin access required', 403);
     }
 
@@ -649,7 +649,9 @@ router.post('/momentgarden/sync-one', async (req, res, next) => {
             const contactUuid = nickname && user_map?.[nickname];
             let contactId = null;
             if (contactUuid) {
-              const contact = await db('contacts').where({ uuid: contactUuid }).first();
+              // user_map is user-supplied; it must not let a UUID from another
+              // tenant leak a cross-tenant contact reference into our rows.
+              const contact = await db('contacts').where({ uuid: contactUuid, tenant_id: req.tenantId }).first();
               if (contact) contactId = contact.id;
             }
             // Check if this contact already reacted on this post
@@ -693,7 +695,8 @@ router.post('/momentgarden/sync-one', async (req, res, next) => {
             const contactUuid = nickname && user_map?.[nickname];
             let contactId = null;
             if (contactUuid) {
-              const contact = await db('contacts').where({ uuid: contactUuid }).first();
+              // Tenant scope — same reasoning as loves above.
+              const contact = await db('contacts').where({ uuid: contactUuid, tenant_id: req.tenantId }).first();
               if (contact) contactId = contact.id;
             }
 

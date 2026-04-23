@@ -1,5 +1,25 @@
+const env = process.env.NODE_ENV || 'development';
+const isProd = env === 'production';
+
+// Fail-fast on required secrets in production. The app would boot with a
+// well-known default for JWT_SECRET ('change-me-in-production') and an
+// open-all CORS policy ('*'); either one is trivially exploitable if it
+// ships. Crashing at startup is a deliberate forcing function — ops must
+// set the env vars before the container starts serving traffic.
+if (isProd) {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-production') {
+    throw new Error('JWT_SECRET must be set to a strong random value in production');
+  }
+  if (!process.env.CORS_ORIGIN) {
+    throw new Error('CORS_ORIGIN must be set in production (comma-separated list of allowed origins, not "*")');
+  }
+  if (process.env.CORS_ORIGIN.trim() === '*') {
+    throw new Error('CORS_ORIGIN cannot be "*" in production — credentialed requests with a wildcard origin are unsafe');
+  }
+}
+
 export const config = {
-  env: process.env.NODE_ENV || 'development',
+  env,
   port: parseInt(process.env.PORT || '3000', 10),
 
   db: {
@@ -11,6 +31,10 @@ export const config = {
   },
 
   jwt: {
+    // Dev gets a predictable default so local setup Just Works — the string
+    // here is matched by the prod guard above to reject it. Don't change
+    // this value casually; existing dev tokens were signed with it and
+    // would become invalid, logging everyone out of the dev stack.
     secret: process.env.JWT_SECRET || 'change-me-in-production',
     expiresIn: '15m',
   },
@@ -23,6 +47,8 @@ export const config = {
   },
 
   cors: {
+    // Dev default: permissive so `npm run dev` on any port works out of the
+    // box. Prod is required to be explicit (enforced above).
     origin: process.env.CORS_ORIGIN || '*',
   },
 

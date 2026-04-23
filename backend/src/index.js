@@ -7,6 +7,7 @@ import { db } from './db.js';
 import { errorHandler } from './utils/errors.js';
 import { authenticate } from './middleware/auth.js';
 import { tenantScope } from './middleware/tenant.js';
+import { accessControl } from './middleware/access-control.js';
 import authRoutes from './routes/auth.js';
 import contactRoutes from './routes/contacts.js';
 import postRoutes from './routes/posts.js';
@@ -38,8 +39,15 @@ app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 // Security
 app.use(helmet());
+// CORS — in dev `config.cors.origin` is '*' which we pass as `true` so the
+// middleware echoes the request's Origin (required with credentials: true).
+// In prod the config loader rejects '*' entirely; accept only the explicit
+// comma-separated list of origins set via CORS_ORIGIN.
+const corsOrigins = config.cors.origin === '*'
+  ? true
+  : config.cors.origin.split(',').map(o => o.trim()).filter(Boolean);
 app.use(cors({
-  origin: config.cors.origin === '*' ? true : config.cors.origin,
+  origin: corsOrigins,
   credentials: true,
 }));
 
@@ -94,6 +102,14 @@ app.get('/api', (req, res) => {
     version: '0.1.0',
   });
 });
+
+// Global access control — system-wide IP and country whitelist. Runs on
+// every /api and /uploads request past this point: signage tokens, portal
+// logins, authenticated API, file serving. Health/info endpoints above
+// are registered first and bypass this check so uptime monitoring keeps
+// working. See backend/src/utils/ip.js isAccessAllowed().
+app.use('/api', accessControl);
+app.use('/uploads', accessControl);
 
 // Auth routes — login/register have strict rate limit, rest uses general API limit
 app.post('/api/auth/login', loginLimiter);

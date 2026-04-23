@@ -87,37 +87,61 @@ function ipToInt(ip) {
 }
 
 /**
- * Check if an IP is allowed to attempt login at all.
- * Checks system-wide login IP whitelist and country whitelist.
+ * Check if an IP is allowed to access the app at all.
+ *
+ * Applied globally to every API and upload request via the accessControl
+ * middleware — NOT just login. If an admin configures a country whitelist
+ * that says "only Norway", the intent is that the whole app is limited to
+ * Norway, including signage tokens, portal guests, and authenticated users.
+ *
+ * Fails CLOSED when a country whitelist is configured but geolocation is
+ * unavailable (no API key, network error, quota exceeded) — the admin
+ * clearly expressed intent to restrict access, and silently allowing
+ * everyone defeats that. Local IPs (RFC 1918, loopback) always pass so the
+ * admin can recover from the same-server console if geolocation breaks.
+ *
+ * Setting keys kept for backwards compatibility (`login_ip_whitelist` /
+ * `login_country_whitelist`) — the scope is global now but the stored
+ * values didn't need to change.
+ *
  * Returns { allowed: true } or { allowed: false, reason: string }.
  */
-export async function isLoginAllowed(ip) {
+export async function isAccessAllowed(ip) {
   const normalizedIp = ip?.replace(/^::ffff:/, '') || '';
 
-  // 1. Check login IP whitelist (if configured)
-  const loginIpWhitelist = await getSetting('login_ip_whitelist', '');
-  if (loginIpWhitelist.trim()) {
-    // If whitelist is configured, IP must be in it
-    if (!ipInRanges(normalizedIp, loginIpWhitelist)) {
+  // 1. IP whitelist — if configured, IP must match; skip country check.
+  const ipWhitelist = await getSetting('login_ip_whitelist', '');
+  if (ipWhitelist.trim()) {
+    if (!ipInRanges(normalizedIp, ipWhitelist)) {
       return { allowed: false, reason: 'ip_blocked' };
     }
-    // IP is whitelisted — skip country check
     return { allowed: true };
   }
 
-  // 2. Check country whitelist (if configured + API key present)
+  // 2. Country whitelist.
   const countryWhitelist = await getSetting('login_country_whitelist', '');
   if (countryWhitelist.trim()) {
     const country = await getCountryForIp(normalizedIp);
+    // Local / private IPs always pass — recovery path when geolocation is
+    // offline and as a convenience for development.
     if (country === 'LOCAL') return { allowed: true };
     if (country) {
       const allowed = countryWhitelist.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
       if (!allowed.includes(country.toUpperCase())) {
         return { allowed: false, reason: 'country_blocked' };
       }
+      return { allowed: true };
     }
-    // If geolocation failed (no API key or network error), allow through
+    // Lookup failed: fail closed. Admin must either fix the API key, clear
+    // the country whitelist, or reach the server from a local/trusted IP.
+    return { allowed: false, reason: 'geo_lookup_failed' };
   }
 
+  // Nothing configured — access unrestricted.
   return { allowed: true };
 }
+
+// Backwards-compatible alias. The old name was misleading because the check
+// was only wired to login routes; it's now applied globally. Left in place
+// so external callers (tests, scripts) keep working.
+export const isLoginAllowed = isAccessAllowed;

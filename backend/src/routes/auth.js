@@ -12,7 +12,8 @@ import { validateEmail, validateRequired, validatePassword } from '../utils/vali
 import { authenticate } from '../middleware/auth.js';
 import { createSession, hashToken, generateAccessToken, revokeSession } from '../utils/session.js';
 import { sendEmail } from '../services/email.js';
-import { isTrustedIp, hasTrustedIpConfig, isLoginAllowed, getClientIp } from '../utils/ip.js';
+import { isTrustedIp, hasTrustedIpConfig, getClientIp } from '../utils/ip.js';
+import { logAuditFromReq } from '../utils/audit.js';
 import {
   generateRegistrationOptions, verifyRegistrationResponse,
   generateAuthenticationOptions, verifyAuthenticationResponse,
@@ -25,9 +26,6 @@ const SALT_ROUNDS = 12;
 // Creates a new tenant + admin user (first user in a household)
 router.post('/register', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed(getClientIp(req));
-    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
-
     // Check if registration is disabled (always allow first user)
     const userCount = await db('users').count('id as count').first();
     const isFirstUser = userCount.count === 0;
@@ -114,9 +112,6 @@ router.post('/register', async (req, res, next) => {
 // POST /api/auth/forgot-password — request password reset email
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed(getClientIp(req));
-    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
-
     const { getSetting } = await import('../utils/settings.js');
     const enabled = await getSetting('password_reset_enabled', 'false');
     if (enabled !== 'true') throw new AppError('Password reset is disabled', 403);
@@ -158,9 +153,6 @@ router.post('/forgot-password', async (req, res, next) => {
 // POST /api/auth/reset-password — set new password with token
 router.post('/reset-password', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed(getClientIp(req));
-    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
-
     const { token, password } = req.body;
     if (!token || !password) throw new AppError('Token and password are required', 400);
     validatePassword(password);
@@ -192,23 +184,23 @@ router.post('/reset-password', async (req, res, next) => {
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   try {
-    // Check IP restrictions before anything else
-    const clientIpRaw = getClientIp(req);
-    const loginCheck = await isLoginAllowed(clientIpRaw);
-    if (!loginCheck.allowed) {
-      throw new AppError('Access denied', 403);
-    }
-
     validateRequired(['email', 'password'], req.body);
     const email = validateEmail(req.body.email);
 
     const user = await db('users').where({ email, is_active: true }).first();
     if (!user) {
+      logAuditFromReq(req, { action: 'login.fail', details: { email, reason: 'no_user' } });
       throw new AppError('Invalid email or password', 401);
     }
 
     const valid = await bcrypt.compare(req.body.password, user.password_hash);
     if (!valid) {
+      logAuditFromReq(req, {
+        action: 'login.fail',
+        userId: user.id,
+        tenantId: user.tenant_id,
+        details: { email, reason: 'bad_password' },
+      });
       throw new AppError('Invalid email or password', 401);
     }
 
@@ -241,6 +233,13 @@ router.post('/login', async (req, res, next) => {
     await db('users').where({ id: user.id }).update({ last_login_at: db.fn.now() });
 
     const { accessToken, refreshToken, sessionUuid } = await createSession(user, req, null, { isTrustedIp: trusted });
+
+    logAuditFromReq(req, {
+      action: 'login.success',
+      userId: user.id,
+      tenantId: user.tenant_id,
+      details: { method: 'password', trusted },
+    });
 
     res.json({
       token: accessToken,
@@ -328,9 +327,6 @@ router.post('/logout', async (req, res, next) => {
 // POST /api/auth/2fa/verify — verify TOTP code during login (completes 2FA challenge)
 router.post('/2fa/verify', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed(getClientIp(req));
-    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
-
     const { challengeToken, code } = req.body;
     if (!challengeToken || !code) throw new AppError('Challenge token and code required', 400);
 
@@ -578,9 +574,6 @@ router.delete('/passkeys/:id', authenticate, async (req, res, next) => {
 // POST /api/auth/passkey/login-options — start passkey authentication (no auth required)
 router.post('/passkey/login-options', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed(getClientIp(req));
-    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
-
     // If email provided, get user's passkeys for allowCredentials
     let allowCredentials;
     if (req.body.email) {
@@ -611,9 +604,6 @@ router.post('/passkey/login-options', async (req, res, next) => {
 // POST /api/auth/passkey/login — verify passkey and create session
 router.post('/passkey/login', async (req, res, next) => {
   try {
-    const ipCheck = await isLoginAllowed(getClientIp(req));
-    if (!ipCheck.allowed) throw new AppError('Access denied', 403);
-
     const { credential } = req.body;
     if (!credential) throw new AppError('Credential required', 400);
 
@@ -802,6 +792,12 @@ router.post('/change-password', authenticate, async (req, res, next) => {
         .update({ is_active: false });
     }
 
+    logAuditFromReq(req, {
+      action: 'password.change',
+      userId: req.user.id,
+      tenantId: req.user.tenantId,
+    });
+
     res.json({ message: 'Password changed' });
   } catch (err) {
     next(err);
@@ -938,6 +934,13 @@ router.post('/switch-tenant', authenticate, async (req, res, next) => {
 
     const user = await db('users').where({ id: req.user.id }).first();
     const accessToken = generateAccessToken(user, req.user.sessionId, tenant.id);
+
+    logAuditFromReq(req, {
+      action: 'tenant.switch',
+      userId: req.user.id,
+      tenantId: tenant.id,
+      details: { from_tenant_id: req.user.tenantId, to_tenant_uuid: tenant.uuid },
+    });
 
     res.json({
       token: accessToken,
@@ -1077,8 +1080,16 @@ router.delete('/tenant-sessions/:uuid', authenticate, async (req, res, next) => 
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
 
-    // Verify session belongs to a tenant member
-    const session = await db('sessions').where({ uuid: req.params.uuid, is_active: true }).first();
+    // Sessions must belong to a member of the admin's current tenant. Without
+    // this filter, an admin in tenant A could revoke an arbitrary session in
+    // tenant B just by knowing its UUID (which is surfaced in admin UIs).
+    const session = await db('sessions')
+      .join('tenant_members', 'sessions.user_id', 'tenant_members.user_id')
+      .where('sessions.uuid', req.params.uuid)
+      .where('sessions.is_active', true)
+      .where('tenant_members.tenant_id', req.tenantId)
+      .select('sessions.uuid')
+      .first();
     if (!session) throw new AppError('Session not found', 404);
 
     if (req.params.uuid === req.user.sessionId) {
@@ -1086,6 +1097,13 @@ router.delete('/tenant-sessions/:uuid', authenticate, async (req, res, next) => 
     }
 
     await db('sessions').where({ uuid: req.params.uuid }).update({ is_active: false });
+    logAuditFromReq(req, {
+      action: 'session.revoke',
+      userId: req.user.id,
+      tenantId: req.tenantId,
+      entityType: 'session',
+      details: { revoked_session_uuid: req.params.uuid, by_admin: true },
+    });
     res.json({ message: 'Session revoked' });
   } catch (err) { next(err); }
 });
@@ -1248,6 +1266,20 @@ router.post('/invite', authenticate, async (req, res, next) => {
 
     const user = await db('users').where({ id: userId }).first();
 
+    logAuditFromReq(req, {
+      action: 'member.invite',
+      userId: req.user.id,
+      tenantId: req.user.tenantId,
+      entityType: 'user',
+      entityId: userId,
+      details: {
+        invited_uuid: userUuid,
+        email,
+        role: req.body.role === 'admin' ? 'admin' : 'member',
+        login_enabled: loginEnabled,
+      },
+    });
+
     // Send welcome email if requested
     const actualPassword = req.body._generatedPassword;
     if (loginEnabled && req.body.send_email && email && actualPassword) {
@@ -1381,6 +1413,21 @@ router.put('/members/:uuid', authenticate, async (req, res, next) => {
     if (req.body.password) {
       await db('sessions').where({ user_id: member.id, is_active: true }).update({ is_active: false });
     }
+
+    // Record what changed — useful when an incident traces back to an
+    // unexpected role change or password reset. Don't log the password
+    // itself, obviously.
+    const changedKeys = Object.keys(updates).filter(k => k !== 'password_hash');
+    if (req.body.password) changedKeys.push('password');
+    if (req.body.reset_2fa) changedKeys.push('reset_2fa');
+    logAuditFromReq(req, {
+      action: 'member.update',
+      userId: req.user.id,
+      tenantId: req.user.tenantId,
+      entityType: 'user',
+      entityId: member.id,
+      details: { target_uuid: member.uuid, changed: changedKeys },
+    });
 
     // Send notification emails (never include plaintext password)
     const { sendEmail } = await import('../services/email.js');

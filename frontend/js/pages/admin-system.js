@@ -145,6 +145,9 @@ export async function renderSystemAdmin() {
             <div class="form-text">${t('admin.countryWhitelistHint')}</div>
           </div>
           <div id="ip-country-fields" class="mb-3 d-none">
+            <div id="ip-country-no-key-warn" class="alert alert-warning small py-2 px-3 d-none mb-2">
+              <i class="bi bi-exclamation-triangle me-1"></i>${t('admin.countryWhitelistWarnNoKey')}
+            </div>
             <div class="mb-2">
               <label class="form-label small">${t('admin.ipgeoApiKey')}</label>
               <div class="d-flex gap-2">
@@ -577,6 +580,18 @@ async function loadIpSecurity() {
     document.getElementById('ip-whitelist-fields').classList.toggle('d-none', !ipEnabled.checked);
     document.getElementById('ip-country-fields').classList.toggle('d-none', !countryEnabled.checked);
 
+    // The country check fails closed — if an admin enables the country
+    // whitelist without an API key, the app will block every non-local
+    // request. Surface that before they save.
+    const apiKeyEl = document.getElementById('ip-geo-key');
+    const noKeyWarn = document.getElementById('ip-country-no-key-warn');
+    function refreshNoKeyWarn() {
+      const needsKey = countryEnabled.checked && !apiKeyEl.value.trim();
+      noKeyWarn.classList.toggle('d-none', !needsKey);
+    }
+    refreshNoKeyWarn();
+    apiKeyEl.addEventListener('input', refreshNoKeyWarn);
+
     ipEnabled.addEventListener('change', () => {
       document.getElementById('ip-whitelist-fields').classList.toggle('d-none', !ipEnabled.checked);
       if (!ipEnabled.checked) ipWhitelistEl.value = '';
@@ -584,6 +599,7 @@ async function loadIpSecurity() {
     countryEnabled.addEventListener('change', () => {
       document.getElementById('ip-country-fields').classList.toggle('d-none', !countryEnabled.checked);
       if (!countryEnabled.checked) countryWhitelistEl.value = '';
+      refreshNoKeyWarn();
     });
 
     // Country tags

@@ -35,35 +35,46 @@ POST /api/auth/login (email + password)
 
 ## IP Security
 
-### Login IP Whitelist (system-level)
+### Scope — global, not just login
+System-level IP and country whitelists apply to **every** request that touches the app, not only the login form. That includes:
+
+- Main-app authentication (`/api/auth/*`)
+- Authenticated API calls (`/api/contacts`, `/api/posts`, etc.)
+- Portal guest login and portal API (`/api/portal/*`)
+- Signage token endpoints (`/api/signage/feed/:token`, `/api/signage/media/:token`)
+- File serving (`/uploads/*`)
+
+Enforcement happens in the `accessControl` middleware ([backend/src/middleware/access-control.js](../backend/src/middleware/access-control.js)), mounted globally on `/api` and `/uploads` in [backend/src/index.js](../backend/src/index.js). Health and info endpoints (`GET /api/health`, `GET /api`) are registered before the middleware so monitoring can verify uptime even when the whitelist would otherwise block.
+
+### IP Whitelist (system-level)
 - CIDR notation (e.g., `192.168.1.0/24, 85.164.32.0/24`)
-- If configured, ONLY listed IPs can attempt login
-- Checked BEFORE password verification on all 7 unauthenticated routes:
-  - `POST /auth/register`
-  - `POST /auth/forgot-password`
-  - `POST /auth/reset-password`
-  - `POST /auth/login`
-  - `POST /auth/2fa/verify`
-  - `POST /auth/passkey/login-options`
-  - `POST /auth/passkey/login`
+- If configured, ONLY listed IPs can reach the app at all — no login, no portal, no signage feed, no file downloads
+- Checked before auth, before rate limits (actually after rate limits, so DB is protected from probes)
+- Blocked requests receive HTTP 403 with `reason: ip_blocked`
+- Stored in `system_settings.login_ip_whitelist` (name retained for backwards compatibility; scope is now global)
 
 ### Country Whitelist (system-level, optional)
 - Requires ipgeolocation.io API key (free tier: 1000 lookups/day)
 - ISO country codes (e.g., `NO, SE, DK`)
 - Results cached in `ip_geo_cache` table for 30 days
 - Only checked if IP whitelist is NOT configured
-- Local IPs always pass
-- Geolocation failure = allow through (fail-open)
+- Local IPs (RFC 1918 / loopback) always pass — ensures the admin can recover from the same-server console if geolocation breaks
+- **Fail-closed**: if the country whitelist is configured but the lookup fails (no API key, quota exceeded, network error), the request is **DENIED** with `reason: geo_lookup_failed`. The admin explicitly restricted access; silently allowing everyone would defeat the intent. The admin UI shows a warning before saving when an API key is missing.
+- Stored in `system_settings.login_country_whitelist` (name retained for backwards compatibility)
 
 ### Trusted IP Ranges (tenant-level)
 - Per-tenant configuration in `tenants.trusted_ip_ranges`
 - Users on trusted IPs skip 2FA requirement
 - Does NOT block login — only affects 2FA step
+- Independent of IP/country whitelist — trusted-IP does not bypass whitelist enforcement
 
 ### Priority Order
 1. IP whitelist (blocks entirely) → match = allowed, skip country check
-2. Country whitelist (blocks entirely) → only if IP whitelist empty
+2. Country whitelist (blocks entirely) → only if IP whitelist empty; fail-closed on lookup failure
 3. Trusted IPs (skips 2FA only) → checked after successful password verify
+
+### Recovery path (lockout)
+If an admin saves a whitelist that excludes their own IP, access from the same LAN or loopback still works because local IPs always pass the country check. For IP whitelist: the admin must connect from a machine on the private network (or shell into the server directly) and clear `login_ip_whitelist` in the `system_settings` table.
 
 ## Two-Factor Authentication
 - TOTP with QR code setup (Google Authenticator, Authy, etc.)
@@ -279,6 +290,34 @@ Token-based, read-only display for TVs — conceptually similar to portal share 
 - Password sent in email only once (initial invite) — no resend option
 - All login paths (direct, 2FA, passkey) check and enforce the flag
 
+## Audit Logging
+
+Security-relevant events are persisted to the `audit_log` table via [utils/audit.js](../backend/src/utils/audit.js). Write path is fire-and-forget so audit failures cannot break the user's action; errors still go to stderr so silent breakage is detectable.
+
+### Events logged today
+
+| Action | Trigger |
+|--------|---------|
+| `login.success` | User completed password auth (2FA-complete path logs separately if needed) |
+| `login.fail` | Wrong email (user_id null) or wrong password |
+| `access.blocked` | `accessControl` middleware rejected by IP or country whitelist |
+| `session.revoke` | Admin revoked a tenant member's session |
+| `tenant.switch` | User switched active tenant |
+| `member.invite` | Admin added a new member (stores role, email, login_enabled) |
+| `member.update` | Admin changed another member's fields (stores the list of changed keys, never the new password) |
+
+Rows capture `tenant_id`, `user_id`, `portal_guest_id`, `action`, `entity_type`, `entity_id`, structured `details` (JSON), `ip_address`, and `user_agent`. Pre-auth events (blocked IPs, failed logins without a matched user) have null `tenant_id` and `user_id` — migration 081 relaxed the schema so this works.
+
+### Not logged yet (planned)
+- 2FA enable/disable, passkey register/remove
+- Password change (self-service via `/auth/change-password`)
+- Tenant-IP-security setting changes
+- Export start/download
+- Portal guest actions
+- Signage token usage
+
+Guidance for future code: prefer a single `logAuditFromReq(req, { action, ... })` call at the point where the event completes; do NOT wrap it in `await` (fire-and-forget). Action names are in [utils/audit.js](../backend/src/utils/audit.js) — extend that vocabulary rather than inventing ad-hoc strings.
+
 ## Security Audit History
 - Round 1: Initial implementation review
 - Round 2: Route-by-route review — fixed HIGH/MEDIUM issues (label-tenant injection, file-tenant bypass, type-validation)
@@ -289,3 +328,11 @@ Token-based, read-only display for TVs — conceptually similar to portal share 
 - Round 7: Member invitation — forced password change on first login when credentials sent via email, must_change_password flag on all login paths (direct, 2FA, passkey)
 - Round 8: Multi-tenant — tenant_members junction table, switch-tenant requires membership (no system admin bypass), auth middleware validates membership on every request (revoked members blocked immediately), system.js tenant creation adds to tenant_members, idempotent migration, tenant switcher on profile page. Verified with API tests: forged JWT for non-member tenant returns 403.
 - Round 9: Author model — `author_contact_id` replaces `created_by` → `tenant_members` → `contacts` join chain for author display. Direct FK to contacts table — survives user/guest/membership deletion. All contact lookups in mg-imported endpoint defensively filter by tenant_id. PUT /posts/:uuid/author validates contact, user, and guest against tenant_id. Image rotation endpoint validates post ownership + tenant scope.
+- Round 10: Global access control + broad review — triggered by the discovery that the system-level IP/country whitelist only fired on login routes. Scope changed to global (`accessControl` middleware on every `/api` and `/uploads` request). Fail-closed on geolocation when a country whitelist is configured. Follow-up review uncovered several MEDIUM/HIGH issues also fixed in this round:
+  - `DELETE /api/auth/tenant-sessions/:uuid` now scoped by `tenant_members` — previously an admin in tenant A could revoke any session in tenant B by UUID
+  - `POST /api/posts/:uuid/comments` and `/reactions` now require the same visibility filter the GET-side uses — previously any tenant member with a private post's UUID could attach comments or reactions the post author would not expect
+  - `GET /api/posts/:uuid/reactions` likewise enforces visibility
+  - MomentGarden sync (`user_map` lookups) now filters contact UUID by `tenant_id` — previously a user-supplied map could reference a contact from another tenant
+  - `req.user.is_system_admin` → `req.user.isSystemAdmin` in 4 places where the snake_case name never existed (middleware sets camelCase). Fixed silently-broken admin gate on MG-admin endpoints
+  - `JWT_SECRET` + `CORS_ORIGIN` now fail-fast at startup in production — previously `JWT_SECRET` would fall back to `'change-me-in-production'` and CORS would default to `*` if env vars were missing
+  - `audit_log` table was created in migration 019 but never used; wired up via `utils/audit.js` for login/session/tenant/member events and the `access.blocked` middleware

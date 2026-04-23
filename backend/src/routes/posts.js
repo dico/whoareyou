@@ -584,7 +584,7 @@ router.get('/link-preview', async (req, res, next) => {
 // GET /api/posts/mg-imported — list MomentGarden-imported posts for author reassignment
 router.get('/mg-imported', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
       throw new AppError('Admin required', 403);
     }
     const contactUuid = req.query.contact_uuid;
@@ -689,7 +689,7 @@ router.get('/mg-imported', async (req, res, next) => {
 // PUT /api/posts/:uuid/author — reassign post author (admin only)
 router.put('/:uuid/author', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
       throw new AppError('Admin required', 403);
     }
     const post = await db('posts')
@@ -743,7 +743,7 @@ router.put('/:uuid/author', async (req, res, next) => {
 // PUT /api/posts/mg-bulk-author — bulk reassign author on MG-imported posts (admin only)
 router.put('/mg-bulk-author', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && !req.user.is_system_admin) {
+    if (req.user.role !== 'admin' && !req.user.isSystemAdmin) {
       throw new AppError('Admin required', 403);
     }
     const { contact_uuid, about_contact_uuid } = req.body;
@@ -1169,9 +1169,16 @@ router.get('/:uuid/comments', async (req, res, next) => {
 // POST /api/posts/:uuid/comments
 router.post('/:uuid/comments', async (req, res, next) => {
   try {
+    // Mirror the GET-side visibility filter: a user can comment on a post
+    // only if they can see it. Without this, anyone in the tenant who gets
+    // hold of a private post's UUID (from logs, export, DB snapshot) could
+    // attach comments even though the post is never shown in their feed.
     const post = await db('posts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
+      .where(function () {
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
+      })
       .first();
     if (!post) throw new AppError('Post not found', 404);
 
@@ -1303,7 +1310,13 @@ router.delete('/:uuid/comments/:commentId', async (req, res, next) => {
 // GET /api/posts/:uuid/reactions — full reaction people list (on demand for popup)
 router.get('/:uuid/reactions', async (req, res, next) => {
   try {
-    const post = await db('posts').where({ uuid: req.params.uuid, tenant_id: req.tenantId }).whereNull('deleted_at').first();
+    const post = await db('posts')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .where(function () {
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
+      })
+      .first();
     if (!post) throw new AppError('Post not found', 404);
 
     const reactions = await db('post_reactions')
@@ -1348,9 +1361,13 @@ router.get('/:uuid/reactions', async (req, res, next) => {
 // POST /api/posts/:uuid/reactions — toggle reaction
 router.post('/:uuid/reactions', async (req, res, next) => {
   try {
+    // Mirror GET-side visibility filter — same reasoning as /comments.
     const post = await db('posts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
+      .where(function () {
+        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
+      })
       .first();
     if (!post) throw new AppError('Post not found', 404);
 
