@@ -14,6 +14,13 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
+      # Required in production — the app fails fast if missing. Set to the
+      # origin(s) the frontend is served from (comma-separated, no '*').
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      # Optional — hostname used for login emails + password-reset links.
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+      # Optional — /24 ranges that skip 2FA (not a whitelist; see security.md).
+      - TRUSTED_IP_RANGES=${TRUSTED_IP_RANGES}
     restart: unless-stopped
 
   # Optional — for users without their own MySQL server
