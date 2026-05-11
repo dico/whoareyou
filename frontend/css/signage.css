@@ -197,6 +197,18 @@ html, body {
    * behavior when the variable is unset. */
   object-fit: var(--img-fit, cover);
   display: block;
+  transition: opacity 0.3s ease;
+}
+.signage-feed-card-img img.is-fading {
+  opacity: 0;
+}
+
+/* Soft cross-fade when a card is replaced (staggered swap). */
+.signage-feed-card {
+  transition: opacity 0.4s ease;
+}
+.signage-feed-card.is-entering {
+  opacity: 0;
 }
 /* Feed collage */
 .signage-feed-card-img .signage-collage {

@@ -95,7 +95,7 @@ router.post('/', async (req, res, next) => {
       shuffle: !!req.body.shuffle,
       include_sensitive: !!req.body.include_sensitive,
       feed_layout: req.body.feed_layout === 'vertical' ? 'vertical' : 'horizontal',
-      multi_image: ['collage', 'first', 'rotate'].includes(req.body.multi_image) ? req.body.multi_image : 'collage',
+      multi_image: ['collage', 'first', 'rotate'].includes(req.body.multi_image) ? req.body.multi_image : 'rotate',
       image_fit: req.body.image_fit === 'cover' ? 'cover' : 'contain',
     };
 
@@ -161,7 +161,7 @@ router.patch('/:uuid', async (req, res, next) => {
       updates.feed_layout = req.body.feed_layout === 'vertical' ? 'vertical' : 'horizontal';
     }
     if (req.body.multi_image !== undefined) {
-      updates.multi_image = ['collage', 'first', 'rotate'].includes(req.body.multi_image) ? req.body.multi_image : 'collage';
+      updates.multi_image = ['collage', 'first', 'rotate'].includes(req.body.multi_image) ? req.body.multi_image : 'rotate';
     }
     if (req.body.image_fit !== undefined) {
       updates.image_fit = req.body.image_fit === 'cover' ? 'cover' : 'contain';
@@ -305,10 +305,11 @@ router.get('/feed/:token', async (req, res, next) => {
     // Order + limit
     const orderCol = screen.shuffle ? db.raw('RAND()') : 'posts.post_date';
     const orderDir = screen.shuffle ? undefined : 'desc';
-    // For feed, fetch max_posts; for slideshow, fetch a larger batch that
-    // the client can rotate through.
+    // Fetch a pool so the client can stagger replacements: feed shows
+    // max_posts at a time but rotates through the pool; slideshow advances
+    // one slide at a time through the whole list.
     const limit = screen.display_mode === 'feed'
-      ? screen.max_posts
+      ? Math.min(100, Math.max(screen.max_posts * 5, 30))
       : Math.min(200, screen.days_back ? 200 : 100);
 
     const posts = await query.clone()

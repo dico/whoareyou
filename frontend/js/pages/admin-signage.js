@@ -86,6 +86,10 @@ function configFormHtml(screen = null) {
               <option value="90" ${s.days_back === 90 ? 'selected' : ''}>${t('signage.days90')}</option>
               <option value="180" ${s.days_back === 180 ? 'selected' : ''}>${t('signage.days180')}</option>
               <option value="365" ${s.days_back === 365 ? 'selected' : ''}>${t('signage.days365')}</option>
+              <option value="730" ${s.days_back === 730 ? 'selected' : ''}>${t('signage.days730')}</option>
+              <option value="1095" ${s.days_back === 1095 ? 'selected' : ''}>${t('signage.days1095')}</option>
+              <option value="1460" ${s.days_back === 1460 ? 'selected' : ''}>${t('signage.days1460')}</option>
+              <option value="1825" ${s.days_back === 1825 ? 'selected' : ''}>${t('signage.days1825')}</option>
               <option value="" ${!s.days_back ? 'selected' : ''}>${t('signage.allTime')}</option>
             </select>
           </div>
@@ -107,7 +111,7 @@ function configFormHtml(screen = null) {
           </div>
         </div>
 
-        <div class="row g-3 mb-3">
+        <div class="row g-3 mb-3" id="sig-feed-fields">
           <div class="col-sm-6">
             <label class="form-label">${t('signage.fieldFeedLayout')}</label>
             <select class="form-select" id="sig-feed-layout">
@@ -127,7 +131,8 @@ function configFormHtml(screen = null) {
           <div class="col-sm-6">
             <label class="form-label">${t('signage.fieldMultiImage')}</label>
             <select class="form-select" id="sig-multi-image">
-              <option value="collage" ${s.multi_image !== 'first' && s.multi_image !== 'rotate' ? 'selected' : ''}>${t('signage.multiCollage')}</option>
+              <option value="rotate" ${!s.multi_image || s.multi_image === 'rotate' ? 'selected' : ''}>${t('signage.multiRotate')}</option>
+              <option value="collage" ${s.multi_image === 'collage' ? 'selected' : ''}>${t('signage.multiCollage')}</option>
               <option value="first" ${s.multi_image === 'first' ? 'selected' : ''}>${t('signage.multiFirst')}</option>
             </select>
           </div>
@@ -344,6 +349,14 @@ export async function renderSignage() {
         searchInput.value = '';
       },
     });
+
+    const modeSelect = document.getElementById('sig-mode');
+    const feedFields = document.getElementById('sig-feed-fields');
+    function syncFeedFields() {
+      feedFields.style.display = modeSelect.value === 'feed' ? '' : 'none';
+    }
+    modeSelect.onchange = syncFeedFields;
+    syncFeedFields();
 
     document.getElementById('sig-cancel').onclick = closeForm;
 

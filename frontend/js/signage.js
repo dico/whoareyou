@@ -4,8 +4,13 @@
  * Entry point: /signage/{token}
  * Fetches /api/signage/feed/{token} and renders either a slideshow
  * (one image at a time with fade transitions) or a feed (1-6 cards).
- * Polls for fresh data every N seconds (slide_interval × slide count
- * for slideshow, or 60s for feed).
+ *
+ * slide_interval drives both:
+ *  - Slideshow: time per slide. With multi_image='rotate', each image in a
+ *    post becomes its own slide.
+ *  - Feed: one card is replaced every slide_interval (staggered, so the
+ *    whole grid isn't refreshed at once). Within a card, images rotate at
+ *    the same rate when multi_image='rotate'.
  */
 
 const root = document.getElementById('signage-root');
@@ -44,13 +49,6 @@ async function init() {
 
     if (data.config.display_mode === 'feed') {
       renderFeed(data);
-      // Poll for fresh data
-      setInterval(async () => {
-        try {
-          const fresh = await fetchFeed();
-          if (fresh.posts.length) renderFeed(fresh);
-        } catch {}
-      }, 60000);
     } else {
       renderSlideshow(data);
     }
@@ -78,7 +76,17 @@ function mediaUrl(filePath) {
 // ── Slideshow ────────────────────────────────────
 
 function renderSlideshow(data) {
-  const { config, posts } = data;
+  const { config } = data;
+  // When multi_image='rotate', expand each multi-image post into one slide
+  // per image so the existing slide loop handles rotation for free.
+  const posts = (config.multi_image === 'rotate')
+    ? data.posts.flatMap((p) => {
+      const imgs = p.images || [];
+      if (imgs.length <= 1) return [p];
+      return imgs.map((img) => ({ ...p, images: [img] }));
+    })
+    : data.posts;
+
   const container = document.createElement('div');
   container.className = 'signage-slideshow';
   root.innerHTML = '';
@@ -93,7 +101,7 @@ function renderSlideshow(data) {
     const images = post.images || [];
     if (images.length === 0) return null;
 
-    if (images.length === 1 || config.multi_image === 'first') {
+    if (images.length === 1 || config.multi_image === 'first' || config.multi_image === 'rotate') {
       const img = document.createElement('img');
       img.className = 'signage-slide-img';
       img.style.objectFit = config.image_fit || 'contain';
@@ -116,67 +124,7 @@ function renderSlideshow(data) {
       div.appendChild(collage);
     }
 
-    // Date badge — top-right corner
-    if (config.show_date && post.post_date) {
-      const badge = document.createElement('div');
-      badge.className = 'signage-date-badge';
-      badge.textContent = formatDate(post.post_date);
-      div.appendChild(badge);
-    }
-
-    // Bottom overlay
-    if (config.show_contact_name || config.show_body || config.show_reactions || config.show_comments) {
-      const overlay = document.createElement('div');
-      overlay.className = 'signage-overlay';
-
-      if (config.show_body && post.body) {
-        const el = document.createElement('div');
-        el.className = 'signage-overlay-body';
-        el.textContent = post.body;
-        overlay.appendChild(el);
-      }
-
-      if (config.show_comments && post.comments?.length) {
-        const el = document.createElement('div');
-        el.className = 'signage-overlay-comments';
-        for (const c of post.comments) {
-          const row = document.createElement('div');
-          row.className = 'signage-overlay-comment';
-          row.innerHTML = `<strong>${esc(c.author)}</strong>${esc(c.body)}`;
-          el.appendChild(row);
-        }
-        overlay.appendChild(el);
-      }
-
-      // Author/contact line — below text, smaller
-      if (config.show_contact_name) {
-        const nameParts = [];
-        if (post.contact_names?.length) nameParts.push(post.contact_names.join(', '));
-        if (post.author_name && post.author_name !== nameParts[0]) {
-          nameParts.push(`Publisert av ${post.author_name}`);
-        }
-        if (nameParts.length) {
-          const el = document.createElement('div');
-          el.className = 'signage-overlay-names';
-          el.textContent = nameParts.join(' · ');
-          overlay.appendChild(el);
-        }
-      }
-
-      const meta = [];
-      if (config.show_reactions && post.reactions) {
-        meta.push(`❤ ${post.reactions}`);
-      }
-      if (meta.length) {
-        const el = document.createElement('div');
-        el.className = 'signage-overlay-meta';
-        el.innerHTML = meta.map(m => `<span>${m}</span>`).join('');
-        overlay.appendChild(el);
-      }
-
-      if (overlay.children.length) div.appendChild(overlay);
-    }
-
+    appendOverlays(div, post, config);
     return div;
   }).filter(Boolean);
 
@@ -216,132 +164,276 @@ function renderSlideshow(data) {
     try {
       const fresh = await fetchFeed();
       if (fresh.posts.length) {
-        // Full re-render — simple and correct
         renderSlideshow(fresh);
       }
     } catch {}
   }, reloadInterval);
 }
 
+// Builds the bottom/top overlays (date, body, comments, names, reactions).
+// Shared by slideshow slides and feed cards' overlay area.
+function appendOverlays(slide, post, config) {
+  // Date badge — top-right corner
+  if (config.show_date && post.post_date) {
+    const badge = document.createElement('div');
+    badge.className = 'signage-date-badge';
+    badge.textContent = formatDate(post.post_date);
+    slide.appendChild(badge);
+  }
+
+  if (!(config.show_contact_name || config.show_body || config.show_reactions || config.show_comments)) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'signage-overlay';
+
+  if (config.show_body && post.body) {
+    const el = document.createElement('div');
+    el.className = 'signage-overlay-body';
+    el.textContent = post.body;
+    overlay.appendChild(el);
+  }
+
+  if (config.show_comments && post.comments?.length) {
+    const el = document.createElement('div');
+    el.className = 'signage-overlay-comments';
+    for (const c of post.comments) {
+      const row = document.createElement('div');
+      row.className = 'signage-overlay-comment';
+      row.innerHTML = `<strong>${esc(c.author)}</strong>${esc(c.body)}`;
+      el.appendChild(row);
+    }
+    overlay.appendChild(el);
+  }
+
+  if (config.show_contact_name) {
+    const nameParts = [];
+    if (post.contact_names?.length) nameParts.push(post.contact_names.join(', '));
+    if (post.author_name && post.author_name !== nameParts[0]) {
+      nameParts.push(`Publisert av ${post.author_name}`);
+    }
+    if (nameParts.length) {
+      const el = document.createElement('div');
+      el.className = 'signage-overlay-names';
+      el.textContent = nameParts.join(' · ');
+      overlay.appendChild(el);
+    }
+  }
+
+  const meta = [];
+  if (config.show_reactions && post.reactions) meta.push(`❤ ${post.reactions}`);
+  if (meta.length) {
+    const el = document.createElement('div');
+    el.className = 'signage-overlay-meta';
+    el.innerHTML = meta.map(m => `<span>${m}</span>`).join('');
+    overlay.appendChild(el);
+  }
+
+  if (overlay.children.length) slide.appendChild(overlay);
+}
+
 // ── Feed ─────────────────────────────────────────
 
 function renderFeed(data) {
-  const { config, posts } = data;
+  const { config } = data;
+  const intervalMs = (config.slide_interval || 15) * 1000;
+
+  const displayable = filterDisplayable(data.posts, config);
+  if (!displayable.length) {
+    root.innerHTML = '<div class="signage-center">No posts to display</div>';
+    return;
+  }
+
+  const maxPosts = Math.min(config.max_posts || 3, displayable.length);
+
   const container = document.createElement('div');
-  // Defensive skip: drop posts that would render as empty cards given the
-  // current config (no image AND body hidden/missing). The backend already
-  // filters these out, but keep a second gate here so bad data can't turn
-  // the display into a wall of blank cards.
-  const displayable = posts.filter((p) => {
+  container.className = `signage-feed layout-${config.feed_layout || 'horizontal'} count-${maxPosts}`;
+  root.innerHTML = '';
+  root.appendChild(container);
+
+  // Pool of available posts; slots hold the currently-visible ones.
+  const pool = displayable;
+  const slots = []; // { card, postIdx, imageTimer }
+  let cursor = 0; // round-robin pointer into pool for the next replacement
+
+  for (let i = 0; i < maxPosts; i++) {
+    const card = buildFeedCard(pool[i], config);
+    container.appendChild(card);
+    const slot = { card, postIdx: i, imageTimer: null };
+    slots.push(slot);
+    startImageRotation(slot, pool, config, intervalMs);
+  }
+  cursor = maxPosts;
+
+  function replaceSlot(slotIdx) {
+    if (pool.length <= slots.length) return; // nothing fresh to rotate to
+    const slot = slots[slotIdx];
+    const visible = new Set(slots.map((s) => s.postIdx));
+    let pick = -1;
+    for (let i = 0; i < pool.length; i++) {
+      const candidate = (cursor + i) % pool.length;
+      if (!visible.has(candidate)) { pick = candidate; break; }
+    }
+    if (pick < 0) return;
+    cursor = (pick + 1) % pool.length;
+
+    clearInterval(slot.imageTimer);
+    slot.postIdx = pick;
+
+    const newCard = buildFeedCard(pool[pick], config);
+    newCard.classList.add('is-entering');
+    slot.card.replaceWith(newCard);
+    slot.card = newCard;
+    requestAnimationFrame(() => newCard.classList.remove('is-entering'));
+
+    startImageRotation(slot, pool, config, intervalMs);
+  }
+
+  // Staggered card swap: each tick replaces ONE slot, so the grid never
+  // refreshes all at once.
+  let swapSlot = 0;
+  const cardSwapTimer = setInterval(() => {
+    replaceSlot(swapSlot);
+    swapSlot = (swapSlot + 1) % slots.length;
+  }, intervalMs);
+
+  // Refresh the pool periodically so new posts trickle in. Full re-render
+  // is simpler than reconciling visible-vs-pool indices.
+  const refreshMs = Math.max(intervalMs * slots.length * 4, 300000); // ≥ 5 min
+  setInterval(async () => {
+    try {
+      const fresh = await fetchFeed();
+      const freshDisplayable = filterDisplayable(fresh.posts || [], fresh.config || config);
+      if (!freshDisplayable.length) return;
+      clearInterval(cardSwapTimer);
+      for (const s of slots) clearInterval(s.imageTimer);
+      renderFeed(fresh);
+    } catch {}
+  }, refreshMs);
+}
+
+function filterDisplayable(posts, config) {
+  return posts.filter((p) => {
     const hasImage = (p.images || []).length > 0;
     const hasVisibleBody = config.show_body && p.body && p.body.trim();
     return hasImage || hasVisibleBody;
   });
-  const visiblePosts = displayable.slice(0, config.max_posts || 3);
-  if (!visiblePosts.length) {
-    root.innerHTML = '<div class="signage-center">No posts to display</div>';
-    return;
-  }
-  container.className = `signage-feed layout-${config.feed_layout || 'horizontal'} count-${visiblePosts.length}`;
-  root.innerHTML = '';
-  root.appendChild(container);
+}
 
-  for (const post of visiblePosts) {
-    const card = document.createElement('div');
-    const images = post.images || [];
-    const isTextOnly = !images.length;
-    card.className = `signage-feed-card${isTextOnly ? ' text-only' : ''}`;
+function startImageRotation(slot, pool, config, intervalMs) {
+  clearInterval(slot.imageTimer);
+  if (config.multi_image !== 'rotate') return;
+  const images = pool[slot.postIdx]?.images || [];
+  if (images.length < 2) return;
+  let imageIdx = 0;
+  slot.imageTimer = setInterval(() => {
+    imageIdx = (imageIdx + 1) % images.length;
+    const img = slot.card.querySelector('.signage-feed-card-img > img');
+    if (img) {
+      img.classList.add('is-fading');
+      // Use a tiny timeout so the browser registers the opacity drop
+      // before swapping src — produces a soft cross-fade via CSS.
+      setTimeout(() => {
+        img.src = mediaUrl(images[imageIdx].file_path);
+        img.onload = () => img.classList.remove('is-fading');
+      }, 150);
+    }
+  }, intervalMs);
+}
 
-    // Image area
-    if (images.length) {
-      const imgWrap = document.createElement('div');
-      imgWrap.className = 'signage-feed-card-img';
-      imgWrap.style.setProperty('--img-fit', config.image_fit || 'contain');
+function buildFeedCard(post, config) {
+  const card = document.createElement('div');
+  const images = post.images || [];
+  const isTextOnly = !images.length;
+  card.className = `signage-feed-card${isTextOnly ? ' text-only' : ''}`;
 
-      if (images.length === 1 || config.multi_image === 'first') {
+  // Image area
+  if (images.length) {
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'signage-feed-card-img';
+    imgWrap.style.setProperty('--img-fit', config.image_fit || 'contain');
+
+    if (images.length === 1 || config.multi_image === 'first' || config.multi_image === 'rotate') {
+      const img = document.createElement('img');
+      img.src = mediaUrl(images[0].file_path);
+      img.alt = '';
+      imgWrap.appendChild(img);
+    } else {
+      const collage = document.createElement('div');
+      const count = Math.min(images.length, 4);
+      collage.className = `signage-collage count-${count}`;
+      for (let j = 0; j < count; j++) {
         const img = document.createElement('img');
-        img.src = mediaUrl(images[0].file_path);
+        img.src = mediaUrl(images[j].file_path);
         img.alt = '';
-        imgWrap.appendChild(img);
-      } else {
-        const collage = document.createElement('div');
-        const count = Math.min(images.length, 4);
-        collage.className = `signage-collage count-${count}`;
-        for (let j = 0; j < count; j++) {
-          const img = document.createElement('img');
-          img.src = mediaUrl(images[j].file_path);
-          img.alt = '';
-          collage.appendChild(img);
-        }
-        imgWrap.appendChild(collage);
+        collage.appendChild(img);
       }
-      card.appendChild(imgWrap);
+      imgWrap.appendChild(collage);
     }
-
-    // Date badge — top-right of card
-    if (config.show_date && post.post_date) {
-      const badge = document.createElement('div');
-      badge.className = 'signage-date-badge';
-      badge.textContent = formatDate(post.post_date);
-      card.appendChild(badge);
-    }
-
-    // Body area
-    const body = document.createElement('div');
-    body.className = 'signage-feed-card-body';
-
-    if (config.show_body && post.body) {
-      const el = document.createElement('div');
-      el.className = 'signage-feed-card-text';
-      // Scale font for text-only cards based on content length
-      if (isTextOnly) {
-        const len = post.body.length;
-        if (len < 80) el.style.fontSize = '3.5vmin';
-        else if (len < 200) el.style.fontSize = '2.8vmin';
-        else if (len < 500) el.style.fontSize = '2.2vmin';
-      }
-      el.textContent = post.body;
-      body.appendChild(el);
-    }
-
-    if (config.show_comments && post.comments?.length) {
-      const el = document.createElement('div');
-      el.className = 'signage-feed-card-comments';
-      for (const c of post.comments) {
-        const row = document.createElement('div');
-        row.innerHTML = `<strong>${esc(c.author)}</strong>${esc(c.body)}`;
-        el.appendChild(row);
-      }
-      body.appendChild(el);
-    }
-
-    // Author/contact line — below text, small and subtle
-    if (config.show_contact_name) {
-      const nameParts = [];
-      if (post.contact_names?.length) nameParts.push(post.contact_names.join(', '));
-      if (post.author_name && post.author_name !== nameParts[0]) {
-        nameParts.push(`Publisert av ${post.author_name}`);
-      }
-      if (nameParts.length) {
-        const el = document.createElement('div');
-        el.className = 'signage-feed-card-names';
-        el.textContent = nameParts.join(' · ');
-        body.appendChild(el);
-      }
-    }
-
-    const meta = [];
-    if (config.show_reactions && post.reactions) meta.push(`❤ ${post.reactions}`);
-    if (meta.length) {
-      const el = document.createElement('div');
-      el.className = 'signage-feed-card-meta';
-      el.innerHTML = meta.map(m => `<span>${m}</span>`).join('');
-      body.appendChild(el);
-    }
-
-    if (body.children.length) card.appendChild(body);
-    container.appendChild(card);
+    card.appendChild(imgWrap);
   }
+
+  // Date badge — top-right of card
+  if (config.show_date && post.post_date) {
+    const badge = document.createElement('div');
+    badge.className = 'signage-date-badge';
+    badge.textContent = formatDate(post.post_date);
+    card.appendChild(badge);
+  }
+
+  // Body area
+  const body = document.createElement('div');
+  body.className = 'signage-feed-card-body';
+
+  if (config.show_body && post.body) {
+    const el = document.createElement('div');
+    el.className = 'signage-feed-card-text';
+    // Scale font for text-only cards based on content length
+    if (isTextOnly) {
+      const len = post.body.length;
+      if (len < 80) el.style.fontSize = '3.5vmin';
+      else if (len < 200) el.style.fontSize = '2.8vmin';
+      else if (len < 500) el.style.fontSize = '2.2vmin';
+    }
+    el.textContent = post.body;
+    body.appendChild(el);
+  }
+
+  if (config.show_comments && post.comments?.length) {
+    const el = document.createElement('div');
+    el.className = 'signage-feed-card-comments';
+    for (const c of post.comments) {
+      const row = document.createElement('div');
+      row.innerHTML = `<strong>${esc(c.author)}</strong>${esc(c.body)}`;
+      el.appendChild(row);
+    }
+    body.appendChild(el);
+  }
+
+  if (config.show_contact_name) {
+    const nameParts = [];
+    if (post.contact_names?.length) nameParts.push(post.contact_names.join(', '));
+    if (post.author_name && post.author_name !== nameParts[0]) {
+      nameParts.push(`Publisert av ${post.author_name}`);
+    }
+    if (nameParts.length) {
+      const el = document.createElement('div');
+      el.className = 'signage-feed-card-names';
+      el.textContent = nameParts.join(' · ');
+      body.appendChild(el);
+    }
+  }
+
+  const meta = [];
+  if (config.show_reactions && post.reactions) meta.push(`❤ ${post.reactions}`);
+  if (meta.length) {
+    const el = document.createElement('div');
+    el.className = 'signage-feed-card-meta';
+    el.innerHTML = meta.map(m => `<span>${m}</span>`).join('');
+    body.appendChild(el);
+  }
+
+  if (body.children.length) card.appendChild(body);
+  return card;
 }
 
 // ── Helpers ──────────────────────────────────────
