@@ -150,14 +150,16 @@ app.use('/api/system', (req, res, next) => {
 }, systemRoutes);
 app.use('/api/portal', portalLimiter, portalRoutes); // Portal has own auth + stricter rate limit
 app.use('/api/portal-admin', authenticate, tenantScope, portalAdminRoutes);
-// Signage rate limiter — stricter than main API since these endpoints are
-// public and token-based (no auth). 60 requests per minute per IP.
-const signageLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
-// Signage: /feed/:token and /media/:token are public (token-based, strict
-// regex match), all other routes require auth.
-const signagePublicPath = /^\/(?:feed|media)\/[^/]+$/;
+// Signage rate limiters — public token-based endpoints, no auth. /feed is
+// polled infrequently; /media serves one request per image (pool of ~30
+// images per screen, plus rotation), so it needs a much higher budget.
+const signageFeedLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
+const signageMediaLimiter = rateLimit({ windowMs: 60 * 1000, max: 600 });
+const signageFeedPath = /^\/feed\/[^/]+$/;
+const signageMediaPath = /^\/media\/[^/]+$/;
 app.use('/api/signage', (req, res, next) => {
-  if (signagePublicPath.test(req.path)) return signageLimiter(req, res, next);
+  if (signageFeedPath.test(req.path)) return signageFeedLimiter(req, res, next);
+  if (signageMediaPath.test(req.path)) return signageMediaLimiter(req, res, next);
   authenticate(req, res, (err) => {
     if (err) return next(err);
     tenantScope(req, res, next);
