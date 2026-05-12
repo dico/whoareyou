@@ -67,12 +67,16 @@ const loginLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
-// Rate limiting on all API endpoints (generous — gallery browsing can be intensive)
+// Rate limiting on all API endpoints (generous — gallery browsing can be intensive).
+// Signage's public /feed and /media routes are exempt: they have their own
+// dedicated limiter, and TV displays running 24/7 would otherwise eat into
+// the global budget and lock the admin UI for everyone on the same IP.
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
   message: { error: 'Too many requests, try again later' },
   validate: { xForwardedForHeader: false },
+  skip: (req) => /^\/signage\/(?:feed|media)\//.test(req.path),
 });
 
 // Stricter rate limiting for portal (guests)
