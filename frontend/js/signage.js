@@ -151,21 +151,25 @@ function renderSlideshow(data) {
   preloadSlides(0);
 
   const interval = (config.slide_interval || 15) * 1000;
-  setInterval(() => {
+  const advanceTimer = setInterval(() => {
     slides[current].classList.remove('is-active');
     current = (current + 1) % slides.length;
     slides[current].classList.add('is-active');
     preloadSlides(current);
   }, interval);
 
-  // Reload data periodically (new posts, etc.)
+  // Reload data periodically (new posts, etc.). Clear BOTH timers before
+  // re-rendering so a recursive renderSlideshow doesn't leak timers and
+  // grow API traffic exponentially.
   const reloadInterval = Math.max(interval * slides.length, 60000);
-  setInterval(async () => {
+  let reloadTimer = null;
+  reloadTimer = setInterval(async () => {
     try {
       const fresh = await fetchFeed();
-      if (fresh.posts.length) {
-        renderSlideshow(fresh);
-      }
+      if (!fresh.posts.length) return;
+      clearInterval(advanceTimer);
+      clearInterval(reloadTimer);
+      renderSlideshow(fresh);
     } catch {}
   }, reloadInterval);
 }
@@ -297,14 +301,18 @@ function renderFeed(data) {
   }, intervalMs);
 
   // Refresh the pool periodically so new posts trickle in. Full re-render
-  // is simpler than reconciling visible-vs-pool indices.
+  // is simpler than reconciling visible-vs-pool indices. Important: clear
+  // THIS refresh timer too before recursing, otherwise each refresh leaks
+  // a new timer and API traffic grows exponentially.
   const refreshMs = Math.max(intervalMs * slots.length * 4, 300000); // ≥ 5 min
-  setInterval(async () => {
+  let refreshTimer = null;
+  refreshTimer = setInterval(async () => {
     try {
       const fresh = await fetchFeed();
       const freshDisplayable = filterDisplayable(fresh.posts || [], fresh.config || config);
       if (!freshDisplayable.length) return;
       clearInterval(cardSwapTimer);
+      clearInterval(refreshTimer);
       for (const s of slots) clearInterval(s.imageTimer);
       renderFeed(fresh);
     } catch {}
