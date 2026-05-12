@@ -289,15 +289,21 @@ router.get('/feed/:token', async (req, res, next) => {
           .where('post_media.file_type', 'like', 'image/%'),
       );
     } else {
-      // Feed + show_body on: keep image posts AND text posts with a body.
-      // Drop the rare post with neither.
+      // Feed + show_body on: keep image posts AND pure text posts. Drop
+      // video-only posts (they have a body but the actual content is the
+      // video, which signage can't play) — i.e. require either an image
+      // OR a body with no media at all.
       query = query.where(function () {
         this.whereExists(
           db('post_media')
             .whereRaw('post_media.post_id = posts.id')
             .where('post_media.file_type', 'like', 'image/%'),
         ).orWhere(function () {
-          this.whereNotNull('posts.body').andWhereNot('posts.body', '');
+          this.whereNotNull('posts.body')
+            .andWhereNot('posts.body', '')
+            .whereNotExists(
+              db('post_media').whereRaw('post_media.post_id = posts.id'),
+            );
         });
       });
     }
