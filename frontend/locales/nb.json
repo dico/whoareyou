@@ -131,7 +131,9 @@
     "deleteCommentConfirm": "Slette denne kommentaren?",
     "commentPlaceholder": "Skriv en kommentar...",
     "send": "Send",
-    "postedBy": "Lagt ut av {name}"
+    "postedBy": "Lagt ut av {name}",
+    "emptyFileSkipped": "{name} er tom og ble hoppet over. Prøv å velge filen på nytt.",
+    "mediaUploadFailed": "Bildene kunne ikke lastes opp: {message}"
   },
   "visibility": {
     "title": "Synlighet",

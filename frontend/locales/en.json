@@ -131,7 +131,9 @@
     "deleteCommentConfirm": "Delete this comment?",
     "commentPlaceholder": "Write a comment...",
     "send": "Send",
-    "postedBy": "Posted by {name}"
+    "postedBy": "Posted by {name}",
+    "emptyFileSkipped": "{name} is empty and was skipped. Try selecting the file again.",
+    "mediaUploadFailed": "Could not upload media: {message}"
   },
   "visibility": {
     "title": "Visibility",

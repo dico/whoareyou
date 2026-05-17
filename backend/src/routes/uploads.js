@@ -59,6 +59,24 @@ const uploadMedia = multer({
   },
 });
 
+function assertNonEmpty(file, route, req) {
+  if (file.size && file.size > 0) return;
+  console.warn('[upload] empty file', JSON.stringify({
+    route,
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size ?? null,
+    user_id: req.user?.id ?? null,
+    tenant_id: req.tenantId ?? null,
+    ua: req.get('user-agent') || null,
+  }));
+  fs.unlink(file.path).catch(() => {});
+  throw new AppError(
+    `Empty file received (${file.originalname || 'unknown'}). The upload may have been interrupted — try again.`,
+    400,
+  );
+}
+
 async function safeProcessImage(file, subDir, filename, opts) {
   try {
     return await processImage(file.path, subDir, filename, opts);
@@ -79,6 +97,7 @@ async function safeProcessImage(file, subDir, filename, opts) {
 router.post('/contacts/:uuid/photos', upload.single('photo'), async (req, res, next) => {
   try {
     if (!req.file) throw new AppError('No file uploaded', 400);
+    assertNonEmpty(req.file, req.originalUrl, req);
 
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
@@ -198,6 +217,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
 
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
+      assertNonEmpty(file, req.originalUrl, req);
       const timestamp = Date.now();
       const isImage = IMAGE_TYPES.includes(file.mimetype);
       const isVideo = VIDEO_TYPES.includes(file.mimetype);

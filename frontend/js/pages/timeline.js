@@ -175,16 +175,29 @@ export async function renderTimeline(contactUuid = null) {
 
   // Media file handling (images + documents)
   let pendingMedia = [];
-  document.getElementById('post-media-input').addEventListener('change', (e) => {
-    for (const file of e.target.files) {
-      if (file.type.startsWith('image/') || file.type.startsWith('video/')) pendingMedia.push(file);
+
+  function acceptFiles(files, predicate) {
+    const skipped = [];
+    for (const file of files) {
+      if (predicate && !predicate(file)) continue;
+      if (!file.size) { skipped.push(file.name); continue; }
+      pendingMedia.push(file);
     }
+    if (skipped.length) {
+      const errorEl = document.getElementById('post-error');
+      errorEl.textContent = skipped.map((n) => t('posts.emptyFileSkipped', { name: n })).join(' ');
+      errorEl.classList.remove('d-none');
+    }
+  }
+
+  document.getElementById('post-media-input').addEventListener('change', (e) => {
+    acceptFiles(e.target.files, (f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
     renderMediaPreview();
     e.target.value = '';
   });
 
   document.getElementById('post-doc-input').addEventListener('change', (e) => {
-    for (const file of e.target.files) pendingMedia.push(file);
+    acceptFiles(e.target.files);
     renderMediaPreview();
     e.target.value = '';
   });
@@ -232,7 +245,7 @@ export async function renderTimeline(contactUuid = null) {
   const composeForm = document.getElementById('new-post-form');
   if (composeForm) {
     enableDropZone(composeForm, (files) => {
-      pendingMedia.push(...files);
+      acceptFiles(files);
       renderMediaPreview();
       document.getElementById('new-post-area').classList.remove('d-none');
     }, { acceptDocuments: true });
@@ -308,22 +321,33 @@ export async function renderTimeline(contactUuid = null) {
     const errorEl = document.getElementById('post-error');
     errorEl.classList.add('d-none');
 
+    const bodyText = document.getElementById('post-body').value;
+    let createdPostUuid = null;
+
     try {
       const { post } = await api.post('/posts', {
-        body: document.getElementById('post-body').value,
+        body: bodyText,
         contact_uuids: taggedContacts.map((c) => c.uuid),
         visibility: document.getElementById('post-visibility-btn').dataset.visibility,
         is_sensitive: document.getElementById('post-sensitive-btn').dataset.sensitive === '1',
       });
+      createdPostUuid = post?.uuid || null;
 
-      // Upload media if any
-      if (pendingMedia.length && post?.uuid) {
-        const formData = new FormData();
-        for (const file of pendingMedia) formData.append('media', file);
-        const uploadResult = await api.upload(`/posts/${post.uuid}/media`, formData);
-        // Auto-set post date from image EXIF if available
-        if (uploadResult?.suggestedDate) {
-          await api.put(`/posts/${post.uuid}`, { post_date: uploadResult.suggestedDate });
+      if (pendingMedia.length && createdPostUuid) {
+        try {
+          const formData = new FormData();
+          for (const file of pendingMedia) formData.append('media', file);
+          const uploadResult = await api.upload(`/posts/${createdPostUuid}/media`, formData);
+          if (uploadResult?.suggestedDate) {
+            await api.put(`/posts/${createdPostUuid}`, { post_date: uploadResult.suggestedDate });
+          }
+        } catch (uploadErr) {
+          // Roll back the post if it would otherwise be left empty
+          if (!bodyText.trim()) {
+            await api.delete(`/posts/${createdPostUuid}`).catch(() => {});
+            createdPostUuid = null;
+          }
+          throw new Error(t('posts.mediaUploadFailed', { message: uploadErr.message }));
         }
       }
 
