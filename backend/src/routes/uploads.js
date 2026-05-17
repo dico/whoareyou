@@ -9,13 +9,27 @@ import { config } from '../config/index.js';
 
 const router = Router();
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'image/heic', 'image/heif', 'image/avif'];
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
 const DOCUMENT_TYPES = ['application/pdf', 'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain', 'text/csv'];
 const ALL_MEDIA_TYPES = [...IMAGE_TYPES, ...VIDEO_TYPES, ...DOCUMENT_TYPES];
+
+function logRejectedUpload(req, file, reason) {
+  console.warn('[upload] rejected', JSON.stringify({
+    reason,
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size ?? null,
+    route: req.originalUrl,
+    user_id: req.user?.id ?? null,
+    tenant_id: req.tenantId ?? null,
+    ua: req.get('user-agent') || null,
+  }));
+}
 
 // Image-only upload (for contact photos)
 const upload = multer({
@@ -25,7 +39,8 @@ const upload = multer({
     if (IMAGE_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new AppError('Only JPEG, PNG, WebP and GIF images are allowed', 400));
+      logRejectedUpload(req, file, 'mimetype_not_image');
+      cb(new AppError(`Image type not allowed: ${file.mimetype}`, 400));
     }
   },
 });
@@ -38,10 +53,27 @@ const uploadMedia = multer({
     if (ALL_MEDIA_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new AppError('File type not allowed', 400));
+      logRejectedUpload(req, file, 'mimetype_not_allowed');
+      cb(new AppError(`File type not allowed: ${file.mimetype}`, 400));
     }
   },
 });
+
+async function safeProcessImage(file, subDir, filename, opts) {
+  try {
+    return await processImage(file.path, subDir, filename, opts);
+  } catch (err) {
+    console.warn('[upload] processImage failed', JSON.stringify({
+      message: err.message,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size ?? null,
+      tmpPath: file.path,
+    }));
+    await fs.unlink(file.path).catch(() => {});
+    throw new AppError(`Could not process image (${file.originalname || 'unknown'}): ${err.message}`, 400);
+  }
+}
 
 // POST /api/contacts/:uuid/photos — upload contact photo
 router.post('/contacts/:uuid/photos', upload.single('photo'), async (req, res, next) => {
@@ -56,8 +88,8 @@ router.post('/contacts/:uuid/photos', upload.single('photo'), async (req, res, n
 
     // Process image
     const timestamp = Date.now();
-    const { filePath, mediumPath, thumbnailPath } = await processImage(
-      req.file.path,
+    const { filePath, mediumPath, thumbnailPath } = await safeProcessImage(
+      req.file,
       `contacts/${contact.uuid}`,
       `photo_${timestamp}`
     );
@@ -181,8 +213,8 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
         if (meta.latitude) mediaLat = meta.latitude;
         if (meta.longitude) mediaLng = meta.longitude;
 
-        const processed = await processImage(
-          file.path, `posts/${post.uuid}`, `media_${timestamp}_${i}`
+        const processed = await safeProcessImage(
+          file, `posts/${post.uuid}`, `media_${timestamp}_${i}`
         );
         filePath = processed.filePath;
         thumbnailPath = processed.thumbnailPath;
