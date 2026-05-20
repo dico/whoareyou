@@ -7,6 +7,7 @@ import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
 import { filterSensitiveContacts, filterSensitivePosts, parseSensitiveFlag, stripSensitiveContacts } from '../utils/sensitive.js';
+import { getLinkedContactId } from '../utils/tenant.js';
 
 const router = Router();
 
@@ -120,6 +121,64 @@ router.get('/', async (req, res, next) => {
         pages: Math.ceil(count / limit),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/contacts/mention-suggestions — smart-sorted contacts for @-mention dropdown
+// Order: favorites first, then by how many posts the current user has tagged the
+// contact in, then alphabetically. Defined before /:uuid to avoid route collision.
+router.get('/mention-suggestions', async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const limit = Math.min(parseInt(req.query.limit) || 6, 20);
+    const linkedContactId = await getLinkedContactId(req.user.id, req.tenantId);
+
+    let query = db('contacts')
+      .where('contacts.tenant_id', req.tenantId)
+      .whereNull('contacts.deleted_at')
+      .where(function () {
+        this.whereIn('contacts.visibility', ['shared', 'family'])
+          .orWhere('contacts.created_by', req.user.id);
+      })
+      .modify(filterSensitiveContacts(req));
+
+    if (q) {
+      const like = `%${q}%`;
+      query = query.where(function () {
+        this.where('contacts.first_name', 'like', like)
+          .orWhere('contacts.last_name', 'like', like)
+          .orWhere('contacts.nickname', 'like', like);
+      });
+    }
+
+    // tag_count = how often the current user has tagged this contact.
+    // NULL author_contact_id (no linked contact yet) → all zero, falls back to
+    // favorites + alphabetic — that's fine.
+    const contacts = await query
+      .select(
+        'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
+        'contacts.nickname', 'contacts.is_favorite'
+      )
+      .select(db.raw(`(
+        SELECT cp.thumbnail_path FROM contact_photos cp
+        WHERE cp.contact_id = contacts.id AND cp.is_primary = true
+        LIMIT 1
+      ) as avatar`))
+      .select(db.raw(`(
+        SELECT COUNT(*) FROM post_contacts pc
+        JOIN posts p ON p.id = pc.post_id
+        WHERE pc.contact_id = contacts.id
+          AND p.author_contact_id = ?
+          AND p.deleted_at IS NULL
+      ) as tag_count`, [linkedContactId]))
+      .orderBy('contacts.is_favorite', 'desc')
+      .orderBy('tag_count', 'desc')
+      .orderBy('contacts.first_name', 'asc')
+      .limit(limit);
+
+    res.json({ contacts });
   } catch (err) {
     next(err);
   }

@@ -1,6 +1,6 @@
 import { api } from '../api/client.js';
 import { confirmDialog, contactSearchDialog, groupSearchDialog } from './dialogs.js';
-import { attachMention } from './mention.js';
+import { createMentionInput, parseMentionMarkup, extractMentionUuids } from './mention-input.js';
 import { t, formatDate, timeAgo, formatDateTime } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 
@@ -124,7 +124,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
               </ul>
             </div>
           </div>
-          <div class="post-body">${linkifyPost(escapeHtml(p.body), p.contacts)}</div>
+          <div class="post-body">${linkifyPost(p.body, p.contacts)}</div>
           ${p.contacts.length ? `
             <div class="post-contacts">
               ${p.contacts.map((c) => `
@@ -245,7 +245,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
               </span>
             </div>
           `}
-          <textarea class="form-control edit-post-body" rows="3">${escapeHtml(p.body)}</textarea>
+          <div class="mention-input form-control edit-post-body" data-initial-body="${escapeHtml(p.body)}"></div>
           <div class="edit-link-preview d-none"></div>
           ${p.media.length ? `
           <div class="edit-media-list post-media-preview">
@@ -403,8 +403,11 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       postEl.querySelectorAll('.edit-post-form').forEach(form => {
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
-          const body = form.querySelector('.edit-post-body').value.trim();
-          const contactUuids = [...form.querySelectorAll('.edit-tag')].map(t => t.dataset.uuid);
+          const bodyEl = form.querySelector('.edit-post-body');
+          const body = (bodyEl._mention ? bodyEl._mention.getValue() : bodyEl.value || '').trim();
+          const tagUuids = [...form.querySelectorAll('.edit-tag')].map(t => t.dataset.uuid);
+          const bodyUuids = extractMentionUuids(body);
+          const contactUuids = [...new Set([...bodyUuids, ...tagUuids])];
           const aboutEl = form.querySelector('.edit-about-contact');
           const aboutUuid = aboutEl ? (aboutEl.dataset.uuid || null) : undefined;
           const submitBtn = form.querySelector('[type="submit"]');
@@ -471,26 +474,30 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         postEl.querySelector('.post-view').classList.add('d-none');
         editEl.classList.remove('d-none');
 
-        // Attach @-mention to edit textarea (once)
+        // Attach @-mention to edit field (once)
         const textarea = postEl.querySelector('.edit-post-body');
         if (!textarea.dataset.mentionAttached) {
           textarea.dataset.mentionAttached = 'true';
-          attachMention(textarea, (contact) => {
-            const tagsList = postEl.querySelector('.edit-tags-list');
-            const existingUuids = [...tagsList.querySelectorAll('.edit-tag')].map((el) => el.dataset.uuid);
-            if (existingUuids.includes(contact.uuid)) return;
+          textarea._mention = createMentionInput({
+            el: textarea,
+            value: textarea.dataset.initialBody || '',
+            onTag: (contact) => {
+              const tagsList = postEl.querySelector('.edit-tags-list');
+              const existingUuids = [...tagsList.querySelectorAll('.edit-tag')].map((el) => el.dataset.uuid);
+              if (existingUuids.includes(contact.uuid)) return;
 
-            const tag = document.createElement('span');
-            tag.className = 'edit-tag';
-            tag.dataset.uuid = contact.uuid;
-            const initials = (contact.first_name[0] || '') + (contact.last_name?.[0] || '');
-            const avatarHtml = contact.avatar
-              ? `<img src="${authUrl(contact.avatar)}" alt="">`
-              : `<span>${initials}</span>`;
-            tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
-            tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
-            const addBtn = tagsList.querySelector('.btn-add-tag-edit');
-            tagsList.insertBefore(tag, addBtn);
+              const tag = document.createElement('span');
+              tag.className = 'edit-tag';
+              tag.dataset.uuid = contact.uuid;
+              const initials = (contact.first_name[0] || '') + (contact.last_name?.[0] || '');
+              const avatarHtml = contact.avatar
+                ? `<img src="${authUrl(contact.avatar)}" alt="">`
+                : `<span>${initials}</span>`;
+              tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
+              tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
+              const addBtn = tagsList.querySelector('.btn-add-tag-edit');
+              tagsList.insertBefore(tag, addBtn);
+            },
           });
         }
 
@@ -531,7 +538,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             editFetchedUrl = editLinkPreview.url;
             renderEditLinkPreview();
           } else {
-            const urls = textarea.value.match(/https?:\/\/[^\s<]+/g);
+            const urls = (textarea._mention?.getValue() || textarea.value || '').match(/https?:\/\/[^\s<]+/g);
             if (urls?.[0]) {
               editFetchedUrl = urls[0];
               api.get(`/posts/link-preview?url=${encodeURIComponent(urls[0])}`).then(d => {
@@ -544,7 +551,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
             clearTimeout(editLpTimeout);
             if (editLinkDismissed) return;
             editLpTimeout = setTimeout(async () => {
-              const urls = textarea.value.match(/https?:\/\/[^\s<]+/g);
+              const urls = (textarea._mention?.getValue() || textarea.value || '').match(/https?:\/\/[^\s<]+/g);
               const firstUrl = urls?.[0];
               if (!firstUrl || firstUrl === editFetchedUrl) return;
               editFetchedUrl = firstUrl;
@@ -1048,36 +1055,46 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function linkifyPost(html, contacts) {
-  // Replace URLs
-  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-
-  // Replace tagged contact names with clickable links
-  if (contacts?.length) {
-    // Sort by full name length descending to match longest first
-    const sorted = [...contacts].sort((a, b) => {
-      const nameA = a.first_name + (a.last_name || '');
-      const nameB = b.first_name + (b.last_name || '');
-      return nameB.length - nameA.length;
-    });
-
-    for (const c of sorted) {
-      const fullName = c.first_name + (c.last_name ? ' ' + c.last_name : '');
-      const link = `<a href="/contacts/${c.uuid}" data-link class="mention-link">${escapeHtml(fullName)}</a>`;
-      // Try @FullName, @FirstName, then plain FullName
-      const patterns = [
-        `@${escapeRegex(fullName)}`,
-        `@${escapeRegex(c.first_name)}(?![\\wæøåÆØÅ])`,
-        escapeRegex(fullName),
-      ];
-      let matched = false;
-      for (const pat of patterns) {
-        const before = html;
-        html = html.replace(new RegExp(`(?<![\\wæøåÆØÅ">/])${pat}`, 'i'), link);
-        if (html !== before) { matched = true; break; }
+function linkifyPost(rawBody, contacts) {
+  // Render mention markup (@[uuid:Name]) first — escape any text in between
+  // so the result is safe to inject as HTML. Legacy posts without markup fall
+  // through to the regex-based name matcher below.
+  const parts = parseMentionMarkup(rawBody);
+  let html;
+  if (parts.some(p => p.type === 'mention')) {
+    html = parts.map(p => {
+      if (p.type === 'mention') {
+        return `<a href="/contacts/${p.uuid}" data-link class="mention-link">${escapeHtml(p.name)}</a>`;
+      }
+      return escapeHtml(p.value);
+    }).join('');
+  } else {
+    html = escapeHtml(rawBody);
+    if (contacts?.length) {
+      const sorted = [...contacts].sort((a, b) => {
+        const nameA = a.first_name + (a.last_name || '');
+        const nameB = b.first_name + (b.last_name || '');
+        return nameB.length - nameA.length;
+      });
+      for (const c of sorted) {
+        const fullName = c.first_name + (c.last_name ? ' ' + c.last_name : '');
+        const link = `<a href="/contacts/${c.uuid}" data-link class="mention-link">${escapeHtml(fullName)}</a>`;
+        const patterns = [
+          `@${escapeRegex(fullName)}`,
+          `@${escapeRegex(c.first_name)}(?![\\wæøåÆØÅ])`,
+          escapeRegex(fullName),
+        ];
+        for (const pat of patterns) {
+          const before = html;
+          html = html.replace(new RegExp(`(?<![\\wæøåÆØÅ">/])${pat}`, 'i'), link);
+          if (html !== before) break;
+        }
       }
     }
   }
+
+  // URLs — only linkify plain text (not text inside an existing <a>)
+  html = html.replace(/(?<![\">])(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
   return html.replace(/\n/g, '<br>');
 }

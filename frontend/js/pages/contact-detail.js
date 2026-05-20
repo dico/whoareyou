@@ -1,7 +1,7 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { renderPostList } from '../components/post-list.js';
-import { attachMention } from '../components/mention.js';
+import { createMentionInput, extractMentionUuids } from '../components/mention-input.js';
 import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
 import { showPhotoViewer } from '../components/photo-viewer.js';
 import { showCropper } from '../components/image-cropper.js';
@@ -88,7 +88,7 @@ export async function renderContactDetail(uuid) {
             <!-- New post compose -->
             <div class="detail-card glass-card post-compose-inline">
               <form id="quick-post-form">
-                <textarea class="form-control" id="quick-post-body" placeholder="${t('posts.writeAbout', { name: contact.first_name })}" rows="2"></textarea>
+                <div class="mention-input form-control" id="quick-post-body"></div>
                 <div id="quick-post-media-preview" class="post-media-preview d-none"></div>
                 <div id="quick-post-link-preview" class="d-none"></div>
                 <div class="post-compose-bar">
@@ -1072,10 +1072,14 @@ export async function renderContactDetail(uuid) {
 
     // Quick post with @-mention support
     const quickPostExtra = [];
-    attachMention(document.getElementById('quick-post-body'), (contact) => {
-      if (contact.uuid !== uuid && !quickPostExtra.find((c) => c.uuid === contact.uuid)) {
-        quickPostExtra.push(contact);
-      }
+    const quickPostInput = createMentionInput({
+      el: document.getElementById('quick-post-body'),
+      placeholder: t('posts.writeAbout', { name: contact.first_name }),
+      onTag: (mention) => {
+        if (mention.uuid !== uuid && !quickPostExtra.find((c) => c.uuid === mention.uuid)) {
+          quickPostExtra.push(mention);
+        }
+      },
     });
 
     // ── Link preview detection ──
@@ -1086,10 +1090,6 @@ export async function renderContactDetail(uuid) {
     const urlRegex = /https?:\/\/[^\s<]+/g;
 
     const postBody = document.getElementById('quick-post-body');
-    postBody.addEventListener('input', () => {
-      postBody.style.height = 'auto';
-      postBody.style.height = postBody.scrollHeight + 'px';
-    });
     const linkPreviewEl = document.getElementById('quick-post-link-preview');
 
     function renderQuickLinkPreview() {
@@ -1124,7 +1124,7 @@ export async function renderContactDetail(uuid) {
       clearTimeout(linkPreviewTimeout);
       if (linkPreviewDismissed) return;
       linkPreviewTimeout = setTimeout(async () => {
-        const urls = postBody.value.match(urlRegex);
+        const urls = quickPostInput.getValue().match(urlRegex);
         const firstUrl = urls?.[0];
         if (!firstUrl || firstUrl === linkPreviewFetchedUrl) return;
         linkPreviewFetchedUrl = firstUrl;
@@ -1146,7 +1146,7 @@ export async function renderContactDetail(uuid) {
 
     document.getElementById('quick-post-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const body = document.getElementById('quick-post-body').value.trim();
+      const body = quickPostInput.getValue().trim();
       if (!body && !quickPostMedia.length) return;
 
       const submitBtn = e.target.querySelector('[type="submit"]');
@@ -1154,7 +1154,9 @@ export async function renderContactDetail(uuid) {
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
-      const extraUuids = quickPostExtra.map((c) => c.uuid);
+      const bodyUuids = extractMentionUuids(body);
+      const extraUuids = [...new Set([...bodyUuids, ...quickPostExtra.map((c) => c.uuid)])]
+        .filter((u) => u !== uuid);
       const { post } = await api.post('/posts', {
         body,
         about_contact_uuid: uuid,
@@ -1174,8 +1176,7 @@ export async function renderContactDetail(uuid) {
         }
       }
 
-      document.getElementById('quick-post-body').value = '';
-      document.getElementById('quick-post-body').style.height = 'auto';
+      quickPostInput.clear();
       quickPostMedia = [];
       renderQuickMediaPreview();
       quickPostExtra.length = 0;

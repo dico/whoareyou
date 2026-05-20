@@ -1,7 +1,7 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { renderPostList } from '../components/post-list.js';
-import { attachMention } from '../components/mention.js';
+import { createMentionInput, extractMentionUuids } from '../components/mention-input.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { toggleVisibilityBtn } from '../utils/visibility.js';
 import { contactRowHtml } from '../components/contact-row.js';
@@ -34,7 +34,7 @@ export async function renderTimeline(contactUuid = null) {
       <div class="dashboard-main">
         <div id="new-post-area" class="d-none">
           <form id="new-post-form" class="glass-card post-compose">
-            <textarea id="post-body" class="form-control" placeholder="${t('posts.placeholder')}" rows="3"></textarea>
+            <div id="post-body" class="mention-input form-control"></div>
             <div id="post-media-preview" class="post-media-preview d-none"></div>
             <div id="post-tags" class="post-tags"></div>
             <div class="post-compose-bar">
@@ -151,7 +151,7 @@ export async function renderTimeline(contactUuid = null) {
     const area = document.getElementById('new-post-area');
     area.classList.toggle('d-none');
     if (!area.classList.contains('d-none')) {
-      document.getElementById('post-body').focus();
+      composeBody.focus();
       renderTags();
     }
   });
@@ -251,19 +251,15 @@ export async function renderTimeline(contactUuid = null) {
     }, { acceptDocuments: true });
   }
 
-  // Auto-expand compose textarea
-  const composeTextarea = document.getElementById('post-body');
-  composeTextarea.addEventListener('input', () => {
-    composeTextarea.style.height = 'auto';
-    composeTextarea.style.height = composeTextarea.scrollHeight + 'px';
-  });
-
-  // @-mention in compose textarea
-  attachMention(document.getElementById('post-body'), (contact) => {
-    if (!taggedContacts.find((c) => c.uuid === contact.uuid)) {
-      taggedContacts.push(contact);
-      renderTags();
-    }
+  const composeBody = createMentionInput({
+    el: document.getElementById('post-body'),
+    placeholder: t('posts.placeholder'),
+    onTag: (contact) => {
+      if (!taggedContacts.find((c) => c.uuid === contact.uuid)) {
+        taggedContacts.push(contact);
+        renderTags();
+      }
+    },
   });
 
   // Tag contact
@@ -321,13 +317,15 @@ export async function renderTimeline(contactUuid = null) {
     const errorEl = document.getElementById('post-error');
     errorEl.classList.add('d-none');
 
-    const bodyText = document.getElementById('post-body').value;
+    const bodyText = composeBody.getValue();
     let createdPostUuid = null;
 
     try {
+      const bodyUuids = extractMentionUuids(bodyText);
+      const allUuids = [...new Set([...bodyUuids, ...taggedContacts.map((c) => c.uuid)])];
       const { post } = await api.post('/posts', {
         body: bodyText,
-        contact_uuids: taggedContacts.map((c) => c.uuid),
+        contact_uuids: allUuids,
         visibility: document.getElementById('post-visibility-btn').dataset.visibility,
         is_sensitive: document.getElementById('post-sensitive-btn').dataset.sensitive === '1',
       });
@@ -351,8 +349,7 @@ export async function renderTimeline(contactUuid = null) {
         }
       }
 
-      document.getElementById('post-body').value = '';
-      document.getElementById('post-body').style.height = 'auto';
+      composeBody.clear();
       pendingMedia = [];
       renderMediaPreview();
       if (!contactUuid) taggedContacts = [];
