@@ -90,19 +90,28 @@ router.get('/', async (req, res, next) => {
       name: 'contacts.last_name',
       first_name: 'contacts.first_name',
       last_contacted: 'contacts.last_contacted_at',
-      last_viewed: 'contacts.last_viewed_at',
+      last_viewed: 'cv.viewed_at',
       created: 'contacts.created_at',
     }[sort] || 'contacts.first_name';
     const sortOrder = order === 'desc' ? 'desc' : 'asc';
 
+    // Per-user "last viewed" via contact_views. LEFT JOIN so contacts the
+    // current user has never opened still appear in unrelated sorts; only
+    // sort=last_viewed and frontend filtering on `last_viewed_at` make use
+    // of the value.
     const contacts = await query
+      .leftJoin('contact_views as cv', function () {
+        this.on('cv.contact_id', 'contacts.id')
+          .andOn('cv.user_id', '=', db.raw('?', [req.user.id]));
+      })
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
         'contacts.nickname', 'contacts.birth_day', 'contacts.birth_month', 'contacts.birth_year',
         'contacts.deceased_date', 'contacts.is_favorite',
-        'contacts.last_contacted_at', 'contacts.last_viewed_at', 'contacts.created_at',
+        'contacts.last_contacted_at', 'contacts.created_at',
         'contacts.visibility', 'contacts.is_sensitive'
       )
+      .select(db.raw('cv.viewed_at as last_viewed_at'))
       .select(db.raw(`(
         SELECT cp.thumbnail_path FROM contact_photos cp
         WHERE cp.contact_id = contacts.id AND cp.is_primary = true
@@ -200,8 +209,17 @@ router.get('/:uuid', async (req, res, next) => {
       throw new AppError('Contact not found', 404);
     }
 
-    // Update last viewed timestamp
-    db('contacts').where({ id: contact.id }).update({ last_viewed_at: db.fn.now() }).catch(() => {});
+    // Update last viewed timestamps — global (kept for a future household-wide
+    // "recently viewed" feature) and per-user (drives the sidebar list on /).
+    // Fire-and-forget; errors logged but don't fail the response.
+    db('contacts').where({ id: contact.id }).update({ last_viewed_at: db.fn.now() })
+      .catch((err) => console.error('contacts.last_viewed_at update failed:', err.message));
+    db.raw(
+      `INSERT INTO contact_views (user_id, contact_id, tenant_id, viewed_at)
+       VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE viewed_at = NOW()`,
+      [req.user.id, contact.id, req.tenantId]
+    ).catch((err) => console.error('contact_views upsert failed:', err.message));
 
     // Fetch related data in parallel
     const [photos, fields, labels, relationships, addresses] = await Promise.all([
