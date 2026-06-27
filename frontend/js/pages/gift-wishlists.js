@@ -38,11 +38,11 @@ async function loadWishlists() {
 
   try {
     const [membersData, wishlistsData] = await Promise.all([
-      api.get('/auth/members').catch(() => ({ members: [] })),
+      api.get('/auth/household').catch(() => ({ members: [] })),
       api.get('/gifts/wishlists'),
     ]);
 
-    const members = (membersData.members || []).filter(m => m.is_active !== false);
+    const members = membersData.members || [];
     const wishlists = wishlistsData.wishlists || [];
 
     // Map wishlists by contact uuid (for linked members) or by member uuid

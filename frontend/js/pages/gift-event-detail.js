@@ -42,7 +42,7 @@ async function loadEventDetail(uuid) {
   try {
     const [data, membersData] = await Promise.all([
       api.get(`/gifts/events/${uuid}`),
-      api.get('/auth/members').catch(() => ({ members: [] })),
+      api.get('/auth/household').catch(() => ({ members: [] })),
     ]);
     const { event, gifts } = data;
     pageGiftsCache = gifts;
@@ -902,7 +902,7 @@ function attachGiftListHandlers(eventUuid) {
 async function reloadGifts(eventUuid) {
   const [data, membersData] = await Promise.all([
     api.get(`/gifts/events/${eventUuid}`),
-    api.get('/auth/members').catch(() => ({ members: [] })),
+    api.get('/auth/household').catch(() => ({ members: [] })),
   ]);
   const el = document.getElementById('gift-list');
   if (!el) return;

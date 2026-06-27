@@ -1110,6 +1110,32 @@ router.delete('/tenant-sessions/:uuid', authenticate, async (req, res, next) => 
 
 // ── Tenant member management ──
 
+// GET /api/auth/household — list active members in current tenant (non-admin)
+// Lightweight, non-sensitive view used by features that need to render the
+// family list (wishlists, gift events). Only returns public household info
+// (name, avatar, linked contact) — never email, role, 2FA, or login state.
+router.get('/household', authenticate, async (req, res, next) => {
+  try {
+    const members = await db('users')
+      .join('tenant_members', function () {
+        this.on('users.id', 'tenant_members.user_id')
+          .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.user.tenantId]));
+      })
+      .leftJoin('contacts', 'tenant_members.linked_contact_id', 'contacts.id')
+      .where('users.is_active', true)
+      .select(
+        'users.uuid', 'users.first_name', 'users.last_name',
+        'contacts.uuid as linked_contact_uuid',
+        db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
+      )
+      .orderBy('users.first_name');
+
+    res.json({ members });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/auth/members — list members in current tenant
 router.get('/members', authenticate, async (req, res, next) => {
   try {
