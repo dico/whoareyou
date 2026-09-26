@@ -4,6 +4,7 @@ import { authUrl } from '../utils/auth-url.js';
 // Markup format: @[uuid:DisplayName]
 // DOM representation: <span class="mention-token" contenteditable="false" data-uuid data-name>Name</span>
 const MENTION_RE = /@\[([0-9a-fA-F-]{8,}):([^\]]+)\]/g;
+const BLOCK_TAGS = new Set(['DIV', 'P', 'LI']);
 
 export function parseMentionMarkup(str) {
   // Returns an array of { type: 'text', value } | { type: 'mention', uuid, name }
@@ -58,9 +59,12 @@ export function createMentionInput({ el, value = '', placeholder = '', onChange,
     }
   }
 
-  function getValue() {
+  // Browsers represent Enter differently in contenteditable: "\n" text, <br>,
+  // or wrapping each new line in <div>/<p> (Chrome, Safari/iOS). Walk the tree
+  // recursively so every variant serializes to "\n" and nested tokens survive.
+  function serialize(parent) {
     let out = '';
-    for (const node of el.childNodes) {
+    for (const node of parent.childNodes) {
       if (node.nodeType === Node.TEXT_NODE) {
         out += node.nodeValue;
       } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -68,13 +72,22 @@ export function createMentionInput({ el, value = '', placeholder = '', onChange,
           out += `@[${node.dataset.uuid}:${node.dataset.name}]`;
         } else if (node.tagName === 'BR') {
           out += '\n';
+        } else if (BLOCK_TAGS.has(node.tagName)) {
+          let inner = serialize(node);
+          // A trailing <br> in a block is a placeholder (e.g. <div><br></div> = empty line)
+          if (node.lastChild?.nodeName === 'BR') inner = inner.slice(0, -1);
+          if (out && !out.endsWith('\n')) out += '\n';
+          out += inner + '\n';
         } else {
-          // Other elements (paste-fallout) — flatten to text
-          out += node.textContent || '';
+          out += serialize(node);
         }
       }
     }
     return out;
+  }
+
+  function getValue() {
+    return serialize(el).replace(/\n$/, '');
   }
 
   function focus() {
