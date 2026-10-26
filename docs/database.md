@@ -6,7 +6,7 @@
 - **Soft deletes** — `deleted_at` timestamp (null = active)
 - **Timestamps** — `created_at`, `updated_at` on most tables
 - **UUIDs** — external-facing IDs are UUIDs; internal PKs are auto-increment integers
-- **Visibility** — `shared` (all tenant members) or `private` (creator only) on contacts, posts, labels
+- **Visibility** — `shared` / `family` / `private` on contacts, posts, labels, gift orders; posts also support `circle` (see [security.md](security.md#visibility-four-levels)). Query rules live in `utils/visibility.js`
 
 ## Core Tables
 
@@ -39,7 +39,8 @@ Universal timeline entries (replaces Monica's notes/activities/diary).
 - `company_id` — "about" group (group timeline post)
 - `body` — post text
 - `post_date` — when the event happened
-- `visibility` — shared/family/private
+- `visibility` — shared/family/circle/private
+- `circle_id` — FK → visibility_circles (only for `visibility = 'circle'`; ON DELETE SET NULL as a fallback — the delete route converts posts to `private` first)
 - `is_sensitive` — orthogonal to visibility; when true the post is hidden from every session unless that session has sensitive mode on. See [security.md](security.md#sensitive-content-mode).
 - `author_contact_id` — FK → contacts. The primary source of author identity for display. Points directly to a contact, independent of user/guest/membership status. Set on creation, survives membership changes. `created_by` and `portal_guest_id` are kept for audit only.
 - `portal_guest_id` — set when created by portal guest (audit field)
@@ -94,6 +95,8 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `audit_log` | Sensitive operation logging |
 | `export_log` | Export audit trail (user, IP, country, type, status, encryption) |
 | `ip_geo_cache` | IP → country cache (30-day TTL) |
+| `visibility_circles` | Admin-defined audience groups per tenant (e.g. "Foreldre"). `uuid`, `tenant_id`, `name` (unique per tenant). Migration 083. |
+| `visibility_circle_members` | Circle ↔ user junction (`circle_id`, `user_id`, composite PK). Circles grant post visibility only. |
 | `book_jobs` | Photo book definitions (title, contacts, date range, layout options). See [todo.md](todo.md) book generation section. |
 | `user_notification_prefs` | Per-user, per-tenant, per-type notification rules. Columns: `user_id`, `tenant_id`, `type`, `scope` (interpretation depends on type: `none`/`all`/`favorites`/`family`/`guests`/`both`/`my_posts`/`all_posts`), `deliver_app`, `deliver_email`. Unique on (user_id, tenant_id, type). Missing rows fall back to "all + app on, email off" defaults in `utils/notification-prefs.js`. |
 | `user_notification_overrides` | Per-contact override that wins over global rules. Columns: `user_id`, `tenant_id`, `contact_id`, `type`, `mode` (`always`/`never`). Unique on (user_id, tenant_id, contact_id, type). |
@@ -135,7 +138,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 - Files: `NNN_description.js` (sequential numbering)
 - Each migration exports `up(knex)` and `down(knex)`
 - Migrations run automatically on container start (`entrypoint.sh`)
-- Currently 83 migrations
+- Latest migration: `083_visibility_circles`
 
 ### Creating a New Migration
 ```bash

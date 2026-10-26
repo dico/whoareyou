@@ -251,6 +251,22 @@ A user should be able to see "what happened on my account" — their own login h
 
 ---
 
+### Contact visibility outside `routes/contacts.js`
+**Status:** Not started — found during round 12 (2026-10-26).
+**Why:** All post visibility and the contact queries in `contacts.js`, `companies.js` and `labels.js` now use `utils/visibility.js`. Other routes that return contacts — relationships (profile lists, tree, family tree, suggestions), addresses (residents, map), life events, reminders, gifts (participants) — don't apply `filterVisibleContacts`, so another user's `private` contact can appear there by name. Group/label `employee_count` / `contact_count` aggregates also count hidden contacts (count only). Bigger sweep across many modules → assess together with the "centralized resource-loader" item above.
+
+### Per-user data export
+**Status:** Not started
+**Why:** Export was made admin-only in round 12 because it dumps the whole household (incl. other members' private/circle posts). A member-level export ("my data") would filter every entity by `filterVisiblePosts` / `filterVisibleContacts` (+ private gifts/labels) and only include media from those posts.
+
+### Visibility circles — follow-ups
+**Status:** Ideas, not started
+- **Contacts in circles** — let a contact (e.g. a child's friend) be visible only to a circle. Needs `contacts.circle_id` + extending `filterVisibleContacts`, and every contact query outside `contacts.js` (see item above) first.
+- **Memory notifications for circle/private posts** — `notification-generate.js` builds one tenant-wide list from `shared`/`family` posts, so circle members never get "on this day" notifications for circle posts. Would need per-user generation. (The `/memories` page itself does include them.)
+- **Default visibility per user** — e.g. a parent who mostly writes "Foreldre" notes could choose it as their compose default.
+
+---
+
 ### Signage: access logging and online monitoring
 **Status:** Not started
 **Why:** A signage token grants unauthenticated read access to family posts/photos. If the token leaks, there's currently no way to know. Need:

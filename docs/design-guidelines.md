@@ -94,8 +94,9 @@ For inline contact references (tags, selections), use `.contact-chip` with `.con
 </span>
 ```
 
-### 8. Visibility pill
-Use `.visibility-pill` toggle for shared/private selection everywhere. Never use a plain button.
+### 8. Visibility selection
+- **Posts:** use the visibility picker from [components/visibility-picker.js](../frontend/js/components/visibility-picker.js) (dropdown with Alle / Familie / circles / Bare meg). It includes the user's visibility circles, so never hand-roll a post visibility control — new circles must show up everywhere automatically.
+- **Contacts and other entities** (no circles): use the `.visibility-pill` toggle. Never use a plain button.
 
 ### 9. Round avatars everywhere
 All thumbnails use `border-radius: var(--radius-full)` (circles). Contacts, products, gifts, member avatars. Only square images in dedicated galleries/lightbox.

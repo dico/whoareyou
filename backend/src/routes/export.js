@@ -139,7 +139,10 @@ async function queryAllData(tenantId) {
   // Posts with media, comments, reactions
   const posts = await db('posts')
     .where({ tenant_id: tenantId }).whereNull('deleted_at')
-    .select('id', 'uuid', 'body', 'post_date', 'contact_id', 'company_id', 'visibility', 'created_at');
+    .select('id', 'uuid', 'body', 'post_date', 'contact_id', 'company_id', 'visibility', 'circle_id', 'created_at');
+
+  const circleRows = await db('visibility_circles').where({ tenant_id: tenantId }).select('id', 'name');
+  const circleNames = new Map(circleRows.map(c => [c.id, c.name]));
 
   const postIds = posts.map(p => p.id);
 
@@ -177,6 +180,7 @@ async function queryAllData(tenantId) {
     contact_uuid: idToUuid.get(p.contact_id) || null,
     company_uuid: companyIdToUuid.get(p.company_id) || null,
     visibility: p.visibility,
+    circle: p.visibility === 'circle' ? circleNames.get(p.circle_id) || null : null,
     created_at: p.created_at,
     media: postMedia.filter(m => m.post_id === p.id).map(m => ({ file_path: m.file_path, thumbnail_path: m.thumbnail_path, file_type: m.file_type, original_name: m.original_name })),
     comments: postComments.filter(c => c.post_id === p.id).map(c => ({ body: c.body, contact_uuid: idToUuid.get(c.contact_id) || null, created_at: c.created_at })),
@@ -390,7 +394,14 @@ router.get('/log', async (req, res, next) => {
 
 // ── GET /api/export/data — instant JSON-only ZIP download ──
 
-router.get('/data', async (req, res, next) => {
+// Exports contain the whole household — including other members' private
+// and circle-only posts — so they are a backup tool for admins only.
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
+router.get('/data', requireAdmin, async (req, res, next) => {
   const logId = await createExportLog(req, 'data');
   try {
     const data = await queryAllData(req.tenantId);
@@ -452,7 +463,7 @@ router.get('/data', async (req, res, next) => {
 
 // ── POST /api/export/full — start full export with media ──
 
-router.post('/full', async (req, res, next) => {
+router.post('/full', requireAdmin, async (req, res, next) => {
   try {
     // Rate limit: one active job per user
     for (const [id, job] of exportJobs) {

@@ -7,6 +7,7 @@ import { showPhotoViewer } from '../components/photo-viewer.js';
 import { showCropper } from '../components/image-cropper.js';
 import { toggleVisibilityBtn, visibilityToggleHtml } from '../utils/visibility.js';
 import { renderContactFields } from '../components/contact-fields.js';
+import { visibilityPickerHtml, attachVisibilityPicker } from '../components/visibility-picker.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
@@ -92,11 +93,7 @@ export async function renderContactDetail(uuid) {
                 <div id="quick-post-media-preview" class="post-media-preview d-none"></div>
                 <div id="quick-post-link-preview" class="d-none"></div>
                 <div class="post-compose-bar">
-                  <div class="visibility-pill" id="quick-post-visibility-btn" data-visibility="shared" title="${t('visibility.sharedHint')}">
-                    <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-globe2"></i> ${t('visibility.shared')}</span>
-                    <span class="visibility-pill-option" data-val="family"><i class="bi bi-people-fill"></i> ${t('visibility.family')}</span>
-                    <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
-                  </div>
+                  ${visibilityPickerHtml('quick-post-visibility-btn')}
                   <button type="button" class="sensitive-toggle" id="quick-post-sensitive-btn"
                     data-sensitive="0"
                     title="${t('sensitive.markPostHint')}">
@@ -1001,13 +998,7 @@ export async function renderContactDetail(uuid) {
       btn.classList.toggle('is-on', next === '1');
     });
 
-    document.getElementById('quick-post-visibility-btn').addEventListener('click', (e) => {
-      const pill = e.currentTarget;
-      const clicked = e.target.closest('.visibility-pill-option');
-      if (!clicked) return;
-      pill.dataset.visibility = clicked.dataset.val;
-      pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
-    });
+    const quickPostVisibility = attachVisibilityPicker(document.getElementById('quick-post-visibility-btn'));
 
     // Quick post media handling (images + documents)
     let quickPostMedia = [];
@@ -1161,7 +1152,7 @@ export async function renderContactDetail(uuid) {
         body,
         about_contact_uuid: uuid,
         contact_uuids: extraUuids.length ? extraUuids : undefined,
-        visibility: document.getElementById('quick-post-visibility-btn').dataset.visibility,
+        ...quickPostVisibility.value(),
         is_sensitive: document.getElementById('quick-post-sensitive-btn').dataset.sensitive === '1',
         link_preview: quickPostLinkPreview || undefined,
       });

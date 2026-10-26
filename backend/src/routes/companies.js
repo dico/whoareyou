@@ -6,6 +6,8 @@ import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
 import { config } from '../config/index.js';
+import { filterVisibleContacts } from '../utils/visibility.js';
+import { filterSensitiveContacts } from '../utils/sensitive.js';
 
 const router = Router();
 
@@ -109,6 +111,8 @@ router.get('/:uuid', async (req, res, next) => {
         .join('contacts', 'contact_companies.contact_id', 'contacts.id')
         .where({ 'contact_companies.company_id': company.id, 'contact_companies.tenant_id': req.tenantId })
         .whereNull('contacts.deleted_at')
+        .modify(filterVisibleContacts(req))
+        .modify(filterSensitiveContacts(req))
         .whereNull('contact_companies.end_date')
         .select(
           'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.birth_year',
@@ -121,6 +125,8 @@ router.get('/:uuid', async (req, res, next) => {
         .join('contacts', 'contact_companies.contact_id', 'contacts.id')
         .where({ 'contact_companies.company_id': company.id, 'contact_companies.tenant_id': req.tenantId })
         .whereNull('contacts.deleted_at')
+        .modify(filterVisibleContacts(req))
+        .modify(filterSensitiveContacts(req))
         .whereNotNull('contact_companies.end_date')
         .select(
           'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.birth_year',

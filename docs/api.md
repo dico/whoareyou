@@ -45,7 +45,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/` | List contacts (search, filter, sort, paginate) |
+| GET | `/` | List contacts (search, filter, sort, paginate). Filters: `label` (name), `company` (uuid) + optional `company_active=true` (current members only), `favorite`, `birth_year` |
 | GET | `/:uuid` | Contact detail with photos, fields, labels, relationships, addresses |
 | POST | `/` | Create contact |
 | PUT | `/:uuid` | Update contact |
@@ -77,7 +77,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/restore/:uuid` | Restore soft-deleted post |
 | DELETE | `/permanent/:uuid` | Permanently delete post and files |
 | GET | `/gallery` | Photo gallery for a contact |
-| POST | `/` | Create post |
+| POST | `/` | Create post. `visibility` ∈ shared/family/circle/private; `circle_uuid` required for `circle` (must be a circle the user belongs to) |
 | PUT | `/:uuid` | Update post (supports `about_contact_uuid` and `company_uuid` for moving between walls — mutually exclusive, setting one clears the other) |
 | PUT | `/:uuid/author` | Admin: reassign post author. Accepts `{ contact_uuid }` (any contact), `{ user_id }`, or `{ guest_id }`. Sets `author_contact_id` directly — works for contacts without user/guest accounts. |
 | DELETE | `/:uuid` | Delete post |
@@ -170,6 +170,19 @@ List, mark-read, generate (birthdays, anniversaries, reminders, memories). Notif
 
 Frontend: [frontend/sw.js](../frontend/sw.js) is registered from [app.js](../frontend/js/app.js) on boot. It handles `push` (showNotification) and `notificationclick` (open/focus URL). [utils/push.js](../frontend/js/utils/push.js) provides `subscribe()`, `unsubscribe()`, `isSubscribed()`, `pushPermission()`. iOS note: Web Push only works in PWAs installed to the home screen (iOS 16.4+) — in a regular Safari tab, `Notification.requestPermission` resolves to `denied`.
 
+### Visibility circles (`/api/circles`)
+Named subsets of tenant members used as a post audience (`visibility = 'circle'`). Grant visibility only. See [security.md](security.md#visibility-circles).
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/mine` | Yes | Circles the current user belongs to (`uuid`, `name`) — feeds the post visibility picker |
+| GET | `/` | Admin | All circles with members (`uuid`, names) and `post_count` |
+| POST | `/` | Admin | Create `{ name, user_uuids }` |
+| PUT | `/:uuid` | Admin | Rename and/or replace members `{ name?, user_uuids? }`. Removed members' post notifications for the circle are pruned. |
+| DELETE | `/:uuid` | Admin | Delete; the circle's posts become `private` (creator-only) |
+
+Audit actions: `circle.create`, `circle.update`, `circle.delete`.
+
 ### Gifts (`/api/gifts`)
 Products (CRUD, URL scraping, images), events (CRUD, auto-fill), orders (CRUD, status lifecycle), wishlists (CRUD, items).
 
@@ -256,7 +269,7 @@ Token-based, read-only display of timeline posts on TVs / digital signage.
 Screen configuration options: `display_mode` (slideshow/feed), `slide_interval`, `visibility_filter`, `days_back`, `shuffle`, `show_body/contact_name/date/reactions/comments`, `max_posts`, `feed_layout` (horizontal/vertical), `multi_image` (collage/first), `image_fit` (contain/cover), `include_sensitive`.
 
 ### Export (`/api/export`)
-Data export with two modes: instant JSON ZIP (`GET /data`) and full backup with media (`POST /full`, `GET /status/:jobId`, `GET /download/:jobId`). See [export.md](export.md) for field documentation.
+Data export with two modes: instant JSON ZIP (`GET /data`) and full backup with media (`POST /full`, `GET /status/:jobId`, `GET /download/:jobId`). **Admin only** — exports contain every member's private and circle posts. See [export.md](export.md) for field documentation.
 
 ### System Admin (`/api/system`)
 System settings, SMTP config, tenant management, IP security.

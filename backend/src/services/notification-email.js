@@ -4,6 +4,7 @@ import { db } from '../db.js';
 import { sendEmail } from './email.js';
 import { config } from '../config/index.js';
 import { NOTIFICATION_TYPES } from '../utils/notification-prefs.js';
+import { filterVisiblePosts } from '../utils/visibility.js';
 
 const DIGEST_THROTTLE_MINUTES = 60;
 
@@ -197,10 +198,7 @@ async function fetchMemoryPostsForDigest(userId, tenantId, limit = 10) {
     .where('posts.tenant_id', tenantId)
     .whereNull('posts.deleted_at')
     .where('posts.is_sensitive', false)
-    .where(function () {
-      this.whereIn('posts.visibility', ['shared', 'family'])
-        .orWhere('posts.created_by', userId);
-    })
+    .modify(filterVisiblePosts({ user: { id: userId }, tenantId }))
     .whereRaw('MONTH(posts.post_date) = ?', [month])
     .whereRaw('DAY(posts.post_date) = ?', [day])
     .whereRaw('YEAR(posts.post_date) < ?', [year])

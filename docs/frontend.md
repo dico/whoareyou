@@ -22,6 +22,8 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `openContactGiftModal()` / `giftContactLinkAttrs()` | `contact-gift-modal.js` | Modal shown when clicking a contact name anywhere in the gift app. Shows avatar, name, "open profile" button, and the contact's received/given gift history. Pages mark contact links with `giftContactLinkAttrs(contact)` — a global click delegate handles every link. |
 | `attachContactSearch()` | `contact-search.js` | Reusable inline contact search dropdown. Floating dropdown, keyboard navigation, modal-aware. |
 | `showMediaPicker()` | `media-picker.js` | Modal picker for selecting one or more existing images. Source-agnostic — currently supports `{ contactUuid }` (combines profile photos + post gallery) and `{ items }` (preloaded). Returns a Promise of selected items. Uses `.contact-gallery-grid` styling. New sources (groups, multi-contact, books) can be added in `loadFromSource`. |
+| `tagGroupDialog()` / `fetchTagSourceMembers()` | `tag-group-dialog.js` | Bulk-tag a post with every member of a group (current members only) or a label. Members are expanded to regular `post_contacts` tags (snapshot — later membership changes don't alter old posts), so contact profiles, books and portal work unchanged. Sensitive contacts are always skipped (tagging one would cascade-hide the whole post). Used by timeline compose (“Gruppe” button), post edit mode (people icon) and the group page (“Tagg medlemmer” toggle). Posts with >7 tags show 6 chips + a “+N til” chip. |
+| `visibilityPickerHtml()` / `attachVisibilityPicker()` / `visibilityIconHtml()` / `visibilityMenuItemsHtml()` / `loadMyCircles()` / `invalidateCircles()` | `visibility-picker.js` | Post visibility dropdown (Alle / Familie / one entry per circle the user is in / Bare meg) with a hint line per option. `attachVisibilityPicker(el).value()` returns `{ visibility, circle_uuid? }` ready to spread into the POST body. Used by all three compose forms (timeline, contact profile, group). `visibilityMenuItemsHtml()` builds the same options for the post `…` menu; `visibilityIconHtml(post)` renders the header icon (circle posts show a badge with the circle name). Circles come from `GET /api/circles/mine`, cached per login session — call `invalidateCircles()` after changing circles. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 | `listRowHtml()` | `list-row.js` | Standardized list row: icon/thumb + title/meta + actions. Used by book list, signage screens, MG author reassignment. Handles dropdown z-index fix once for all consumers. See [design-guidelines.md](design-guidelines.md) rule 34. |
 
@@ -92,7 +94,7 @@ The dedicated **Editor view** was removed — its job (per-post weight, image in
 |------|-------|----------|
 | Settings | `/settings` | `renderSettings()` |
 | Profile | `/profile` | `renderProfile()` — 3 tabs: Account, Security, Sessions |
-| Tenant Admin | `/admin/tenant` | `renderTenantAdmin()` — Members, invites, contact linking |
+| Tenant Admin | `/admin/tenant` | `renderTenantAdmin()` — Members, invites, contact linking, visibility circles (tab "Kretser", implemented in [admin-circles.js](../frontend/js/pages/admin-circles.js)), portal, sessions, security |
 | System Admin | `/admin/system` | `renderSystemAdmin()` — 4 tabs: Tenants, Settings, Email, IP Security |
 | Integrations | `/admin/integrations` | `renderIntegrations()` |
 | MomentGarden | `/admin/integrations/momentgarden` | `renderMomentGarden()` |

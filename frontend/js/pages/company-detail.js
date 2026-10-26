@@ -9,6 +9,8 @@ import { renderPostList } from '../components/post-list.js';
 import { showPhotoViewer } from '../components/photo-viewer.js';
 import { loadGalleryInto } from './contact-detail.js';
 import { enableDropZone } from '../utils/drop-zone.js';
+import { fetchTagSourceMembers } from '../components/tag-group-dialog.js';
+import { visibilityPickerHtml, attachVisibilityPicker } from '../components/visibility-picker.js';
 
 const TYPE_ICONS = {
   company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people',
@@ -159,11 +161,12 @@ export async function renderCompanyDetail(uuid) {
                       <textarea class="form-control" id="group-post-body" rows="2" placeholder="${t('posts.placeholder')}"></textarea>
                       <div id="group-post-media-preview" class="post-media-preview d-none"></div>
                       <div class="post-compose-bar">
-                        <div class="visibility-pill" id="group-post-visibility" data-visibility="shared" title="${t('visibility.sharedHint')}">
-                          <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-globe2"></i> ${t('visibility.shared')}</span>
-                          <span class="visibility-pill-option" data-val="family"><i class="bi bi-people-fill"></i> ${t('visibility.family')}</span>
-                          <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
-                        </div>
+                        ${visibilityPickerHtml('group-post-visibility')}
+                        ${currentEmployees.length ? `
+                        <button type="button" class="sensitive-toggle toggle-primary" id="group-post-tag-members" title="${t('posts.tagMembersHint')}">
+                          <i class="bi bi-people"></i>
+                          <span>${t('posts.tagMembers', { count: currentEmployees.length })}</span>
+                        </button>` : ''}
                         <div class="post-compose-actions">
                           <label class="post-media-btn" title="${t('posts.addMedia')}">
                             <i class="bi bi-image"></i>
@@ -383,14 +386,12 @@ export async function renderCompanyDetail(uuid) {
     }
 
 
-    // Visibility pill
-    const visPill = document.getElementById('group-post-visibility');
-    visPill?.addEventListener('click', (e) => {
-      const clicked = e.target.closest('.visibility-pill-option');
-      if (!clicked) return;
-      visPill.dataset.visibility = clicked.dataset.val;
-      visPill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
-    });
+    // Visibility picker
+    const groupPostVisibility = attachVisibilityPicker(document.getElementById('group-post-visibility'));
+
+    // "Tag members" toggle — tags all current members as regular contact tags
+    const tagMembersBtn = document.getElementById('group-post-tag-members');
+    tagMembersBtn?.addEventListener('click', () => tagMembersBtn.classList.toggle('is-on'));
 
     // Group post media handling
     let groupPostMedia = [];
@@ -447,8 +448,17 @@ export async function renderCompanyDetail(uuid) {
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
-      const visibility = document.getElementById('group-post-visibility')?.dataset.visibility || 'shared';
-      const { post } = await api.post('/posts', { body: body || '', company_uuid: uuid, visibility, has_media: groupPostMedia.length > 0 });
+      const tagMembers = tagMembersBtn?.classList.contains('is-on');
+      const memberUuids = tagMembers
+        ? (await fetchTagSourceMembers({ groupUuid: uuid })).map(c => c.uuid)
+        : [];
+      const { post } = await api.post('/posts', {
+        body: body || '',
+        company_uuid: uuid,
+        ...groupPostVisibility.value(),
+        has_media: groupPostMedia.length > 0,
+        contact_uuids: memberUuids.length ? memberUuids : undefined,
+      });
 
       if (groupPostMedia.length && post?.uuid) {
         const formData = new FormData();
@@ -460,6 +470,7 @@ export async function renderCompanyDetail(uuid) {
       }
 
       document.getElementById('group-post-body').value = '';
+      tagMembersBtn?.classList.remove('is-on');
       groupPostMedia = [];
       renderGroupMediaPreview();
       submitBtn.disabled = false;

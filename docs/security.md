@@ -94,18 +94,32 @@ If an admin saves a whitelist that excludes their own IP, access from the same L
 - ALL queries MUST filter by `tenant_id`
 - Cross-tenant access verified in security audits (3 rounds)
 
-## Visibility (Three Levels)
+## Visibility (Four Levels)
 
 | Level | Who sees | Icon | Default? |
 |-------|----------|------|----------|
-| `shared` | Family + portal guests | 🌐 globe | ✅ Yes |
-| `family` | Family members only | 👥 people | |
+| `shared` | Family + portal guests (+ signage) | 🌐 globe | ✅ Yes |
+| `family` | All tenant members (+ signage set to "shared + family") | 👥 people | |
+| `circle` | Members of `posts.circle_id` + the creator (posts only) | `bi-person-heart` + circle name | |
 | `private` | Only the creator | 🔒 lock | |
 
-- Applies to: posts, contacts, labels, gift orders
-- Main app queries: `WHERE visibility IN ('shared','family') OR created_by = userId`
-- Portal queries: `WHERE visibility = 'shared'` (family and private are NEVER visible)
-- Backend enforces valid values: `['shared','family','private']`
+- Applies to: posts (all four), contacts / labels / gift orders (`shared` / `family` / `private`)
+- **All main-app checks go through [utils/visibility.js](../backend/src/utils/visibility.js)** — never inline the rule:
+  - `filterVisiblePosts(req)` / `filterVisibleContacts(req)` — Knex modifiers for list queries
+  - `loadVisiblePost(req, uuid, { sensitive })` — single-post loader (404 if not visible); used by edit, delete, comments, reactions, media upload/delete/rotate
+  - `resolvePostVisibility(req, visibility, circleUuid)` — validates input; a user can only post into a circle they belong to
+  - `postAudienceUserIds(post, tenantId)` — who gets `family_post` / `family_comment` notifications
+- Portal queries: `WHERE visibility = 'shared'` (family, circle and private are NEVER visible)
+- Signage and books use explicit allow-lists (`shared`, or `shared` + `family`) — circle and private never appear
+- `/uploads/posts/{uuid}/…` applies the same rule: main-app users only get files from posts they can see; portal guests only from `shared`, non-sensitive, non-deleted posts
+
+### Visibility circles
+Admin-defined subsets of tenant members (`visibility_circles` + `visibility_circle_members`), managed in Tenant admin → Kretser. Typical use: a "Foreldre" circle for notes about the children that the children (who have their own logins) must not see.
+- Circles grant **visibility only** — no admin rights, no edit rights beyond what any member who can see a post already has.
+- Membership is evaluated at query time: removing a user from a circle hides its posts from them immediately, and their stale `family_post` / `family_comment` notifications for those posts are deleted.
+- Changing a post to a narrower audience also prunes notifications (which contain body previews) for users who can no longer see it.
+- Deleting a circle converts its posts to `private` (creator-only) — never to a broader audience.
+- A `circle` post whose `circle_id` is NULL (FK fallback) is creator-only.
 
 ## Sensitive Content Mode
 
@@ -336,3 +350,13 @@ Guidance for future code: prefer a single `logAuditFromReq(req, { action, ... })
   - `req.user.is_system_admin` → `req.user.isSystemAdmin` in 4 places where the snake_case name never existed (middleware sets camelCase). Fixed silently-broken admin gate on MG-admin endpoints
   - `JWT_SECRET` + `CORS_ORIGIN` now fail-fast at startup in production — previously `JWT_SECRET` would fall back to `'change-me-in-production'` and CORS would default to `*` if env vars were missing
   - `audit_log` table was created in migration 019 but never used; wired up via `utils/audit.js` for login/session/tenant/member events and the `access.blocked` middleware
+- Round 11: Contact visibility on member lists — `GET /api/companies/:uuid` (current + previous members) and `GET /api/labels/:id/contacts` returned other users' `private` contacts and sensitive contacts (name + avatar). Both now apply `filterVisibleContacts(req)` (new, `utils/visibility.js`) and `filterSensitiveContacts(req)`. Also fixed `GET /api/contacts` using `visibility = 'shared'` only, which hid `family` contacts from other members' contact list and search.
+- Round 12: Post visibility centralized (`utils/visibility.js`) while adding visibility circles. Every inline `visibility IN ('shared','family') OR created_by` check on posts and contacts replaced with the shared helpers. Holes found and fixed on the way:
+  - `GET /api/posts/geo` (map) had **no visibility filter** — other users' private posts' photos, GPS and body text appeared on the map
+  - `GET /api/posts/:uuid/comments` had no visibility filter — comments on a private post were readable by UUID
+  - `POST/DELETE /api/posts/:uuid/media`, `POST …/rotate` had no visibility filter — any member could add/delete/rotate media on a private post by UUID
+  - `DELETE /api/posts/:uuid/comments/:id` now requires the post to be visible
+  - `/uploads/posts/…` served media from private posts to every tenant member, and media from `family`/sensitive posts to portal guests whose contacts were tagged
+  - `GET /api/posts/trash` listed other users' deleted private posts (with body); restore/permanent-delete likewise
+  - `GET /api/posts/gallery` used `shared` only — `family` posts were missing from galleries (functional bug)
+  - `GET/POST /api/export/data|full` were open to every member and include all private posts/contacts/gifts of the household — now admin-only (the Settings UI was already admin-only)

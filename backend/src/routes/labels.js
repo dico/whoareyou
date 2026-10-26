@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
+import { filterVisibleContacts } from '../utils/visibility.js';
+import { filterSensitiveContacts } from '../utils/sensitive.js';
 
 const router = Router();
 
@@ -105,6 +107,8 @@ router.get('/:id/contacts', async (req, res, next) => {
       .join('contacts', 'contact_labels.contact_id', 'contacts.id')
       .where({ 'contact_labels.label_id': label.id })
       .whereNull('contacts.deleted_at')
+      .modify(filterVisibleContacts(req))
+      .modify(filterSensitiveContacts(req))
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
         db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)

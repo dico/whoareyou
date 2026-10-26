@@ -8,6 +8,7 @@ import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
 import { filterSensitiveContacts, filterSensitivePosts, parseSensitiveFlag, stripSensitiveContacts } from '../utils/sensitive.js';
 import { getLinkedContactId } from '../utils/tenant.js';
+import { filterVisibleContacts, filterVisiblePosts } from '../utils/visibility.js';
 
 const router = Router();
 
@@ -21,10 +22,7 @@ router.get('/', async (req, res, next) => {
     let query = db('contacts')
       .where('contacts.tenant_id', req.tenantId)
       .whereNull('contacts.deleted_at')
-      .where(function () {
-        this.where('contacts.visibility', 'shared')
-          .orWhere('contacts.created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .modify(filterSensitiveContacts(req));
 
     // Search
@@ -75,10 +73,10 @@ router.get('/', async (req, res, next) => {
     if (req.query.company) {
       const companyRow = await db('companies').where({ uuid: req.query.company, tenant_id: req.tenantId }).first();
       if (companyRow) {
-        query = query
-          .whereIn('contacts.id',
-            db('contact_companies').where({ company_id: companyRow.id }).select('contact_id')
-          );
+        // company_active=true limits to current members (no end_date)
+        const memberQuery = db('contact_companies').where({ company_id: companyRow.id });
+        if (req.query.company_active === 'true') memberQuery.whereNull('end_date');
+        query = query.whereIn('contacts.id', memberQuery.select('contact_id'));
       }
     }
 
@@ -147,10 +145,7 @@ router.get('/mention-suggestions', async (req, res, next) => {
     let query = db('contacts')
       .where('contacts.tenant_id', req.tenantId)
       .whereNull('contacts.deleted_at')
-      .where(function () {
-        this.whereIn('contacts.visibility', ['shared', 'family'])
-          .orWhere('contacts.created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .modify(filterSensitiveContacts(req));
 
     if (q) {
@@ -199,9 +194,7 @@ router.get('/:uuid', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .modify(filterSensitiveContacts(req))
       .first();
 
@@ -419,9 +412,7 @@ router.put('/:uuid', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .first();
 
     if (!contact) {
@@ -536,9 +527,7 @@ router.get('/search/global', async (req, res, next) => {
     const contacts = await db('contacts')
       .where('contacts.tenant_id', req.tenantId)
       .whereNull('contacts.deleted_at')
-      .where(function () {
-        this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .modify(filterSensitiveContacts(req))
       .where(function () {
         // Multi-word search: each term must match somewhere
@@ -563,9 +552,7 @@ router.get('/search/global', async (req, res, next) => {
     const posts = await db('posts')
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
-      .where(function () {
-        this.whereIn('posts.visibility', ['shared', 'family']).orWhere('posts.created_by', req.user.id);
-      })
+      .modify(filterVisiblePosts(req))
       .modify(filterSensitivePosts(req))
       .where('posts.body', 'like', like)
       .select('posts.uuid', 'posts.body', 'posts.post_date', 'posts.contact_id')
@@ -628,9 +615,7 @@ router.get('/upcoming-birthdays/list', async (req, res, next) => {
       .whereNull('contacts.deleted_at')
       .whereNotNull('contacts.birth_day')
       .whereNotNull('contacts.birth_month')
-      .where(function () {
-        this.whereIn('contacts.visibility', ['shared', 'family']).orWhere('contacts.created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .modify(filterSensitiveContacts(req))
       .select(
         'contacts.uuid', 'contacts.first_name', 'contacts.last_name',
@@ -680,9 +665,7 @@ router.post('/:uuid/fields', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .first();
 
     if (!contact) {
@@ -736,9 +719,7 @@ router.put('/:uuid/fields/:fieldId', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .first();
 
     if (!contact) {
@@ -783,9 +764,7 @@ router.delete('/:uuid/fields/:fieldId', async (req, res, next) => {
     const contact = await db('contacts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
+      .modify(filterVisibleContacts(req))
       .first();
 
     if (!contact) {

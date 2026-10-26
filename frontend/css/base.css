@@ -411,6 +411,74 @@ a:hover {
   .visibility-pill-option i { font-size: 0.75rem; }
 }
 
+/* ── Post visibility picker (components/visibility-picker.js) ──
+ * Compact dropdown: icon + label + caret. Shared looks neutral; any
+ * narrower audience (family / circle / private) is tinted so the author
+ * notices before publishing. */
+.visibility-picker { flex-shrink: 0; }
+.visibility-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  padding: .25rem 10px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  max-width: 180px;
+}
+.visibility-picker-btn:hover { background: rgba(0, 0, 0, 0.04); }
+.visibility-picker-btn.is-restricted {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.visibility-picker-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visibility-picker-caret { font-size: 0.6rem; }
+.visibility-picker-menu { min-width: 240px; }
+.visibility-picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  white-space: normal;
+}
+.visibility-picker-item > i { margin-top: 2px; }
+.visibility-picker-item-label { display: block; font-size: var(--font-size-sm); }
+.visibility-picker-item-hint { display: block; font-size: 0.75rem; color: var(--color-text-secondary); }
+.visibility-picker-item.active { background: var(--color-primary); color: #fff; }
+.visibility-picker-item.active .visibility-picker-item-hint { color: rgba(255, 255, 255, 0.8); }
+/* glass-card creates a stacking context — lift the compose card while its
+   menu is open so following posts don't paint over it (see list-row) */
+.glass-card:has(.visibility-picker-menu.show) { position: relative; z-index: 10; }
+@media (max-width: 576px) {
+  .visibility-picker-label { max-width: 80px; }
+}
+
+/* Member checkboxes in the circle create/edit modal (admin-circles.js) */
+.circle-member-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* Circle badge in post header (visibility = circle) */
+.post-circle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-full);
+  padding: 0 6px;
+  line-height: 1.6;
+}
+
 /* Legacy visibility button (used in settings forms) */
 .visibility-btn {
   border: 1px solid var(--color-border);
@@ -476,6 +544,11 @@ a:hover {
   background: #d97706;
   border-color: #d97706;
   color: #fff;
+}
+/* Same pill toggle for non-sensitive options (e.g. "tag members"), primary when on */
+.sensitive-toggle.toggle-primary.is-on {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
 }
 @media (max-width: 576px) {
   .sensitive-toggle span { display: none; }

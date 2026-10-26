@@ -3,7 +3,8 @@ import { navigate } from '../app.js';
 import { renderPostList } from '../components/post-list.js';
 import { createMentionInput, extractMentionUuids } from '../components/mention-input.js';
 import { attachContactSearch } from '../components/contact-search.js';
-import { toggleVisibilityBtn } from '../utils/visibility.js';
+import { tagGroupDialog } from '../components/tag-group-dialog.js';
+import { visibilityPickerHtml, attachVisibilityPicker } from '../components/visibility-picker.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { enableDropZone } from '../utils/drop-zone.js';
@@ -38,11 +39,7 @@ export async function renderTimeline(contactUuid = null) {
             <div id="post-media-preview" class="post-media-preview d-none"></div>
             <div id="post-tags" class="post-tags"></div>
             <div class="post-compose-bar">
-              <div class="visibility-pill" id="post-visibility-btn" data-visibility="shared">
-                <span class="visibility-pill-option active" data-val="shared"><i class="bi bi-globe2"></i> ${t('visibility.shared')}</span>
-                <span class="visibility-pill-option" data-val="family"><i class="bi bi-people-fill"></i> ${t('visibility.family')}</span>
-                <span class="visibility-pill-option" data-val="private"><i class="bi bi-lock-fill"></i> ${t('visibility.private')}</span>
-              </div>
+              ${visibilityPickerHtml('post-visibility-btn')}
               <button type="button" class="sensitive-toggle" id="post-sensitive-btn"
                 data-sensitive="0"
                 title="${t('sensitive.markPostHint')}">
@@ -60,6 +57,9 @@ export async function renderTimeline(contactUuid = null) {
                 </label>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-tag-contact">
                   <i class="bi bi-person-plus"></i> ${t('posts.tag')}
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-tag-group" title="${t('posts.tagGroup')}">
+                  <i class="bi bi-people"></i> ${t('posts.tagGroupShort')}
                 </button>
                 <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
               </div>
@@ -156,14 +156,8 @@ export async function renderTimeline(contactUuid = null) {
     }
   });
 
-  // Visibility pill toggle on compose
-  document.getElementById('post-visibility-btn').addEventListener('click', (e) => {
-    const pill = e.currentTarget;
-    const clicked = e.target.closest('.visibility-pill-option');
-    if (!clicked) return;
-    pill.dataset.visibility = clicked.dataset.val;
-    pill.querySelectorAll('.visibility-pill-option').forEach(o => o.classList.toggle('active', o.dataset.val === clicked.dataset.val));
-  });
+  // Visibility picker on compose
+  const visibilityPicker = attachVisibilityPicker(document.getElementById('post-visibility-btn'));
 
   // Sensitive toggle on compose
   document.getElementById('post-sensitive-btn').addEventListener('click', (e) => {
@@ -284,6 +278,13 @@ export async function renderTimeline(contactUuid = null) {
     },
   });
 
+  document.getElementById('btn-tag-group').addEventListener('click', async () => {
+    const result = await tagGroupDialog({ excludeUuids: taggedContacts.map((c) => c.uuid) });
+    if (!result?.contacts.length) return;
+    taggedContacts.push(...result.contacts);
+    renderTags();
+  });
+
   function renderTags() {
     const el = document.getElementById('post-tags');
     el.innerHTML = taggedContacts.map((c) => `
@@ -326,7 +327,7 @@ export async function renderTimeline(contactUuid = null) {
       const { post } = await api.post('/posts', {
         body: bodyText,
         contact_uuids: allUuids,
-        visibility: document.getElementById('post-visibility-btn').dataset.visibility,
+        ...visibilityPicker.value(),
         is_sensitive: document.getElementById('post-sensitive-btn').dataset.sensitive === '1',
       });
       createdPostUuid = post?.uuid || null;

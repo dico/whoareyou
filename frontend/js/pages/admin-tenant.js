@@ -5,6 +5,7 @@ import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { attachContactSearch } from '../components/contact-search.js';
+import { loadCircles, showCircleModal } from './admin-circles.js';
 
 export async function renderTenantAdmin() {
   const content = document.getElementById('app-content');
@@ -29,6 +30,7 @@ export async function renderTenantAdmin() {
 
       <div class="filter-tabs mb-3" id="tenant-tabs">
         <button class="filter-tab active" data-tab="members"><i class="bi bi-people me-1"></i>${t('admin.manageMembers')}</button>
+        <button class="filter-tab" data-tab="circles"><i class="bi bi-person-heart me-1"></i>${t('circles.title')}</button>
         <button class="filter-tab" data-tab="portal"><i class="bi bi-share me-1"></i>${t('portal.title')}</button>
         <button class="filter-tab" data-tab="sessions"><i class="bi bi-laptop me-1"></i>${t('admin.sessions')}</button>
         <button class="filter-tab" data-tab="security"><i class="bi bi-shield-lock me-1"></i>${t('settings.security')}</button>
@@ -41,6 +43,20 @@ export async function renderTenantAdmin() {
           <div id="members-list" class="mt-3">
             <div class="loading">${t('admin.loadingMembers')}</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Visibility circles tab -->
+      <div id="tab-circles" class="d-none">
+        <div class="settings-section glass-card">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <h4 class="mb-0">${t('circles.title')}</h4>
+            <button class="btn btn-primary btn-sm" id="btn-add-circle">
+              <i class="bi bi-plus-lg me-1"></i>${t('circles.create')}
+            </button>
+          </div>
+          <p class="text-muted small">${t('circles.desc')}</p>
+          <div id="circles-list"><div class="loading">${t('app.loading')}</div></div>
         </div>
       </div>
 
@@ -196,14 +212,17 @@ export async function renderTenantAdmin() {
     if (!tab) return;
     document.querySelectorAll('#tenant-tabs .filter-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    ['members', 'sessions', 'portal', 'security'].forEach(id => {
+    ['members', 'circles', 'sessions', 'portal', 'security'].forEach(id => {
       document.getElementById(`tab-${id}`)?.classList.toggle('d-none', id !== tab.dataset.tab);
     });
     inviteBtn.classList.toggle('d-none', tab.dataset.tab !== 'members');
     if (tab.dataset.tab === 'sessions') loadTenantSessions();
     if (tab.dataset.tab === 'security') loadTrustedIps();
     if (tab.dataset.tab === 'portal') loadPortal();
+    if (tab.dataset.tab === 'circles') loadCircles();
   });
+
+  document.getElementById('btn-add-circle').addEventListener('click', () => showCircleModal());
   inviteBtn.classList.remove('d-none');
 
   // Revoke all sessions
@@ -759,7 +778,7 @@ async function loadPortalGuests() {
                     ${guestSessions.length ? guestSessions.map(s => `
                       <div class="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom">
                         <div class="flex-grow-1">
-                          <div class="small"><strong>${s.device_label || t('admin.unknown')}</strong></div>
+                          <div class="small"><strong>${s.device_label || t('settings.unknown')}</strong></div>
                           <div class="text-muted small">${s.ip_address || ''} · ${formatDate(s.last_activity_at)}</div>
                         </div>
                         <button class="btn btn-outline-danger btn-sm portal-revoke-session" data-uuid="${s.uuid}"><i class="bi bi-x-lg"></i></button>

@@ -324,6 +324,14 @@
   color: var(--color-primary);
 }
 
+/* "+N more" chip for posts with many tagged contacts (no avatar slot) */
+.post-contacts-more {
+  padding: 2px 10px;
+  min-height: 28px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
 .contact-chip-avatar {
   width: 22px;
   height: 22px;

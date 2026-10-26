@@ -32,6 +32,8 @@ import bookRoutes from './routes/books.js';
 import portalRoutes from './routes/portal.js';
 import portalAdminRoutes from './routes/portal-admin.js';
 import signageRoutes from './routes/signage.js';
+import circleRoutes from './routes/circles.js';
+import { filterVisiblePosts } from './utils/visibility.js';
 
 const app = express();
 
@@ -147,6 +149,7 @@ app.use('/api/life-events', authenticate, tenantScope, lifeEventRoutes);
 app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
 app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api/gifts', authenticate, tenantScope, giftRoutes);
+app.use('/api/circles', authenticate, tenantScope, circleRoutes);
 // System routes — registration-status is public (must be before catch-all)
 app.use('/api/system', (req, res, next) => {
   if (req.path === '/registration-status' && req.method === 'GET') return next();
@@ -230,7 +233,18 @@ app.use('/uploads/', (req, res, next) => {
     if (req.portal && type === 'contacts' && !isThumbnail && !req.portal.contactIds.includes(record.id)) {
       return res.status(403).json({ error: 'Access denied' });
     }
+    // Post media follows post visibility: main-app users only get files from
+    // posts they can see (private/circle posts stay with their audience).
+    if (!req.portal && type === 'posts') {
+      const visible = await db('posts').where({ id: record.id })
+        .modify(filterVisiblePosts(req)).first();
+      if (!visible) return res.status(403).json({ error: 'Access denied' });
+    }
     if (req.portal && type === 'posts') {
+      // Portal guests only ever see shared, non-sensitive, non-deleted posts
+      if (record.visibility !== 'shared' || record.is_sensitive || record.deleted_at) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
       const postContact = record.contact_id;
       const tagged = await db('post_contacts').where({ post_id: record.id }).whereIn('contact_id', req.portal.contactIds).first();
       if (!req.portal.contactIds.includes(postContact) && !tagged) {

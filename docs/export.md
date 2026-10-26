@@ -24,6 +24,7 @@ Two export modes available from Settings → Export Data (`/admin/export-data`):
 ## Security
 
 - All endpoints require authentication + tenant scope
+- `GET /data` and `POST /full` are **admin only** — the export is a full household backup including other members' `private` and `circle` posts, private contacts and gifts
 - Export rate limited: 10 requests per hour per user
 - Jobs are tied to userId + tenantId — other users get 404
 - Temp files use random UUIDs (not guessable)
@@ -93,6 +94,7 @@ Each contact includes:
 ### posts.json
 Each post includes:
 - `uuid`, `body`, `post_date`, `visibility`, `created_at`
+- `circle` — circle name when `visibility = 'circle'` (nullable)
 - `contact_uuid` — profile post target (nullable)
 - `company_uuid` — group post target (nullable)
 - `media[]` — file_path, thumbnail_path, file_type, original_name

@@ -6,6 +6,7 @@ import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
 import { processImage, extractImageMetadata, rotateImage } from '../services/image.js';
 import { config } from '../config/index.js';
+import { loadVisiblePost } from '../utils/visibility.js';
 
 const router = Router();
 
@@ -202,11 +203,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
   try {
     if (!req.files?.length) throw new AppError('No files uploaded', 400);
 
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     const [{ maxSort }] = await db('post_media')
       .where({ post_id: post.id })
@@ -307,11 +304,7 @@ router.post('/posts/:uuid/media', uploadMedia.array('media', 50), async (req, re
 // DELETE /api/posts/:uuid/media/:mediaId — remove a media item from a post
 router.delete('/posts/:uuid/media/:mediaId', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     const media = await db('post_media')
       .where({ id: req.params.mediaId, post_id: post.id })
@@ -337,11 +330,7 @@ router.delete('/posts/:uuid/media/:mediaId', async (req, res, next) => {
 // POST /api/posts/:uuid/media/:mediaId/rotate — rotate image 90° clockwise on disk
 router.post('/posts/:uuid/media/:mediaId/rotate', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     const media = await db('post_media')
       .where({ id: req.params.mediaId, post_id: post.id })

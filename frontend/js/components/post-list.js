@@ -3,6 +3,8 @@ import { confirmDialog, contactSearchDialog, groupSearchDialog } from './dialogs
 import { createMentionInput, parseMentionMarkup, extractMentionUuids } from './mention-input.js';
 import { t, formatDate, timeAgo, formatDateTime } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
+import { tagGroupDialog } from './tag-group-dialog.js';
+import { loadMyCircles, visibilityIconHtml, visibilityMenuItemsHtml } from './visibility-picker.js';
 
 // Store reaction people per post (avoids JSON-in-HTML-attribute issues)
 // Reaction people loaded on demand via GET /posts/:uuid/reactions
@@ -22,6 +24,26 @@ function renderLinkPreview(lp) {
     </div>
   </a>`;
 }
+
+// Append a removable contact tag to an edit form's tag list (skips duplicates).
+// Inserted before the first action button so tags stay grouped.
+function appendEditTag(tagsList, contact) {
+  if (tagsList.querySelector(`.edit-tag[data-uuid="${contact.uuid}"]`)) return;
+  const tag = document.createElement('span');
+  tag.className = 'edit-tag';
+  tag.dataset.uuid = contact.uuid;
+  const initials = (contact.first_name?.[0] || '') + (contact.last_name?.[0] || '');
+  const avatarHtml = contact.avatar
+    ? `<img src="${authUrl(contact.avatar)}" alt="">`
+    : `<span>${escapeHtml(initials)}</span>`;
+  tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
+  tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
+  tagsList.insertBefore(tag, tagsList.querySelector('.btn-add-tag-edit'));
+}
+
+// Posts with many tags (e.g. a whole group) show the first few chips and
+// collapse the rest behind a "+N more" chip.
+const VISIBLE_TAGS = 6;
 
 function formatLikeNames(names, count) {
   if (!names?.length) return count;
@@ -45,7 +67,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     if (companyUuid) params.set('company', companyUuid);
     params.set('limit', currentLimit[key]);
 
-    const data = await api.get(`${endpoint}?${params}`);
+    const [data, circles] = await Promise.all([api.get(`${endpoint}?${params}`), loadMyCircles()]);
 
     if (data.posts.length === 0) {
       el.innerHTML = `
@@ -97,8 +119,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           `}
           <div class="post-header-actions">
             ${(p.is_sensitive || p.about?.is_sensitive) ? `<i class="bi bi-eye-slash post-sensitive-icon" title="${t('sensitive.markedTooltip')}"></i>` : ''}
-            ${p.visibility === 'private' ? `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('visibility.private')}"></i>` : ''}
-            ${p.visibility === 'family' ? `<i class="bi bi-people-fill text-muted post-visibility-icon" title="${t('visibility.family')}"></i>` : ''}
+            ${visibilityIconHtml(p)}
             <div class="dropdown">
               <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
@@ -110,15 +131,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
                 ${p.about || p.company ? `<li><a class="dropdown-item btn-move-to-timeline" href="#" data-uuid="${p.uuid}"><i class="bi bi-house me-2"></i>${t('posts.moveToTimeline')}</a></li>` : ''}
                 <li><hr class="dropdown-divider"></li>
                 <li><h6 class="dropdown-header">${t('visibility.title')}</h6></li>
-                <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="shared">
-                  <i class="bi bi-globe2 me-2"></i>${t('visibility.shared')} ${p.visibility === 'shared' ? '<i class="bi bi-check"></i>' : ''}
-                </a></li>
-                <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="family">
-                  <i class="bi bi-people-fill me-2"></i>${t('visibility.family')} ${p.visibility === 'family' ? '<i class="bi bi-check"></i>' : ''}
-                </a></li>
-                <li><a class="dropdown-item btn-set-visibility" href="#" data-uuid="${p.uuid}" data-vis="private">
-                  <i class="bi bi-lock-fill me-2"></i>${t('visibility.private')} ${p.visibility === 'private' ? '<i class="bi bi-check"></i>' : ''}
-                </a></li>
+                ${visibilityMenuItemsHtml(circles, { visibility: p.visibility, circle_uuid: p.circle?.uuid }, { itemClass: 'btn-set-visibility', dataAttrs: `data-uuid="${p.uuid}"` })}
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger btn-delete-post" href="#" data-uuid="${p.uuid}"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
               </ul>
@@ -127,17 +140,20 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           <div class="post-body">${linkifyPost(p.body, p.contacts)}</div>
           ${p.contacts.length ? `
             <div class="post-contacts">
-              ${p.contacts.map((c) => `
-                <a href="/contacts/${c.uuid}" data-link class="contact-chip">
+              ${p.contacts.map((c, i) => `
+                <a href="/contacts/${c.uuid}" data-link class="contact-chip${p.contacts.length > VISIBLE_TAGS + 1 && i >= VISIBLE_TAGS ? ' d-none post-contact-extra' : ''}">
                   <span class="contact-chip-avatar">
                     ${c.avatar
                       ? `<img src="${authUrl(c.avatar)}" alt="">`
-                      : `<span>${(c.first_name[0] || '') + (c.last_name?.[0] || '')}</span>`
+                      : `<span>${escapeHtml((c.first_name?.[0] || '') + (c.last_name?.[0] || ''))}</span>`
                     }
                   </span>
-                  ${c.first_name} ${c.last_name || ''}
+                  ${escapeHtml(c.first_name)} ${escapeHtml(c.last_name || '')}
                 </a>
               `).join('')}
+              ${p.contacts.length > VISIBLE_TAGS + 1 ? `
+                <button type="button" class="contact-chip post-contacts-more">${t('posts.showMoreTags', { count: p.contacts.length - VISIBLE_TAGS })}</button>
+              ` : ''}
             </div>
           ` : ''}
           ${(() => {
@@ -277,6 +293,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
                 </span>
               `).join('')}
               <button type="button" class="edit-action btn-add-tag-edit" title="${t('posts.tagContact')}"><i class="bi bi-person-plus"></i></button>
+              <button type="button" class="edit-action btn-add-group-tag-edit" title="${t('posts.tagGroup')}"><i class="bi bi-people"></i></button>
               <label class="edit-action" title="${t('posts.addMedia')}" style="cursor:pointer">
                 <i class="bi bi-image"></i>
                 <input type="file" class="edit-media-input" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
@@ -325,21 +342,18 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           e.preventDefault(); e.stopPropagation();
           try {
             const contact = await contactSearchDialog({ title: t('posts.tagContact') });
-            if (!contact) return;
-            const tagsList = btn.closest('.edit-tags-list');
-            const existingUuids = [...tagsList.querySelectorAll('.edit-tag')].map(el => el.dataset.uuid);
-            if (existingUuids.includes(contact.uuid)) return;
-            const tag = document.createElement('span');
-            tag.className = 'edit-tag';
-            tag.dataset.uuid = contact.uuid;
-            const initials = (contact.first_name[0] || '') + (contact.last_name?.[0] || '');
-            const avatarHtml = contact.avatar
-              ? `<img src="${authUrl(contact.avatar)}" alt="">`
-              : `<span>${initials}</span>`;
-            tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
-            tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
-            tagsList.insertBefore(tag, btn);
+            if (contact) appendEditTag(btn.closest('.edit-tags-list'), contact);
           } catch {}
+        });
+      });
+      // Add all members of a group or label
+      postEl.querySelectorAll('.btn-add-group-tag-edit').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const tagsList = btn.closest('.edit-tags-list');
+          const existing = [...tagsList.querySelectorAll('.edit-tag')].map(el => el.dataset.uuid);
+          const result = await tagGroupDialog({ excludeUuids: existing });
+          result?.contacts.forEach(c => appendEditTag(tagsList, c));
         });
       });
       // Remove media
@@ -455,6 +469,14 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       });
     }
 
+    // Expand collapsed tag list
+    el.querySelectorAll('.post-contacts-more').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        btn.parentElement.querySelectorAll('.post-contact-extra').forEach((c) => c.classList.remove('d-none'));
+        btn.remove();
+      });
+    });
+
     // Edit handlers — build form on demand
     el.querySelectorAll('.btn-edit-post').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -481,23 +503,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
           textarea._mention = createMentionInput({
             el: textarea,
             value: textarea.dataset.initialBody || '',
-            onTag: (contact) => {
-              const tagsList = postEl.querySelector('.edit-tags-list');
-              const existingUuids = [...tagsList.querySelectorAll('.edit-tag')].map((el) => el.dataset.uuid);
-              if (existingUuids.includes(contact.uuid)) return;
-
-              const tag = document.createElement('span');
-              tag.className = 'edit-tag';
-              tag.dataset.uuid = contact.uuid;
-              const initials = (contact.first_name[0] || '') + (contact.last_name?.[0] || '');
-              const avatarHtml = contact.avatar
-                ? `<img src="${authUrl(contact.avatar)}" alt="">`
-                : `<span>${initials}</span>`;
-              tag.innerHTML = `<span class="contact-chip-avatar">${avatarHtml}</span>${escapeHtml(contact.first_name)} ${escapeHtml(contact.last_name || '')} <button type="button" class="btn-remove-tag"><i class="bi bi-x"></i></button>`;
-              tag.querySelector('.btn-remove-tag').addEventListener('click', () => tag.remove());
-              const addBtn = tagsList.querySelector('.btn-add-tag-edit');
-              tagsList.insertBefore(tag, addBtn);
-            },
+            onTag: (contact) => appendEditTag(postEl.querySelector('.edit-tags-list'), contact),
           });
         }
 
@@ -576,22 +582,27 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
         const newVis = btn.dataset.vis;
-        await api.put(`/posts/${btn.dataset.uuid}`, { visibility: newVis });
+        const circleUuid = btn.dataset.circleUuid || null;
+        let updated;
+        try {
+          ({ post: updated } = await api.put(`/posts/${btn.dataset.uuid}`, newVis === 'circle'
+            ? { visibility: newVis, circle_uuid: circleUuid }
+            : { visibility: newVis }));
+        } catch { return; }
         // Update in-place
         const post = postsMap.get(btn.dataset.uuid);
-        if (post) post.visibility = newVis;
+        if (post) { post.visibility = updated.visibility; post.circle = updated.circle; }
         const postEl = el.querySelector(`[data-post-uuid="${btn.dataset.uuid}"]`);
         if (postEl) {
           // Update visibility icon
           postEl.querySelectorAll('.post-visibility-icon').forEach(i => i.remove());
-          const actions = postEl.querySelector('.post-header-actions');
-          if (newVis === 'private') actions.insertAdjacentHTML('afterbegin', `<i class="bi bi-lock-fill text-muted post-visibility-icon" title="${t('visibility.private')}"></i>`);
-          if (newVis === 'family') actions.insertAdjacentHTML('afterbegin', `<i class="bi bi-people-fill text-muted post-visibility-icon" title="${t('visibility.family')}"></i>`);
+          postEl.querySelector('.post-header-actions').insertAdjacentHTML('afterbegin', visibilityIconHtml(updated));
           // Update check marks in menu
           postEl.querySelectorAll('.btn-set-visibility').forEach(b => {
-            const check = b.querySelector('.bi-check');
-            if (check) check.remove();
-            if (b.dataset.vis === newVis) b.insertAdjacentHTML('beforeend', ' <i class="bi bi-check"></i>');
+            b.querySelector('.bi-check')?.remove();
+            if (b.dataset.vis === newVis && (b.dataset.circleUuid || null) === circleUuid) {
+              b.insertAdjacentHTML('beforeend', ' <i class="bi bi-check"></i>');
+            }
           });
         }
       });

@@ -11,8 +11,20 @@ import { filterSensitivePosts, filterSensitiveContacts, parseSensitiveFlag, stri
 import { tryCreateNotification } from '../utils/notification-prefs.js';
 import { sendDigestsForTenant } from '../services/notification-email.js';
 import { sendPortalDigestsForTenant } from '../services/portal-notification-email.js';
+import { filterVisiblePosts, loadVisiblePost, resolvePostVisibility, postAudienceUserIds } from '../utils/visibility.js';
 
 const router = Router();
+
+// { id → { uuid, name } } for the circles referenced by circle-visibility posts.
+async function circleInfoMap(posts) {
+  const ids = [...new Set(posts.filter(p => p.visibility === 'circle' && p.circle_id).map(p => p.circle_id))];
+  const map = new Map();
+  if (ids.length) {
+    const rows = await db('visibility_circles').whereIn('id', ids).select('id', 'uuid', 'name');
+    for (const r of rows) map.set(r.id, { uuid: r.uuid, name: r.name });
+  }
+  return map;
+}
 
 // Enriches a list of post rows with tagged contacts, media, authors, reactions,
 // comments counts, link previews and the subject contact/company. Shared by
@@ -149,6 +161,8 @@ async function assemblePosts(req, posts) {
     }
   }
 
+  const circleMap = await circleInfoMap(posts);
+
   const companyIds = [...new Set(posts.map(p => p.company_id).filter(Boolean))];
   const companyMap = new Map();
   if (companyIds.length) {
@@ -165,6 +179,7 @@ async function assemblePosts(req, posts) {
       body: p.body,
       post_date: p.post_date,
       visibility: p.visibility,
+      circle: p.visibility === 'circle' ? circleMap.get(p.circle_id) || null : null,
       is_sensitive: !!p.is_sensitive,
       created_at: p.created_at,
       about: profileContact ? {
@@ -206,10 +221,7 @@ router.get('/', async (req, res, next) => {
     let query = db('posts')
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
-      .where(function () {
-        this.whereIn('posts.visibility', ['shared', 'family'])
-          .orWhere('posts.created_by', req.user.id);
-      })
+      .modify(filterVisiblePosts(req))
       .modify(filterSensitivePosts(req));
 
     // Filter by company/group
@@ -239,7 +251,7 @@ router.get('/', async (req, res, next) => {
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
         'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
-        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by', 'posts.author_contact_id'
+        'posts.visibility', 'posts.circle_id', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by', 'posts.author_contact_id'
       )
       .groupBy('posts.id')
       .orderBy('posts.post_date', 'desc')
@@ -341,10 +353,7 @@ router.get('/memories', async (req, res, next) => {
     const posts = await db('posts')
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
-      .where(function () {
-        this.whereIn('posts.visibility', ['shared', 'family'])
-          .orWhere('posts.created_by', req.user.id);
-      })
+      .modify(filterVisiblePosts(req))
       .modify(filterSensitivePosts(req))
       .whereRaw('MONTH(posts.post_date) = ?', [month])
       .whereRaw('DAY(posts.post_date) = ?', [day])
@@ -352,7 +361,7 @@ router.get('/memories', async (req, res, next) => {
       .select(
         'posts.id', 'posts.uuid', 'posts.body', 'posts.post_date',
         'posts.contact_id', 'posts.company_id', 'posts.created_at', 'posts.updated_at',
-        'posts.visibility', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by', 'posts.author_contact_id'
+        'posts.visibility', 'posts.circle_id', 'posts.is_sensitive', 'posts.portal_guest_id', 'posts.created_by', 'posts.author_contact_id'
       )
       .orderBy('posts.post_date', 'desc');
 
@@ -384,6 +393,7 @@ router.get('/geo', async (req, res, next) => {
       .whereNotNull('post_media.latitude')
       .whereNotNull('post_media.longitude')
       .where('post_media.file_type', 'like', 'image/%')
+      .modify(filterVisiblePosts(req))
       .modify(filterSensitivePosts(req))
       .select(
         'post_media.thumbnail_path', 'post_media.file_path',
@@ -426,6 +436,7 @@ router.get('/trash', async (req, res, next) => {
     const posts = await db('posts')
       .where({ tenant_id: req.tenantId })
       .whereNotNull('deleted_at')
+      .modify(filterVisiblePosts(req))
       .select('uuid', 'body', 'post_date', 'deleted_at',
         db.raw('(SELECT COUNT(*) FROM post_media WHERE post_media.post_id = posts.id) as media_count'))
       .orderBy('deleted_at', 'desc');
@@ -439,6 +450,7 @@ router.post('/restore/:uuid', async (req, res, next) => {
     const post = await db('posts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNotNull('deleted_at')
+      .modify(filterVisiblePosts(req))
       .first();
     if (!post) throw new AppError('Post not found', 404);
     await db('posts').where({ id: post.id }).update({ deleted_at: null });
@@ -452,6 +464,7 @@ router.delete('/permanent/:uuid', async (req, res, next) => {
     const post = await db('posts')
       .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
       .whereNotNull('deleted_at')
+      .modify(filterVisiblePosts(req))
       .first();
     if (!post) throw new AppError('Post not found', 404);
 
@@ -486,9 +499,7 @@ router.get('/gallery', async (req, res, next) => {
     let query = db('posts')
       .where('posts.tenant_id', req.tenantId)
       .whereNull('posts.deleted_at')
-      .where(function () {
-        this.where('posts.visibility', 'shared').orWhere('posts.created_by', req.user.id);
-      })
+      .modify(filterVisiblePosts(req))
       .modify(filterSensitivePosts(req));
 
     if (contact) {
@@ -782,7 +793,8 @@ router.post('/', async (req, res, next) => {
     if (!req.body.body?.trim() && !req.body.has_media) req.body.body = '';
 
     const uuid = uuidv4();
-    const { body, post_date, contact_uuids, about_contact_uuid, company_uuid, visibility, is_sensitive } = req.body;
+    const { body, post_date, contact_uuids, about_contact_uuid, company_uuid, visibility, circle_uuid, is_sensitive } = req.body;
+    const audience = await resolvePostVisibility(req, visibility, circle_uuid);
 
     // Resolve "about" contact (profile post)
     let aboutContactId = null;
@@ -815,7 +827,8 @@ router.post('/', async (req, res, next) => {
         post_date: post_date || new Date(),
         contact_id: aboutContactId,
         company_id: companyId,
-        visibility: ['shared', 'family', 'private'].includes(visibility) ? visibility : 'shared',
+        visibility: audience.visibility,
+        circle_id: audience.circle_id,
         is_sensitive: parseSensitiveFlag(is_sensitive),
       });
 
@@ -887,17 +900,12 @@ async function notifyFamilyPost(req, post, created) {
   // newlines to stay single-line.
   const preview = (created.body || '').replace(/\s+/g, ' ').trim().slice(0, 120);
 
-  const users = await db('users')
-    .join('tenant_members', function () {
-      this.on('users.id', 'tenant_members.user_id')
-        .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.tenantId]));
-    })
-    .where('users.is_active', true)
-    .whereNot('users.id', authorUserId)
-    .select('users.id');
+  // Only users who can see the post (circle posts: circle members only)
+  const row = await db('posts').where({ id: post.id }).first();
+  const audienceIds = (await postAudienceUserIds(row, req.tenantId)).filter(id => id !== authorUserId);
 
-  for (const u of users) {
-    await tryCreateNotification(u.id, req.tenantId, 'family_post', {
+  for (const userId of audienceIds) {
+    await tryCreateNotification(userId, req.tenantId, 'family_post', {
       title: authorName,
       body: `${post.uuid}|${thumb}|${preview}`,
       link: created.about?.uuid ? `/contacts/${created.about.uuid}?post=${post.uuid}` : `/?post=${post.uuid}`,
@@ -914,17 +922,10 @@ async function notifyFamilyPost(req, post, created) {
 // PUT /api/posts/:uuid — update post
 router.put('/:uuid', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
-      .first();
-
-    if (!post) {
-      throw new AppError('Post not found', 404);
-    }
+    const post = await loadVisiblePost(req, req.params.uuid);
+    const audience = req.body.visibility !== undefined
+      ? await resolvePostVisibility(req, req.body.visibility, req.body.circle_uuid)
+      : null;
 
     await db.transaction(async (trx) => {
       const updates = {};
@@ -934,7 +935,7 @@ router.put('/:uuid', async (req, res, next) => {
         if (isNaN(d.getTime())) throw new AppError('Invalid post_date', 400);
         updates.post_date = d;
       }
-      if (req.body.visibility !== undefined) updates.visibility = ['shared', 'family', 'private'].includes(req.body.visibility) ? req.body.visibility : 'shared';
+      if (audience) Object.assign(updates, audience);
       if (req.body.is_sensitive !== undefined) updates.is_sensitive = parseSensitiveFlag(req.body.is_sensitive);
 
       // Change "about" contact (profile post) — clears company_id (mutually exclusive)
@@ -1010,6 +1011,10 @@ router.put('/:uuid', async (req, res, next) => {
 
     const updated = await getPostWithDetails(post.id, req.tenantId);
     res.json({ post: updated });
+
+    // Narrowed audience → drop post notifications (with body previews) for
+    // users who can no longer see the post.
+    if (audience) pruneStaleNotifications(post.id, req.tenantId).catch(() => {});
   } catch (err) {
     next(err);
   }
@@ -1018,17 +1023,7 @@ router.put('/:uuid', async (req, res, next) => {
 // DELETE /api/posts/:uuid — soft delete
 router.delete('/:uuid', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
-      .first();
-
-    if (!post) {
-      throw new AppError('Post not found', 404);
-    }
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     await db('posts').where({ id: post.id }).update({ deleted_at: db.fn.now() });
     res.json({ message: 'Post deleted' });
@@ -1036,6 +1031,20 @@ router.delete('/:uuid', async (req, res, next) => {
     next(err);
   }
 });
+
+// Delete family_post / family_comment notifications for a post from users
+// outside its current audience. Notification bodies start with the post UUID.
+async function pruneStaleNotifications(postId, tenantId) {
+  const post = await db('posts').where({ id: postId }).first();
+  const postUuid = post.uuid;
+  const audienceIds = await postAudienceUserIds(post, tenantId);
+  await db('notifications')
+    .where({ tenant_id: tenantId })
+    .whereIn('type', ['family_post', 'family_comment'])
+    .where('body', 'like', `${postUuid}|%`)
+    .modify((q) => { if (audienceIds.length) q.whereNotIn('user_id', audienceIds); })
+    .del();
+}
 
 // Helper: fetch a single post with contacts and media
 async function getPostWithDetails(postId, tenantId) {
@@ -1081,11 +1090,14 @@ async function getPostWithDetails(postId, tenantId) {
     }
   }
 
+  const circle = (await circleInfoMap([post])).get(post.circle_id) || null;
+
   return {
     uuid: post.uuid,
     body: post.body,
     post_date: post.post_date,
     visibility: post.visibility,
+    circle: post.visibility === 'circle' ? circle : null,
     is_sensitive: !!post.is_sensitive,
     created_at: post.created_at,
     about,
@@ -1101,12 +1113,7 @@ async function getPostWithDetails(postId, tenantId) {
 // GET /api/posts/:uuid/comments
 router.get('/:uuid/comments', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .modify(filterSensitivePosts(req))
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid, { sensitive: true });
 
     const comments = await db('post_comments')
       .leftJoin('users', 'post_comments.user_id', 'users.id')
@@ -1173,14 +1180,7 @@ router.post('/:uuid/comments', async (req, res, next) => {
     // only if they can see it. Without this, anyone in the tenant who gets
     // hold of a private post's UUID (from logs, export, DB snapshot) could
     // attach comments even though the post is never shown in their feed.
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     if (!req.body.body?.trim()) throw new AppError('Comment body is required', 400);
 
@@ -1255,18 +1255,11 @@ async function notifyFamilyComment(req, post, comment, { commentBody, authorIsGu
   if (!authorName) authorName = 'Someone';
   const preview = (commentBody || '').slice(0, 80);
 
-  // Everyone who should get a notification: all active tenant users except the commenter.
-  const users = await db('users')
-    .join('tenant_members', function () {
-      this.on('users.id', 'tenant_members.user_id')
-        .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.tenantId]));
-    })
-    .where('users.is_active', true)
-    .modify((q) => { if (authorUserId) q.whereNot('users.id', authorUserId); })
-    .select('users.id');
+  // Everyone who can see the post, except the commenter.
+  const audienceIds = (await postAudienceUserIds(post, req.tenantId)).filter(id => id !== authorUserId);
 
-  for (const u of users) {
-    await tryCreateNotification(u.id, req.tenantId, 'family_comment', {
+  for (const userId of audienceIds) {
+    await tryCreateNotification(userId, req.tenantId, 'family_comment', {
       title: authorName,
       body: `${post.uuid}|${preview}`,
       link: `/?post=${post.uuid}`,
@@ -1288,11 +1281,7 @@ async function notifyFamilyComment(req, post, comment, { commentBody, authorIsGu
 // DELETE /api/posts/:uuid/comments/:id
 router.delete('/:uuid/comments/:commentId', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     const deleted = await db('post_comments')
       .where({ id: req.params.commentId, post_id: post.id, user_id: req.user.id })
@@ -1310,14 +1299,7 @@ router.delete('/:uuid/comments/:commentId', async (req, res, next) => {
 // GET /api/posts/:uuid/reactions — full reaction people list (on demand for popup)
 router.get('/:uuid/reactions', async (req, res, next) => {
   try {
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid, { sensitive: true });
 
     const reactions = await db('post_reactions')
       .where({ 'post_reactions.post_id': post.id })
@@ -1362,14 +1344,7 @@ router.get('/:uuid/reactions', async (req, res, next) => {
 router.post('/:uuid/reactions', async (req, res, next) => {
   try {
     // Mirror GET-side visibility filter — same reasoning as /comments.
-    const post = await db('posts')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .whereNull('deleted_at')
-      .where(function () {
-        this.whereIn('visibility', ['shared', 'family']).orWhere('created_by', req.user.id);
-      })
-      .first();
-    if (!post) throw new AppError('Post not found', 404);
+    const post = await loadVisiblePost(req, req.params.uuid);
 
     const emoji = req.body.emoji || '❤️';
     const contactId = await getLinkedContactId(req.user.id, req.tenantId);

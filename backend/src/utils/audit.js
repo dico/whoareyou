@@ -24,6 +24,7 @@ import { getClientIp } from './ip.js';
  *   export.start           — full/data export started
  *   twofa.enable / twofa.disable — 2FA state change
  *   passkey.register / passkey.remove — passkey state change
+ *   circle.create / circle.update / circle.delete — visibility circle changes
  *
  * Pre-auth events (blocked IPs, failed logins) may have null tenant_id and
  * null user_id — migration 081 made both nullable for this reason.
