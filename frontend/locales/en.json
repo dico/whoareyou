@@ -149,7 +149,7 @@
     "family": "Family",
     "private": "Only me",
     "sharedHint": "Visible to family and portal guests",
-    "familyHint": "Visible to family only, not portal guests",
+    "familyHint": "Visible to family only",
     "privateHint": "Only visible to you",
     "circle": "Circle",
     "circles": "Circles",

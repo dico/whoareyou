@@ -3,8 +3,9 @@ import { t } from '../utils/i18n.js';
 
 /**
  * Post visibility picker — a compact dropdown replacing the old three-way
- * pill. Options: Alle (shared), Familie (family), one entry per visibility
- * circle the user belongs to (e.g. "Foreldre"), and Bare meg (private).
+ * pill. Options: Alle (shared), Familie (family), Bare meg (private), then
+ * one entry per visibility circle the user belongs to (e.g. "Foreldre")
+ * under a "Kretser" header.
  *
  * Usage:
  *   container.innerHTML = visibilityPickerHtml('post-visibility');
@@ -16,11 +17,12 @@ import { t } from '../utils/i18n.js';
  * visibilityMenuItemsHtml() so both stay in sync.
  */
 
+// Built-in levels first, then the user's circles under their own header
 const BASE_OPTIONS = [
   { vis: 'shared', icon: 'bi-globe2', label: () => t('visibility.shared'), hint: () => t('visibility.sharedHint') },
   { vis: 'family', icon: 'bi-people-fill', label: () => t('visibility.family'), hint: () => t('visibility.familyHint') },
+  { vis: 'private', icon: 'bi-lock-fill', label: () => t('visibility.private'), hint: () => t('visibility.privateHint') },
 ];
-const PRIVATE_OPTION = { vis: 'private', icon: 'bi-lock-fill', label: () => t('visibility.private'), hint: () => t('visibility.privateHint') };
 export const CIRCLE_ICON = 'bi-person-heart';
 
 let circlesPromise = null;
@@ -55,7 +57,6 @@ function allOptions(circles) {
       vis: 'circle', circleUuid: c.uuid, icon: CIRCLE_ICON,
       label: () => c.name, hint: () => t('visibility.circleHint', { name: c.name }),
     })),
-    PRIVATE_OPTION,
   ];
 }
 

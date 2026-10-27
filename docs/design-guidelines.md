@@ -95,7 +95,7 @@ For inline contact references (tags, selections), use `.contact-chip` with `.con
 ```
 
 ### 8. Visibility selection
-- **Posts:** use the visibility picker from [components/visibility-picker.js](../frontend/js/components/visibility-picker.js) (dropdown with Alle / Familie / circles / Bare meg). It includes the user's visibility circles, so never hand-roll a post visibility control — new circles must show up everywhere automatically.
+- **Posts:** use the visibility picker from [components/visibility-picker.js](../frontend/js/components/visibility-picker.js) (dropdown with Alle / Familie / Bare meg, then the user's circles under a «Kretser» header). It includes the user's visibility circles, so never hand-roll a post visibility control — new circles must show up everywhere automatically.
 - **Contacts and other entities** (no circles): use the `.visibility-pill` toggle. Never use a plain button.
 
 ### 9. Round avatars everywhere

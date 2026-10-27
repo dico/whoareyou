@@ -149,7 +149,7 @@
     "family": "Familie",
     "private": "Bare meg",
     "sharedHint": "Synlig for familie og portalgjester",
-    "familyHint": "Kun synlig for familien, ikke portalgjester",
+    "familyHint": "Bare synlig for familien",
     "privateHint": "Bare synlig for deg",
     "circle": "Krets",
     "circles": "Kretser",
