@@ -239,17 +239,6 @@ a.gallery-lb-comment-author:hover {
   opacity: 0.85;
 }
 
-.post-compose-inline textarea {
-  border: none;
-  background: transparent;
-  resize: none;
-}
-
-.post-compose-inline textarea:focus {
-  box-shadow: none;
-  background: transparent;
-}
-
 @media (max-width: 768px) {
   .profile-layout {
     grid-template-columns: 1fr;

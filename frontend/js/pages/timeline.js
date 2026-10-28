@@ -1,14 +1,10 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { renderPostList } from '../components/post-list.js';
-import { createMentionInput, extractMentionUuids } from '../components/mention-input.js';
-import { attachContactSearch } from '../components/contact-search.js';
-import { tagGroupDialog } from '../components/tag-group-dialog.js';
-import { visibilityPickerHtml, attachVisibilityPicker } from '../components/visibility-picker.js';
+import { openPostComposer } from '../components/post-composer.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { enableDropZone } from '../utils/drop-zone.js';
-import { authUrl } from '../utils/auth-url.js';
 import { addContactModalHtml, initAddContactModal, showAddContactModal } from '../components/add-contact-modal.js';
 
 export async function renderTimeline(contactUuid = null) {
@@ -33,41 +29,6 @@ export async function renderTimeline(contactUuid = null) {
       ${isDashboard ? '<div class="dashboard-layout">' : ''}
 
       <div class="dashboard-main">
-        <div id="new-post-area" class="d-none">
-          <form id="new-post-form" class="glass-card post-compose">
-            <div id="post-body" class="mention-input form-control"></div>
-            <div id="post-media-preview" class="post-media-preview d-none"></div>
-            <div id="post-tags" class="post-tags"></div>
-            <div class="post-compose-bar">
-              ${visibilityPickerHtml('post-visibility-btn')}
-              <button type="button" class="sensitive-toggle" id="post-sensitive-btn"
-                data-sensitive="0"
-                title="${t('sensitive.markPostHint')}">
-                <i class="bi bi-eye-slash"></i>
-                <span>${t('sensitive.markShort')}</span>
-              </button>
-              <div class="post-compose-actions">
-                <label class="post-media-btn" id="btn-add-media" title="${t('posts.addMedia')}">
-                  <i class="bi bi-image"></i>
-                  <input type="file" id="post-media-input" multiple accept="image/*,video/*" hidden>
-                </label>
-                <label class="post-media-btn" title="${t('posts.addDocument')}">
-                  <i class="bi bi-paperclip"></i>
-                  <input type="file" id="post-doc-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
-                </label>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-tag-contact">
-                  <i class="bi bi-person-plus"></i> ${t('posts.tag')}
-                </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-tag-group" title="${t('posts.tagGroup')}">
-                  <i class="bi bi-people"></i> ${t('posts.tagGroupShort')}
-                </button>
-                <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
-              </div>
-            </div>
-            <div id="post-error" class="alert alert-danger d-none mt-2"></div>
-          </form>
-        </div>
-
         <div id="timeline" class="timeline">
           <div class="loading">${t('app.loading')}</div>
         </div>
@@ -99,31 +60,15 @@ export async function renderTimeline(contactUuid = null) {
       ${isDashboard ? '</div>' : ''}
     </div>
 
-    <!-- Tag contact modal -->
-    <div class="modal fade" id="tag-modal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content glass-card">
-          <div class="modal-header">
-            <h5 class="modal-title">${t('posts.tagContact')}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <input type="text" class="form-control" id="tag-search" placeholder="${t('common.search')}" autofocus>
-          </div>
-        </div>
-      </div>
-    </div>
-
     ${isDashboard ? addContactModalHtml() : ''}
   `;
 
-  let taggedContacts = [];
-
   // Pre-tag contact if viewing contact timeline
+  const preTags = [];
   if (contactUuid) {
     try {
       const { contact } = await api.get(`/contacts/${contactUuid}`);
-      taggedContacts.push({ uuid: contact.uuid, first_name: contact.first_name, last_name: contact.last_name });
+      preTags.push({ uuid: contact.uuid, first_name: contact.first_name, last_name: contact.last_name, avatar: contact.avatar || null });
     } catch {}
   }
 
@@ -146,224 +91,10 @@ export async function renderTimeline(contactUuid = null) {
     document.getElementById('btn-add-contact-timeline').addEventListener('click', showAddContactModal);
   }
 
-  // Toggle compose area
-  document.getElementById('btn-new-post').addEventListener('click', () => {
-    const area = document.getElementById('new-post-area');
-    area.classList.toggle('d-none');
-    if (!area.classList.contains('d-none')) {
-      composeBody.focus();
-      renderTags();
-    }
-  });
-
-  // Visibility picker on compose
-  const visibilityPicker = attachVisibilityPicker(document.getElementById('post-visibility-btn'));
-
-  // Sensitive toggle on compose
-  document.getElementById('post-sensitive-btn').addEventListener('click', (e) => {
-    const btn = e.currentTarget;
-    const next = btn.dataset.sensitive === '1' ? '0' : '1';
-    btn.dataset.sensitive = next;
-    btn.classList.toggle('is-on', next === '1');
-  });
-
-  // Media file handling (images + documents)
-  let pendingMedia = [];
-
-  function acceptFiles(files, predicate) {
-    const skipped = [];
-    for (const file of files) {
-      if (predicate && !predicate(file)) continue;
-      if (!file.size) { skipped.push(file.name); continue; }
-      pendingMedia.push(file);
-    }
-    if (skipped.length) {
-      const errorEl = document.getElementById('post-error');
-      errorEl.textContent = skipped.map((n) => t('posts.emptyFileSkipped', { name: n })).join(' ');
-      errorEl.classList.remove('d-none');
-    }
-  }
-
-  document.getElementById('post-media-input').addEventListener('change', (e) => {
-    acceptFiles(e.target.files, (f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
-    renderMediaPreview();
-    e.target.value = '';
-  });
-
-  document.getElementById('post-doc-input').addEventListener('change', (e) => {
-    acceptFiles(e.target.files);
-    renderMediaPreview();
-    e.target.value = '';
-  });
-
-  const docIcons = { 'application/pdf': 'bi-file-earmark-pdf', 'text/plain': 'bi-file-earmark-text', 'text/csv': 'bi-file-earmark-spreadsheet' };
-  function getDocIcon(type) {
-    if (type.includes('word') || type.includes('document')) return 'bi-file-earmark-word';
-    if (type.includes('excel') || type.includes('sheet') || type.includes('csv')) return 'bi-file-earmark-spreadsheet';
-    return docIcons[type] || 'bi-file-earmark';
-  }
-
-  function renderMediaPreview() {
-    const el = document.getElementById('post-media-preview');
-    if (!pendingMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
-    el.classList.remove('d-none');
-    el.innerHTML = pendingMedia.map((f, i) => {
-      if (f.type.startsWith('image/')) {
-        return `<div class="media-preview-item">
-          <img src="${URL.createObjectURL(f)}" alt="">
-          <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-        </div>`;
-      }
-      if (f.type.startsWith('video/')) {
-        return `<div class="media-preview-item">
-          <video src="${URL.createObjectURL(f)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video>
-          <div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div>
-          <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-        </div>`;
-      }
-      return `<div class="media-preview-item media-preview-doc">
-        <i class="${getDocIcon(f.type)}"></i>
-        <span class="media-preview-doc-name">${f.name}</span>
-        <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-      </div>`;
-    }).join('');
-    el.querySelectorAll('.media-preview-remove').forEach(btn => {
-      btn.addEventListener('click', () => {
-        pendingMedia.splice(parseInt(btn.dataset.index), 1);
-        renderMediaPreview();
-      });
-    });
-  }
-
-  // Drop zone on compose form (drag images from browser/filesystem, or paste)
-  const composeForm = document.getElementById('new-post-form');
-  if (composeForm) {
-    enableDropZone(composeForm, (files) => {
-      acceptFiles(files);
-      renderMediaPreview();
-      document.getElementById('new-post-area').classList.remove('d-none');
-    }, { acceptDocuments: true });
-  }
-
-  const composeBody = createMentionInput({
-    el: document.getElementById('post-body'),
-    placeholder: t('posts.placeholder'),
-    onTag: (contact) => {
-      if (!taggedContacts.find((c) => c.uuid === contact.uuid)) {
-        taggedContacts.push(contact);
-        renderTags();
-      }
-    },
-  });
-
-  // Tag contact
-  const tagModal = document.getElementById('tag-modal');
-  const tagSearchInput = document.getElementById('tag-search');
-
-  document.getElementById('btn-tag-contact').addEventListener('click', () => {
-    new bootstrap.Modal(tagModal).show();
-  });
-
-  tagModal.addEventListener('shown.bs.modal', () => { tagSearchInput.value = ''; tagSearchInput.focus(); });
-
-  attachContactSearch(tagSearchInput, {
-    limit: 8,
-    floating: false,
-    onSelect: (c) => {
-      if (!taggedContacts.find(t => t.uuid === c.uuid)) {
-        taggedContacts.push({ uuid: c.uuid, first_name: c.first_name, last_name: c.last_name, avatar: c.avatar || null });
-        renderTags();
-      }
-      bootstrap.Modal.getInstance(tagModal).hide();
-    },
-  });
-
-  document.getElementById('btn-tag-group').addEventListener('click', async () => {
-    const result = await tagGroupDialog({ excludeUuids: taggedContacts.map((c) => c.uuid) });
-    if (!result?.contacts.length) return;
-    taggedContacts.push(...result.contacts);
-    renderTags();
-  });
-
-  function renderTags() {
-    const el = document.getElementById('post-tags');
-    el.innerHTML = taggedContacts.map((c) => `
-      <span class="contact-chip" data-uuid="${c.uuid}">
-        <span class="contact-chip-avatar">
-          ${c.avatar
-            ? `<img src="${authUrl(c.avatar)}" alt="">`
-            : `<span>${(c.first_name?.[0] || '') + (c.last_name?.[0] || '')}</span>`
-          }
-        </span>
-        ${c.first_name} ${c.last_name || ''}
-        <button type="button" class="contact-chip-remove" data-uuid="${c.uuid}"><i class="bi bi-x"></i></button>
-      </span>
-    `).join('');
-
-    el.querySelectorAll('.contact-chip-remove').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        taggedContacts = taggedContacts.filter((c) => c.uuid !== btn.dataset.uuid);
-        renderTags();
-      });
-    });
-  }
-
-  // Submit post
-  document.getElementById('new-post-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const submitBtn = e.target.querySelector('[type="submit"]');
-    const btnText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-    const errorEl = document.getElementById('post-error');
-    errorEl.classList.add('d-none');
-
-    const bodyText = composeBody.getValue();
-    let createdPostUuid = null;
-
-    try {
-      const bodyUuids = extractMentionUuids(bodyText);
-      const allUuids = [...new Set([...bodyUuids, ...taggedContacts.map((c) => c.uuid)])];
-      const { post } = await api.post('/posts', {
-        body: bodyText,
-        contact_uuids: allUuids,
-        ...visibilityPicker.value(),
-        is_sensitive: document.getElementById('post-sensitive-btn').dataset.sensitive === '1',
-      });
-      createdPostUuid = post?.uuid || null;
-
-      if (pendingMedia.length && createdPostUuid) {
-        try {
-          const formData = new FormData();
-          for (const file of pendingMedia) formData.append('media', file);
-          const uploadResult = await api.upload(`/posts/${createdPostUuid}/media`, formData);
-          if (uploadResult?.suggestedDate) {
-            await api.put(`/posts/${createdPostUuid}`, { post_date: uploadResult.suggestedDate });
-          }
-        } catch (uploadErr) {
-          // Roll back the post if it would otherwise be left empty
-          if (!bodyText.trim()) {
-            await api.delete(`/posts/${createdPostUuid}`).catch(() => {});
-            createdPostUuid = null;
-          }
-          throw new Error(t('posts.mediaUploadFailed', { message: uploadErr.message }));
-        }
-      }
-
-      composeBody.clear();
-      pendingMedia = [];
-      renderMediaPreview();
-      if (!contactUuid) taggedContacts = [];
-      renderTags();
-      document.getElementById('new-post-area').classList.add('d-none');
-      await reloadPosts();
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.classList.remove('d-none');
-    }
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = btnText;
-  });
+  // New post → composer modal. Files dropped on the feed open it pre-filled.
+  const openComposer = (extra = {}) => openPostComposer({ tags: preTags, onPosted: reloadPosts, ...extra });
+  document.getElementById('btn-new-post').addEventListener('click', () => openComposer());
+  enableDropZone(content.querySelector('.dashboard-main'), (files) => openComposer({ files }), { acceptDocuments: true, paste: false });
 }
 
 async function loadRecentlyViewed() {

@@ -113,15 +113,12 @@
     "moveToTimeline": "To main timeline",
     "makeShared": "Make shared",
     "makePrivate": "Make private",
-    "tag": "Tag",
     "tagContact": "Tag contact",
     "tagGroup": "Tag group or label",
-    "tagGroupShort": "Group",
     "tagGroupSearch": "Search for group or label...",
     "tagGroupLabel": "Label",
     "tagGroupMembers": "{count} people",
     "tagMembers": "Tag members ({count})",
-    "tagMembersHint": "Tag all current members of the group in the post",
     "showMoreTags": "+{count} more",
     "addMedia": "Add images",
     "addDocument": "Attach document",
@@ -141,7 +138,14 @@
     "send": "Send",
     "postedBy": "Posted by {name}",
     "emptyFileSkipped": "{name} is empty and was skipped. Try selecting the file again.",
-    "mediaUploadFailed": "Could not upload media: {message}"
+    "mediaUploadFailed": "Could not upload media: {message}",
+    "newPost": "New post",
+    "dateToday": "Today",
+    "dateHint": "When did this happen?",
+    "dateClear": "Use today's date",
+    "discardTitle": "Discard post?",
+    "discardConfirm": "The text and attachments you added will be lost.",
+    "discard": "Discard"
   },
   "visibility": {
     "title": "Visibility",
@@ -793,7 +797,8 @@
     "info": "Info",
     "back": "Back",
     "loading": "Loading...",
-    "noInfo": "No info added yet. Click edit to add details."
+    "noInfo": "No info added yet. Click edit to add details.",
+    "close": "Close"
   },
   "time": {
     "justNow": "just now",

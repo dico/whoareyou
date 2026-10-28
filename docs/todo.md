@@ -75,6 +75,10 @@ Immediate push via `web-push` library ([services/notification-push.js](../backen
 - Rich notifications (action buttons like "Open post" or "Dismiss") — web-push supports this but not in the MVP.
 - Badge API for unread count on the PWA icon (Chrome desktop/Android only).
 
+### Composer: date from photo EXIF before publishing
+**Status:** Not started — step 2 after the shared post composer.
+**Why:** The composer's date chip lets the user backdate a post, but the EXIF date of attached photos is still only applied after upload (`suggestedDate` from `POST /posts/:uuid/media`, skipped when the user picked a date). Read `DateTimeOriginal` from JPEGs in the browser when files are added (small parser, no library) and pre-fill the chip as «📷 12. mai 2019» so the user sees and can correct it before publishing. Same majority/median rule as `routes/uploads.js`.
+
 ### Standardize contact search component
 **Status:** In progress — 9/12 refactored
 **Remaining (complex — custom selection flows):**

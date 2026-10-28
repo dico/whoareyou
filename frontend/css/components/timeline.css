@@ -109,43 +109,193 @@
   }
 }
 
-/* Compose */
-.post-compose {
-  padding: var(--space-md);
-  margin-bottom: var(--space-lg);
+/* ── Post composer (components/post-composer.js) ──────────────
+ * Modal on desktop, fullscreen on mobile (modal-fullscreen-sm-down).
+ * Settings that change how the post is shown (visibility + date) sit as
+ * chips under the author; tools are icon-only so the toolbar fits on one
+ * line at 320px. */
+.composer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
 }
 
-.post-compose textarea,
-.post-compose-inline textarea,
-.post-compose .mention-input,
-.post-compose-inline .mention-input {
+.composer-author {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.composer-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.composer-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.composer-avatar span {
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.composer-author-info { min-width: 0; flex: 1; }
+.composer-author-name { font-weight: var(--font-weight-semibold); line-height: 1.3; }
+
+.composer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: 4px;
+}
+
+/* Date chip — same look as .visibility-picker-btn, tinted once a date is chosen */
+.composer-date {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.composer-date:hover { background: rgba(0, 0, 0, 0.04); }
+.composer-date.is-set {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  padding-right: 4px;
+}
+input.composer-date-input {
   border: none;
   background: transparent;
-  resize: none;
-  overflow: hidden;
-  padding: var(--space-sm);
-  font-size: var(--font-size-base);
-  min-height: auto;
+  color: inherit;
+  font-size: inherit;
+  padding: .25rem 0;
+  width: 5.6em;
+  cursor: pointer;
+  outline: none;
+}
+input.composer-date-input::placeholder { color: inherit; opacity: 1; }
+.composer-date-clear {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0 2px;
+  line-height: 1;
 }
 
-.post-compose textarea:focus,
-.post-compose .mention-input:focus,
-.post-compose-inline .mention-input:focus {
+.post-composer .composer-body {
+  border: none;
+  background: transparent;
+  padding: var(--space-xs) 0;
+  min-height: 120px;
+  font-size: var(--font-size-base);
+}
+.post-composer .composer-body:focus {
   box-shadow: none;
   background: transparent;
-  border: none;
   outline: none;
 }
 
-.post-compose-bar {
+.composer-suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-xs);
+  border: 1px dashed var(--color-primary);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  padding: .25rem 10px;
+}
+.composer-suggest:hover { background: rgba(0, 122, 255, 0.06); }
+
+/* Inline tag panel — replaces the tag modals (no modal-in-modal) */
+.composer-tag-panel {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.composer-tag-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-sm);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border);
-  margin-top: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
+.composer-tag-panel .contact-search-results,
+.composer-tag-panel .contact-search-dropdown {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.composer-toolbar { justify-content: space-between; }
+.composer-tools { display: flex; align-items: center; gap: 2px; }
+
+/* Round icon button — composer toolbar and trigger card */
+.composer-tool {
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.composer-tool:hover { color: var(--color-primary); background: rgba(0, 122, 255, 0.08); }
+.composer-tool.is-active { color: var(--color-primary); background: rgba(0, 122, 255, 0.12); }
+.composer-sensitive.is-on,
+.composer-sensitive.is-on:hover { color: #fff; background: #d97706; }
+
+@media (max-width: 575.98px) {
+  .post-composer .composer-body { min-height: 30vh; }
+}
+
+/* Trigger card ("What happened?") that opens the composer */
+.glass-card.composer-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+.composer-trigger-input {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: .5rem var(--space-md);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.composer-trigger-input:hover { background: rgba(0, 0, 0, 0.03); }
 
 .post-tags {
   display: flex;
@@ -257,6 +407,17 @@
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+/* Reserve room for the absolutely positioned actions so long names wrap
+ * instead of running under them. Circle posts carry a wider badge. */
+.post-view > .post-about-header,
+.post-view > .post-header {
+  padding-right: 56px;
+}
+.timeline-post:has(.post-circle-badge) .post-view > .post-about-header,
+.timeline-post:has(.post-circle-badge) .post-view > .post-header {
+  padding-right: calc(var(--post-circle-badge-max, 120px) + 48px);
 }
 
 /* Lift entire post above siblings when dropdown is open */
@@ -487,7 +648,8 @@
   flex-shrink: 0;
 }
 
-.media-preview-item img {
+.media-preview-item img,
+.media-preview-video {
   height: 64px;
   width: 64px;
   object-fit: cover;
@@ -870,8 +1032,9 @@ a.post-comment-author:hover {
 }
 
 /* Drop zone visual feedback */
-.post-compose.drop-active,
-.post-compose-inline.drop-active {
+.composer-trigger.drop-active,
+.post-composer.drop-active,
+.dashboard-main.drop-active {
   outline: 2px dashed var(--color-primary);
   outline-offset: -2px;
   background: rgba(0, 122, 255, 0.04);

@@ -6,11 +6,9 @@ import { attachContactSearch } from '../components/contact-search.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
 import { renderPostList } from '../components/post-list.js';
+import { openPostComposer, composerTriggerHtml, attachComposerTrigger } from '../components/post-composer.js';
 import { showPhotoViewer } from '../components/photo-viewer.js';
 import { loadGalleryInto } from './contact-detail.js';
-import { enableDropZone } from '../utils/drop-zone.js';
-import { fetchTagSourceMembers } from '../components/tag-group-dialog.js';
-import { visibilityPickerHtml, attachVisibilityPicker } from '../components/visibility-picker.js';
 
 const TYPE_ICONS = {
   company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people',
@@ -156,31 +154,7 @@ export async function renderCompanyDetail(uuid) {
             <div id="group-info-section" class="d-none">
               <div class="profile-layout">
                 <div class="profile-main">
-                  <div class="detail-card glass-card post-compose-inline">
-                    <form id="group-post-form">
-                      <textarea class="form-control" id="group-post-body" rows="2" placeholder="${t('posts.placeholder')}"></textarea>
-                      <div id="group-post-media-preview" class="post-media-preview d-none"></div>
-                      <div class="post-compose-bar">
-                        ${visibilityPickerHtml('group-post-visibility')}
-                        ${currentEmployees.length ? `
-                        <button type="button" class="sensitive-toggle toggle-primary" id="group-post-tag-members" title="${t('posts.tagMembersHint')}">
-                          <i class="bi bi-people"></i>
-                          <span>${t('posts.tagMembers', { count: currentEmployees.length })}</span>
-                        </button>` : ''}
-                        <div class="post-compose-actions">
-                          <label class="post-media-btn" title="${t('posts.addMedia')}">
-                            <i class="bi bi-image"></i>
-                            <input type="file" id="group-post-media-input" multiple accept="image/*,video/*" hidden>
-                          </label>
-                          <label class="post-media-btn" title="${t('posts.addDocument')}">
-                            <i class="bi bi-paperclip"></i>
-                            <input type="file" id="group-post-doc-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
-                          </label>
-                          <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
-                        </div>
-                      </div>
-                    </form>
-                  </div>
+                  ${composerTriggerHtml({ id: 'group-composer-trigger', extraClass: 'detail-card' })}
                   <div id="group-posts" class="timeline"></div>
                 </div>
                 <div class="profile-sidebar">
@@ -386,97 +360,12 @@ export async function renderCompanyDetail(uuid) {
     }
 
 
-    // Visibility picker
-    const groupPostVisibility = attachVisibilityPicker(document.getElementById('group-post-visibility'));
-
-    // "Tag members" toggle — tags all current members as regular contact tags
-    const tagMembersBtn = document.getElementById('group-post-tag-members');
-    tagMembersBtn?.addEventListener('click', () => tagMembersBtn.classList.toggle('is-on'));
-
-    // Group post media handling
-    let groupPostMedia = [];
-    document.getElementById('group-post-media-input')?.addEventListener('change', (e) => {
-      for (const file of e.target.files) {
-        if (file.type.startsWith('image/') || file.type.startsWith('video/')) groupPostMedia.push(file);
-      }
-      renderGroupMediaPreview();
-      e.target.value = '';
-    });
-
-    document.getElementById('group-post-doc-input')?.addEventListener('change', (e) => {
-      for (const file of e.target.files) groupPostMedia.push(file);
-      renderGroupMediaPreview();
-      e.target.value = '';
-    });
-
-    // Drop zone on compose area
-    const composeEl = document.getElementById('group-post-form')?.closest('.post-compose-inline');
-    if (composeEl) {
-      enableDropZone(composeEl, (files) => {
-        groupPostMedia.push(...files);
-        renderGroupMediaPreview();
-      }, { acceptDocuments: true });
-    }
-
-    function renderGroupMediaPreview() {
-      const el = document.getElementById('group-post-media-preview');
-      if (!el) return;
-      if (!groupPostMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
-      el.classList.remove('d-none');
-      el.innerHTML = groupPostMedia.map((f, i) => {
-        if (f.type.startsWith('image/')) {
-          return `<div class="media-preview-item"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button></div>`;
-        }
-        if (f.type.startsWith('video/')) {
-          return `<div class="media-preview-item"><video src="${URL.createObjectURL(f)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video><div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div><button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button></div>`;
-        }
-        return `<div class="media-preview-item media-preview-doc"><i class="bi bi-file-earmark"></i><span class="media-preview-doc-name">${f.name}</span><button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button></div>`;
-      }).join('');
-      el.querySelectorAll('.media-preview-remove').forEach(btn => {
-        btn.addEventListener('click', () => { groupPostMedia.splice(parseInt(btn.dataset.index), 1); renderGroupMediaPreview(); });
-      });
-    }
-
-    // Group post submit
-    document.getElementById('group-post-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const body = document.getElementById('group-post-body').value.trim();
-      if (!body && !groupPostMedia.length) return;
-
-      const submitBtn = e.target.querySelector('[type="submit"]');
-      const btnText = submitBtn.innerHTML;
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-      const tagMembers = tagMembersBtn?.classList.contains('is-on');
-      const memberUuids = tagMembers
-        ? (await fetchTagSourceMembers({ groupUuid: uuid })).map(c => c.uuid)
-        : [];
-      const { post } = await api.post('/posts', {
-        body: body || '',
-        company_uuid: uuid,
-        ...groupPostVisibility.value(),
-        has_media: groupPostMedia.length > 0,
-        contact_uuids: memberUuids.length ? memberUuids : undefined,
-      });
-
-      if (groupPostMedia.length && post?.uuid) {
-        const formData = new FormData();
-        for (const file of groupPostMedia) formData.append('media', file);
-        const uploadResult = await api.upload(`/posts/${post.uuid}/media`, formData);
-        if (uploadResult?.suggestedDate) {
-          await api.put(`/posts/${post.uuid}`, { post_date: uploadResult.suggestedDate });
-        }
-      }
-
-      document.getElementById('group-post-body').value = '';
-      tagMembersBtn?.classList.remove('is-on');
-      groupPostMedia = [];
-      renderGroupMediaPreview();
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = btnText;
-      loadGroupPosts();
-    });
+    // New post → composer modal (offers "tag all members" when the group has any)
+    attachComposerTrigger(document.getElementById('group-composer-trigger'), (extra) => openPostComposer({
+      company: { uuid, name: company.name, memberCount: currentEmployees.length },
+      onPosted: loadGroupPosts,
+      ...extra,
+    }));
 
     // Load timeline (lazy — loaded on tab switch)
     async function loadGroupPosts() {

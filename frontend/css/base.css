@@ -477,6 +477,16 @@ a:hover {
   border-radius: var(--radius-full);
   padding: 0 6px;
   line-height: 1.6;
+  max-width: var(--post-circle-badge-max, 120px);
+}
+.post-circle-badge-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 576px) {
+  :root { --post-circle-badge-max: 80px; }
 }
 
 /* Legacy visibility button (used in settings forms) */
@@ -553,12 +563,6 @@ a:hover {
 @media (max-width: 576px) {
   .sensitive-toggle span { display: none; }
   .sensitive-toggle { padding: .25rem 8px; }
-}
-
-.post-compose-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
 }
 
 /* ── List row ────────────────────────────────────────────────
@@ -882,26 +886,6 @@ a.list-row-info,
 
 .subtle-link:hover {
   color: var(--color-primary);
-}
-
-/* ── Reusable: icon-only media button (no border, subtle hover) ── */
-.post-media-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 8px;
-  border: none;
-  background: none;
-  color: var(--color-text-secondary);
-  font-size: 1.1rem;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-}
-
-.post-media-btn:hover {
-  color: var(--color-primary);
-  background: rgba(0, 122, 255, 0.08);
 }
 
 /* Settings admin card grid */

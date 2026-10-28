@@ -77,7 +77,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 | POST | `/restore/:uuid` | Restore soft-deleted post |
 | DELETE | `/permanent/:uuid` | Permanently delete post and files |
 | GET | `/gallery` | Photo gallery for a contact |
-| POST | `/` | Create post. `visibility` ∈ shared/family/circle/private; `circle_uuid` required for `circle` (must be a circle the user belongs to) |
+| POST | `/` | Create post. `visibility` ∈ shared/family/circle/private; `circle_uuid` required for `circle` (must be a circle the user belongs to). Optional `post_date` (backdated post, validated; defaults to now) |
 | PUT | `/:uuid` | Update post (supports `about_contact_uuid` and `company_uuid` for moving between walls — mutually exclusive, setting one clears the other) |
 | PUT | `/:uuid/author` | Admin: reassign post author. Accepts `{ contact_uuid }` (any contact), `{ user_id }`, or `{ guest_id }`. Sets `author_contact_id` directly — works for contacts without user/guest accounts. |
 | DELETE | `/:uuid` | Delete post |

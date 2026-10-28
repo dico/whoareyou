@@ -113,15 +113,12 @@
     "moveToTimeline": "Til hovedtidslinje",
     "makeShared": "Gjør delt",
     "makePrivate": "Gjør privat",
-    "tag": "Tagg",
     "tagContact": "Tagg kontakt",
     "tagGroup": "Tagg gruppe eller etikett",
-    "tagGroupShort": "Gruppe",
     "tagGroupSearch": "Søk etter gruppe eller etikett...",
     "tagGroupLabel": "Etikett",
     "tagGroupMembers": "{count} pers.",
     "tagMembers": "Tagg medlemmer ({count})",
-    "tagMembersHint": "Tagg alle nåværende medlemmer av gruppen i innlegget",
     "showMoreTags": "+{count} til",
     "addMedia": "Legg til bilder",
     "addDocument": "Legg ved dokument",
@@ -141,7 +138,14 @@
     "send": "Send",
     "postedBy": "Lagt ut av {name}",
     "emptyFileSkipped": "{name} er tom og ble hoppet over. Prøv å velge filen på nytt.",
-    "mediaUploadFailed": "Bildene kunne ikke lastes opp: {message}"
+    "mediaUploadFailed": "Bildene kunne ikke lastes opp: {message}",
+    "newPost": "Nytt innlegg",
+    "dateToday": "I dag",
+    "dateHint": "Når skjedde dette?",
+    "dateClear": "Bruk dagens dato",
+    "discardTitle": "Forkaste innlegget?",
+    "discardConfirm": "Teksten og vedleggene du har lagt til blir borte.",
+    "discard": "Forkast"
   },
   "visibility": {
     "title": "Synlighet",
@@ -793,7 +797,8 @@
     "info": "Info",
     "back": "Tilbake",
     "loading": "Laster...",
-    "noInfo": "Ingen info lagt til enn\u00e5. Klikk rediger for \u00e5 legge til detaljer."
+    "noInfo": "Ingen info lagt til enn\u00e5. Klikk rediger for \u00e5 legge til detaljer.",
+    "close": "Lukk"
   },
   "time": {
     "justNow": "akkurat nå",

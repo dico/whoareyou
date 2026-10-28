@@ -14,10 +14,11 @@ function isAllowed(file, acceptDocs) {
  * Make an element accept drag-and-drop files (images + optionally documents).
  * @param {HTMLElement} el - The drop target element
  * @param {function} onFiles - Callback with array of File objects
- * @param {{ acceptDocuments?: boolean }} opts
+ * @param {{ acceptDocuments?: boolean, paste?: boolean }} opts - paste: also accept pasted images (default true)
  */
 export function enableDropZone(el, onFiles, opts = {}) {
   const acceptDocs = opts.acceptDocuments || false;
+  const acceptPaste = opts.paste !== false;
 
   el.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -78,7 +79,7 @@ export function enableDropZone(el, onFiles, opts = {}) {
   });
 
   // Also support paste (Ctrl+V) for images
-  el.addEventListener('paste', (e) => {
+  if (acceptPaste) el.addEventListener('paste', (e) => {
     const files = [];
     for (const item of (e.clipboardData?.items || [])) {
       if (item.type.startsWith('image/')) {

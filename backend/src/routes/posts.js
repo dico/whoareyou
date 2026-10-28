@@ -796,6 +796,13 @@ router.post('/', async (req, res, next) => {
     const { body, post_date, contact_uuids, about_contact_uuid, company_uuid, visibility, circle_uuid, is_sensitive } = req.body;
     const audience = await resolvePostVisibility(req, visibility, circle_uuid);
 
+    // Optional backdated post (composer date chip) — same check as PUT
+    let postDate = new Date();
+    if (post_date) {
+      postDate = new Date(post_date);
+      if (isNaN(postDate.getTime())) throw new AppError('Invalid post_date', 400);
+    }
+
     // Resolve "about" contact (profile post)
     let aboutContactId = null;
     if (about_contact_uuid) {
@@ -824,7 +831,7 @@ router.post('/', async (req, res, next) => {
         created_by: req.user.id,
         author_contact_id: authorContactId,
         body: body.trim(),
-        post_date: post_date || new Date(),
+        post_date: postDate,
         contact_id: aboutContactId,
         company_id: companyId,
         visibility: audience.visibility,

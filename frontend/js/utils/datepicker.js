@@ -46,8 +46,17 @@ async function loadFlatpickr() {
   return flatpickrLoading;
 }
 
-async function initInput(input) {
-  if (input.dataset.fpInit) return;
+/**
+ * Initialize flatpickr on a specific input with option overrides — for
+ * custom UIs (e.g. the composer date chip) that need more than the
+ * auto-init defaults. Resolves to the flatpickr instance.
+ */
+export function attachDatePicker(input, overrides = {}) {
+  return initInput(input, overrides);
+}
+
+async function initInput(input, overrides = {}) {
+  if (input.dataset.fpInit) return input._flatpickr;
   input.dataset.fpInit = 'true';
 
   await loadFlatpickr();
@@ -67,10 +76,12 @@ async function initInput(input) {
     allowInput: true,
     disableMobile: true,
     defaultDate: val || null,
+    ...overrides,
   });
 
   // Add sizing class to the visible altInput
   if (fp.altInput) fp.altInput.classList.add('fp-date');
+  return fp;
 }
 
 // Auto-initialize on any date input that appears in the DOM

@@ -259,6 +259,12 @@ All date inputs use flatpickr (CDN) for locale-aware formatting. **No manual ini
 - Only observe specific containers, never the entire body
 - This lesson was learned when flatpickr's auto-init observer crashed Chrome at ~1900 posts in production
 
+### 33a. Post composer
+New posts are always created through `openPostComposer()` ([components/post-composer.js](../frontend/js/components/post-composer.js)) — never a page-specific compose form. Pages only decide *where* the entry point is (header button or `composerTriggerHtml()` card) and pass context (`about`, `company`, `tags`). New post options go into the composer so every page gets them:
+- Settings that change how the post is shown (visibility, date) are chips under the author line — always visible.
+- Everything else is an icon in the toolbar with a tooltip. Keep the toolbar to icons so it fits on one line at 320px.
+- Searches/pickers open as inline panels inside the composer (rule 4).
+
 ### 33. Portal post creation
 Portal guests can create posts on contacts they have access to. Posts are always `visibility: shared` and attributed to the guest via `portal_guest_id`. Media upload uses same image processing pipeline as main app.
 

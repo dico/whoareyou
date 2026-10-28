@@ -1,17 +1,15 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { renderPostList } from '../components/post-list.js';
-import { createMentionInput, extractMentionUuids } from '../components/mention-input.js';
+import { openPostComposer, composerTriggerHtml, attachComposerTrigger } from '../components/post-composer.js';
 import { confirmDialog, contactSearchDialog } from '../components/dialogs.js';
 import { showPhotoViewer } from '../components/photo-viewer.js';
 import { showCropper } from '../components/image-cropper.js';
 import { toggleVisibilityBtn, visibilityToggleHtml } from '../utils/visibility.js';
 import { renderContactFields } from '../components/contact-fields.js';
-import { visibilityPickerHtml, attachVisibilityPicker } from '../components/visibility-picker.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
-import { enableDropZone } from '../utils/drop-zone.js';
 
 export async function renderContactDetail(uuid) {
   const content = document.getElementById('app-content');
@@ -86,34 +84,8 @@ export async function renderContactDetail(uuid) {
               ` : ''}
             </div>
 
-            <!-- New post compose -->
-            <div class="detail-card glass-card post-compose-inline">
-              <form id="quick-post-form">
-                <div class="mention-input form-control" id="quick-post-body"></div>
-                <div id="quick-post-media-preview" class="post-media-preview d-none"></div>
-                <div id="quick-post-link-preview" class="d-none"></div>
-                <div class="post-compose-bar">
-                  ${visibilityPickerHtml('quick-post-visibility-btn')}
-                  <button type="button" class="sensitive-toggle" id="quick-post-sensitive-btn"
-                    data-sensitive="0"
-                    title="${t('sensitive.markPostHint')}">
-                    <i class="bi bi-eye-slash"></i>
-                    <span>${t('sensitive.markShort')}</span>
-                  </button>
-                  <div class="post-compose-actions">
-                    <label class="post-media-btn" title="${t('posts.addMedia')}">
-                      <i class="bi bi-image"></i>
-                      <input type="file" id="quick-post-media-input" multiple accept="image/*,video/*" hidden>
-                    </label>
-                    <label class="post-media-btn" title="${t('posts.addDocument')}">
-                      <i class="bi bi-paperclip"></i>
-                      <input type="file" id="quick-post-doc-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" hidden>
-                    </label>
-                    <button type="submit" class="btn btn-primary btn-sm">${t('posts.post')}</button>
-                  </div>
-                </div>
-              </form>
-            </div>
+            <!-- New post: opens the composer modal -->
+            ${composerTriggerHtml({ id: 'contact-composer-trigger', placeholder: t('posts.writeAbout', { name: contact.first_name }), extraClass: 'detail-card' })}
 
             <!-- View tabs -->
             <div class="filter-tabs mb-3" id="profile-view-tabs">
@@ -981,7 +953,7 @@ export async function renderContactDetail(uuid) {
 
       const view = tab.dataset.view;
       document.getElementById('contact-posts').classList.toggle('d-none', view !== 'posts');
-      document.querySelector('.post-compose-inline')?.classList.toggle('d-none', view !== 'posts');
+      document.getElementById('contact-composer-trigger')?.classList.toggle('d-none', view !== 'posts');
       document.getElementById('contact-gallery').classList.toggle('d-none', view !== 'gallery');
 
       if (view === 'gallery' && !galleryLoaded) {
@@ -990,195 +962,11 @@ export async function renderContactDetail(uuid) {
       }
     });
 
-    // Quick post visibility pill toggle
-    document.getElementById('quick-post-sensitive-btn').addEventListener('click', (e) => {
-      const btn = e.currentTarget;
-      const next = btn.dataset.sensitive === '1' ? '0' : '1';
-      btn.dataset.sensitive = next;
-      btn.classList.toggle('is-on', next === '1');
-    });
-
-    const quickPostVisibility = attachVisibilityPicker(document.getElementById('quick-post-visibility-btn'));
-
-    // Quick post media handling (images + documents)
-    let quickPostMedia = [];
-    document.getElementById('quick-post-media-input')?.addEventListener('change', (e) => {
-      for (const file of e.target.files) {
-        if (file.type.startsWith('image/') || file.type.startsWith('video/')) quickPostMedia.push(file);
-      }
-      renderQuickMediaPreview();
-      e.target.value = '';
-    });
-
-    document.getElementById('quick-post-doc-input')?.addEventListener('change', (e) => {
-      for (const file of e.target.files) quickPostMedia.push(file);
-      renderQuickMediaPreview();
-      e.target.value = '';
-    });
-
-    // Drop zone for quick post (images + documents)
-    enableDropZone(document.getElementById('quick-post-form').closest('.post-compose-inline'), (files) => {
-      quickPostMedia.push(...files);
-      renderQuickMediaPreview();
-    }, { acceptDocuments: true });
-
-    const docIcons = { 'application/pdf': 'bi-file-earmark-pdf', 'text/plain': 'bi-file-earmark-text', 'text/csv': 'bi-file-earmark-spreadsheet' };
-    function getDocIcon(type) {
-      if (type.includes('word') || type.includes('document')) return 'bi-file-earmark-word';
-      if (type.includes('excel') || type.includes('sheet') || type.includes('csv')) return 'bi-file-earmark-spreadsheet';
-      return docIcons[type] || 'bi-file-earmark';
-    }
-
-    function renderQuickMediaPreview() {
-      const el = document.getElementById('quick-post-media-preview');
-      if (!quickPostMedia.length) { el.classList.add('d-none'); el.innerHTML = ''; return; }
-      el.classList.remove('d-none');
-      el.innerHTML = quickPostMedia.map((f, i) => {
-        if (f.type.startsWith('image/')) {
-          return `<div class="media-preview-item">
-            <img src="${URL.createObjectURL(f)}" alt="">
-            <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-          </div>`;
-        }
-        if (f.type.startsWith('video/')) {
-          return `<div class="media-preview-item">
-            <video src="${URL.createObjectURL(f)}" muted style="height:64px;width:64px;object-fit:cover;border-radius:var(--radius-sm)"></video>
-            <div class="media-preview-video-badge"><i class="bi bi-play-fill"></i></div>
-            <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-          </div>`;
-        }
-        return `<div class="media-preview-item media-preview-doc">
-          <i class="${getDocIcon(f.type)}"></i>
-          <span class="media-preview-doc-name">${f.name}</span>
-          <button type="button" class="media-preview-remove" data-index="${i}"><i class="bi bi-x"></i></button>
-        </div>`;
-      }).join('');
-      el.querySelectorAll('.media-preview-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-          quickPostMedia.splice(parseInt(btn.dataset.index), 1);
-          renderQuickMediaPreview();
-        });
-      });
-    }
-
-    // Quick post with @-mention support
-    const quickPostExtra = [];
-    const quickPostInput = createMentionInput({
-      el: document.getElementById('quick-post-body'),
-      placeholder: t('posts.writeAbout', { name: contact.first_name }),
-      onTag: (mention) => {
-        if (mention.uuid !== uuid && !quickPostExtra.find((c) => c.uuid === mention.uuid)) {
-          quickPostExtra.push(mention);
-        }
-      },
-    });
-
-    // ── Link preview detection ──
-    let quickPostLinkPreview = null;
-    let linkPreviewFetchedUrl = null;
-    let linkPreviewDismissed = false;
-    let linkPreviewTimeout = null;
-    const urlRegex = /https?:\/\/[^\s<]+/g;
-
-    const postBody = document.getElementById('quick-post-body');
-    const linkPreviewEl = document.getElementById('quick-post-link-preview');
-
-    function renderQuickLinkPreview() {
-      if (!quickPostLinkPreview || linkPreviewDismissed) {
-        linkPreviewEl.classList.add('d-none');
-        linkPreviewEl.innerHTML = '';
-        return;
-      }
-      const lp = quickPostLinkPreview;
-      const domain = lp.site_name || (() => { try { return new URL(lp.url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
-      linkPreviewEl.innerHTML = `
-        <div class="link-preview-compose">
-          <button type="button" class="link-preview-dismiss" title="${t('common.cancel')}"><i class="bi bi-x-lg"></i></button>
-          <a href="${lp.url}" target="_blank" rel="noopener noreferrer" class="link-preview-card">
-            ${lp.image_url ? `<div class="link-preview-image"><img src="${lp.image_url}" alt="" loading="lazy"></div>` : ''}
-            <div class="link-preview-body">
-              ${domain ? `<span class="link-preview-site">${domain}</span>` : ''}
-              <span class="link-preview-title">${lp.title || lp.url}</span>
-              ${lp.description ? `<span class="link-preview-desc">${lp.description}</span>` : ''}
-            </div>
-          </a>
-        </div>`;
-      linkPreviewEl.classList.remove('d-none');
-      linkPreviewEl.querySelector('.link-preview-dismiss').addEventListener('click', () => {
-        linkPreviewDismissed = true;
-        quickPostLinkPreview = null;
-        renderQuickLinkPreview();
-      });
-    }
-
-    postBody.addEventListener('input', () => {
-      clearTimeout(linkPreviewTimeout);
-      if (linkPreviewDismissed) return;
-      linkPreviewTimeout = setTimeout(async () => {
-        const urls = quickPostInput.getValue().match(urlRegex);
-        const firstUrl = urls?.[0];
-        if (!firstUrl || firstUrl === linkPreviewFetchedUrl) return;
-        linkPreviewFetchedUrl = firstUrl;
-        try {
-          const data = await api.get(`/posts/link-preview?url=${encodeURIComponent(firstUrl)}`);
-          if (data.title) {
-            quickPostLinkPreview = data;
-            renderQuickLinkPreview();
-          }
-        } catch {}
-      }, 600);
-    });
-
-    // Also detect on paste (immediate)
-    postBody.addEventListener('paste', () => {
-      if (linkPreviewDismissed) return;
-      setTimeout(() => postBody.dispatchEvent(new Event('input')), 100);
-    });
-
-    document.getElementById('quick-post-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const body = quickPostInput.getValue().trim();
-      if (!body && !quickPostMedia.length) return;
-
-      const submitBtn = e.target.querySelector('[type="submit"]');
-      const btnText = submitBtn.innerHTML;
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-      const bodyUuids = extractMentionUuids(body);
-      const extraUuids = [...new Set([...bodyUuids, ...quickPostExtra.map((c) => c.uuid)])]
-        .filter((u) => u !== uuid);
-      const { post } = await api.post('/posts', {
-        body,
-        about_contact_uuid: uuid,
-        contact_uuids: extraUuids.length ? extraUuids : undefined,
-        ...quickPostVisibility.value(),
-        is_sensitive: document.getElementById('quick-post-sensitive-btn').dataset.sensitive === '1',
-        link_preview: quickPostLinkPreview || undefined,
-      });
-
-      // Upload media
-      if (quickPostMedia.length && post?.uuid) {
-        const formData = new FormData();
-        for (const file of quickPostMedia) formData.append('media', file);
-        const uploadResult = await api.upload(`/posts/${post.uuid}/media`, formData);
-        if (uploadResult?.suggestedDate) {
-          await api.put(`/posts/${post.uuid}`, { post_date: uploadResult.suggestedDate });
-        }
-      }
-
-      quickPostInput.clear();
-      quickPostMedia = [];
-      renderQuickMediaPreview();
-      quickPostExtra.length = 0;
-      quickPostLinkPreview = null;
-      linkPreviewFetchedUrl = null;
-      linkPreviewDismissed = false;
-      renderQuickLinkPreview();
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = btnText;
-      reloadPosts();
-    });
+    attachComposerTrigger(document.getElementById('contact-composer-trigger'), (extra) => openPostComposer({
+      about: contact,
+      onPosted: reloadPosts,
+      ...extra,
+    }));
 
   } catch (err) {
     content.innerHTML = `<div class="page-container"><div class="alert alert-danger">${err.message}</div></div>`;

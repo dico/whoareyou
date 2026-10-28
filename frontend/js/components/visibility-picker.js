@@ -76,7 +76,7 @@ export function visibilityIconHtml(post) {
   if (post.visibility === 'family') return `<i class="bi bi-people-fill text-muted post-visibility-icon" title="${t('visibility.family')}"></i>`;
   if (post.visibility === 'circle') {
     const name = post.circle?.name || t('visibility.circle');
-    return `<span class="post-visibility-icon post-circle-badge" title="${escapeHtml(t('visibility.circleHint', { name }))}"><i class="bi ${CIRCLE_ICON}"></i> ${escapeHtml(name)}</span>`;
+    return `<span class="post-visibility-icon post-circle-badge" title="${escapeHtml(t('visibility.circleHint', { name }))}"><i class="bi ${CIRCLE_ICON}"></i><span class="post-circle-badge-name">${escapeHtml(name)}</span></span>`;
   }
   return '';
 }

@@ -24,6 +24,86 @@ export async function fetchTagSourceMembers({ groupUuid, labelName }) {
 }
 
 /**
+ * Group/label search wired to an input + results container. Shared by
+ * tagGroupDialog() (modal) and the post composer (inline panel, since the
+ * composer is itself a modal). Selecting a row resolves it to its members.
+ *
+ * @param {HTMLInputElement} input
+ * @param {HTMLElement} results
+ * @param {{ onSelect: (r: { name: string, contacts: Array }) => void, onEscape?: () => void }} options
+ * @returns {{ load: (q?: string) => Promise<void> }}
+ */
+export function attachTagSourceSearch(input, results, { onSelect, onEscape }) {
+  let labels = null;
+  let items = [];
+
+  let searchTimeout;
+  input.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => load(input.value.trim()), 200);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const rows = [...results.querySelectorAll('.contact-row')];
+    const active = results.querySelector('.contact-row.active');
+    let index = rows.indexOf(active);
+    if (e.key === 'ArrowDown') { e.preventDefault(); index = Math.min(index + 1, rows.length - 1); rows.forEach(r => r.classList.remove('active')); rows[index]?.classList.add('active'); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); index = Math.max(index - 1, 0); rows.forEach(r => r.classList.remove('active')); rows[index]?.classList.add('active'); }
+    else if (e.key === 'Enter') { e.preventDefault(); const target = active || rows[0]; if (target) selectItem(items[rows.indexOf(target)]); }
+    else if (e.key === 'Escape' && onEscape) { e.preventDefault(); e.stopPropagation(); onEscape(); }
+  });
+
+  async function load(q = '') {
+    try {
+      if (!labels) labels = (await api.get('/labels')).labels || [];
+      const { companies } = await api.get(`/companies${q ? `?search=${encodeURIComponent(q)}` : ''}`);
+      const lq = q.toLowerCase();
+
+      items = [
+        ...(companies || []).filter(c => c.employee_count > 0).slice(0, MAX_PER_KIND).map(c => ({
+          kind: 'group', key: c.uuid, name: c.name, avatar: c.logo_path,
+          meta: `<i class="bi bi-people"></i> ${t('groups.types.' + (c.type || 'other'))} · ${t('posts.tagGroupMembers', { count: c.employee_count })}`,
+        })),
+        ...labels.filter(l => l.contact_count > 0 && l.name.toLowerCase().includes(lq)).slice(0, MAX_PER_KIND).map(l => ({
+          kind: 'label', key: l.name, name: l.name, avatar: null,
+          meta: `<i class="bi bi-tag"></i> ${t('posts.tagGroupLabel')} · ${t('posts.tagGroupMembers', { count: l.contact_count })}`,
+        })),
+      ];
+
+      if (!items.length) {
+        results.innerHTML = `<div class="text-muted small p-2">${t('common.noResults')}</div>`;
+        return;
+      }
+
+      results.innerHTML = items.map((it, i) =>
+        contactRowHtml({ uuid: it.key, first_name: it.name, last_name: '', avatar: it.avatar }, {
+          tag: 'div', active: i === 0, meta: it.meta,
+        })
+      ).join('');
+      results.querySelectorAll('.contact-row').forEach((row, i) => {
+        row.addEventListener('click', () => selectItem(items[i]));
+      });
+    } catch {
+      results.innerHTML = '';
+    }
+  }
+
+  async function selectItem(item) {
+    if (!item) return;
+    try {
+      const contacts = await fetchTagSourceMembers(
+        item.kind === 'group' ? { groupUuid: item.key } : { labelName: item.key }
+      );
+      onSelect({ name: item.name, contacts });
+    } catch {
+      results.innerHTML = `<div class="text-danger small p-2">${t('common.error')}</div>`;
+    }
+  }
+
+  return { load };
+}
+
+/**
  * Pick a group or label and resolve to its members, so a post can be
  * tagged with everyone at once. Members are expanded to plain contact tags
  * (snapshot) — later membership changes do not alter existing posts.
@@ -59,80 +139,20 @@ export function tagGroupDialog(options = {}) {
     const modalEl = document.getElementById(id);
     const modal = new bootstrap.Modal(modalEl);
     const input = document.getElementById(`${id}-input`);
-    const results = document.getElementById(`${id}-results`);
     let resolved = false;
-    let labels = null;
-    let items = [];
 
     modalEl.addEventListener('shown.bs.modal', () => input.focus());
 
-    let searchTimeout;
-    input.addEventListener('input', () => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => loadResults(input.value.trim()), 200);
-    });
-
-    input.addEventListener('keydown', (e) => {
-      const rows = [...results.querySelectorAll('.contact-row')];
-      const active = results.querySelector('.contact-row.active');
-      let index = rows.indexOf(active);
-      if (e.key === 'ArrowDown') { e.preventDefault(); index = Math.min(index + 1, rows.length - 1); rows.forEach(r => r.classList.remove('active')); rows[index]?.classList.add('active'); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); index = Math.max(index - 1, 0); rows.forEach(r => r.classList.remove('active')); rows[index]?.classList.add('active'); }
-      else if (e.key === 'Enter') { e.preventDefault(); const target = active || rows[0]; if (target) selectItem(items[rows.indexOf(target)]); }
-      else if (e.key === 'Escape') { modal.hide(); }
-    });
-
-    async function loadResults(q) {
-      try {
-        if (!labels) labels = (await api.get('/labels')).labels || [];
-        const { companies } = await api.get(`/companies${q ? `?search=${encodeURIComponent(q)}` : ''}`);
-        const lq = q.toLowerCase();
-
-        items = [
-          ...(companies || []).filter(c => c.employee_count > 0).slice(0, MAX_PER_KIND).map(c => ({
-            kind: 'group', key: c.uuid, name: c.name, avatar: c.logo_path,
-            meta: `<i class="bi bi-people"></i> ${t('groups.types.' + (c.type || 'other'))} · ${t('posts.tagGroupMembers', { count: c.employee_count })}`,
-          })),
-          ...labels.filter(l => l.contact_count > 0 && l.name.toLowerCase().includes(lq)).slice(0, MAX_PER_KIND).map(l => ({
-            kind: 'label', key: l.name, name: l.name, avatar: null,
-            meta: `<i class="bi bi-tag"></i> ${t('posts.tagGroupLabel')} · ${t('posts.tagGroupMembers', { count: l.contact_count })}`,
-          })),
-        ];
-
-        if (!items.length) {
-          results.innerHTML = `<div class="text-muted small p-2">${t('common.noResults')}</div>`;
-          return;
-        }
-
-        results.innerHTML = items.map((it, i) =>
-          contactRowHtml({ uuid: it.key, first_name: it.name, last_name: '', avatar: it.avatar }, {
-            tag: 'div', active: i === 0, meta: it.meta,
-          })
-        ).join('');
-        results.querySelectorAll('.contact-row').forEach((row, i) => {
-          row.addEventListener('click', () => selectItem(items[i]));
-        });
-      } catch {
-        results.innerHTML = '';
-      }
-    }
-
-    async function selectItem(item) {
-      if (!item) return;
-      try {
-        const contacts = await fetchTagSourceMembers(
-          item.kind === 'group' ? { groupUuid: item.key } : { labelName: item.key }
-        );
+    const search = attachTagSourceSearch(input, document.getElementById(`${id}-results`), {
+      onSelect: ({ name, contacts }) => {
         resolved = true;
         modal.hide();
-        resolve({ name: item.name, contacts: contacts.filter(c => !excludeUuids.includes(c.uuid)) });
-      } catch {
-        results.innerHTML = `<div class="text-danger small p-2">${t('common.error')}</div>`;
-      }
-    }
+        resolve({ name, contacts: contacts.filter(c => !excludeUuids.includes(c.uuid)) });
+      },
+    });
 
     modalEl.addEventListener('hidden.bs.modal', () => { modalEl.remove(); if (!resolved) resolve(null); }, { once: true });
     modal.show();
-    loadResults('');
+    search.load('');
   });
 }
