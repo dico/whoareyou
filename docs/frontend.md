@@ -122,7 +122,7 @@ Standalone fullscreen page — no navbar, no SPA router, no Bootstrap. Fetches `
 |------|-------|------|
 | Shared wishlist | `/w/{token}` | `wishlist.html` + `js/wishlist-public.js` + `css/wishlist-public.css` |
 
-Standalone read-only page for share links created from `/gifts/wishlists` (share button per person). No navbar, SPA router or i18n bundle — the handful of strings live in the script, picked by browser language (nb/en). Fetches `/api/public/wishlists/{token}`. `noindex` via meta and `X-Robots-Tag`.
+Standalone read-only page for share links created from `/gifts/wishlists` (the "Del" button at the top covers anyone; the per-person button opens the same dialog with that person preselected). One person → single list; several → sticky name bar and one section per person. No navbar, SPA router or i18n bundle — the handful of strings live in the script, picked by browser language (nb/en). Fetches `/api/public/wishlists/{token}`. `noindex` via meta and `X-Robots-Tag`.
 
 ### Portal Pages
 | Page | Route | Function |

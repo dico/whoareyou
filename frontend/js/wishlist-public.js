@@ -2,13 +2,16 @@
  * Public wishlist — standalone read-only page for share links.
  *
  * Entry point: /w/{token}
- * Fetches /api/public/wishlists/{token}. No login, no SPA router, no i18n
- * bundle: the few strings live here, picked from the browser language.
+ * Fetches /api/public/wishlists/{token}. A link covers one person or several
+ * (e.g. the whole family); several people get a name bar to jump between
+ * sections. No login, no SPA router, no i18n bundle: the few strings live
+ * here, picked from the browser language.
  */
 
 const STRINGS = {
   nb: {
     title: (name) => `Ønskelisten til ${name}`,
+    titleMany: 'Ønskelister',
     empty: 'Ingen ønsker på listen akkurat nå.',
     notFound: 'Denne ønskelisten finnes ikke, eller lenken er ikke lenger delt.',
     error: 'Kunne ikke laste ønskelisten.',
@@ -17,6 +20,7 @@ const STRINGS = {
   },
   en: {
     title: (name) => `${name}'s wishlist`,
+    titleMany: 'Wishlists',
     empty: 'No wishes on the list right now.',
     notFound: 'This wishlist does not exist, or the link is no longer shared.',
     error: 'Could not load the wishlist.',
@@ -48,21 +52,58 @@ async function load() {
   }
 }
 
-function render({ wishlist, items }) {
-  const title = s.title(wishlist.first_name);
-  document.title = title;
-  const initials = (wishlist.first_name?.[0] || '') + (wishlist.last_name?.[0] || '');
+function render({ people }) {
+  if (!people.length) return showMessage(s.notFound);
 
+  if (people.length === 1) {
+    const [person] = people;
+    document.title = s.title(person.first_name);
+    root.innerHTML = `
+      <header class="wl-header">
+        ${avatarHtml(person, 'wl-avatar')}
+        <h1>${esc(s.title(person.first_name))}</h1>
+      </header>
+      ${itemsHtml(person.items)}
+      <footer class="wl-footer">${s.footer}</footer>
+    `;
+    return;
+  }
+
+  document.title = s.titleMany;
   root.innerHTML = `
     <header class="wl-header">
-      <div class="wl-avatar">
-        ${wishlist.avatar ? `<img src="${esc(wishlist.avatar)}" alt="">` : `<span>${esc(initials)}</span>`}
-      </div>
-      <h1>${esc(title)}</h1>
+      <h1>${s.titleMany}</h1>
     </header>
-    ${items.length ? `<ul class="wl-items">${items.map(renderItem).join('')}</ul>` : `<p class="wl-center">${s.empty}</p>`}
+    <nav class="wl-people-nav">
+      ${people.map((p, i) => `
+        <a href="#person-${i}" class="wl-people-chip">
+          ${avatarHtml(p, 'wl-chip-avatar')}
+          <span>${esc(p.first_name)}</span>
+        </a>
+      `).join('')}
+    </nav>
+    ${people.map((p, i) => `
+      <section class="wl-person" id="person-${i}">
+        <h2 class="wl-person-head">
+          ${avatarHtml(p, 'wl-person-avatar')}
+          <span>${esc(p.first_name)} ${esc(p.last_name || '')}</span>
+        </h2>
+        ${itemsHtml(p.items)}
+      </section>
+    `).join('')}
     <footer class="wl-footer">${s.footer}</footer>
   `;
+}
+
+function avatarHtml(person, cls) {
+  const initials = (person.first_name?.[0] || '') + (person.last_name?.[0] || '');
+  return `<span class="${cls}">${person.avatar ? `<img src="${esc(person.avatar)}" alt="">` : esc(initials)}</span>`;
+}
+
+function itemsHtml(items) {
+  return items.length
+    ? `<ul class="wl-items">${items.map(renderItem).join('')}</ul>`
+    : `<p class="wl-empty">${s.empty}</p>`;
 }
 
 function renderItem(item) {

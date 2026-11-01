@@ -943,7 +943,7 @@ router.get('/wishlists', async (req, res, next) => {
       .join('contacts', 'gift_wishlists.contact_id', 'contacts.id')
       .select(
         'gift_wishlists.uuid', 'gift_wishlists.name', 'gift_wishlists.is_default',
-        'gift_wishlists.visibility', 'gift_wishlists.created_at', 'gift_wishlists.share_token',
+        'gift_wishlists.visibility', 'gift_wishlists.created_at',
         'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name'
       )
       .select(db.raw('(SELECT COUNT(*) FROM gift_wishlist_items WHERE gift_wishlist_items.wishlist_id = gift_wishlists.id) as item_count'))
@@ -1019,33 +1019,94 @@ router.post('/wishlists', async (req, res, next) => {
   }
 });
 
-// POST /api/gifts/wishlists/:uuid/share — create (or return) the public share link token
-router.post('/wishlists/:uuid/share', async (req, res, next) => {
-  try {
-    const wishlist = await db('gift_wishlists')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId }).first();
-    if (!wishlist) throw new AppError('Wishlist not found', 404);
-    if (wishlist.share_token) return res.json({ token: wishlist.share_token });
+// ── Wishlist share links ──
+// A share is a public token covering one or more contacts (one person or
+// the whole family). See routes/public-wishlists.js for the public side.
 
-    const token = crypto.randomBytes(24).toString('base64url');
-    await db('gift_wishlists').where({ id: wishlist.id }).update({
-      share_token: token,
-      share_token_hash: hashShareToken(token),
-      updated_at: db.fn.now(),
+// Contact uuids → ids within the tenant; rejects unknown or empty lists.
+async function resolveShareContacts(tenantId, contactUuids) {
+  if (!Array.isArray(contactUuids) || !contactUuids.length) {
+    throw new AppError('Select at least one person', 400);
+  }
+  const contacts = await db('contacts')
+    .where({ tenant_id: tenantId }).whereNull('deleted_at')
+    .whereIn('uuid', [...new Set(contactUuids)]).select('id');
+  if (contacts.length !== new Set(contactUuids).size) throw new AppError('Contact not found', 404);
+  return contacts.map(c => c.id);
+}
+
+// GET /api/gifts/wishlist-shares — all share links in the tenant with their people
+router.get('/wishlist-shares', async (req, res, next) => {
+  try {
+    const shares = await db('wishlist_shares')
+      .where({ tenant_id: req.tenantId })
+      .select('id', 'uuid', 'token', 'created_at')
+      .orderBy('created_at');
+    const people = shares.length ? await db('wishlist_share_contacts')
+      .whereIn('share_id', shares.map(sh => sh.id))
+      .join('contacts', 'wishlist_share_contacts.contact_id', 'contacts.id')
+      .whereNull('contacts.deleted_at')
+      .select('wishlist_share_contacts.share_id', 'contacts.uuid', 'contacts.first_name', 'contacts.last_name')
+      .orderBy('contacts.first_name') : [];
+
+    res.json({
+      shares: shares.map(sh => ({
+        uuid: sh.uuid,
+        token: sh.token,
+        created_at: sh.created_at,
+        contacts: people.filter(p => p.share_id === sh.id)
+          .map(({ uuid, first_name, last_name }) => ({ uuid, first_name, last_name })),
+      })),
     });
-    res.json({ token });
   } catch (err) {
     next(err);
   }
 });
 
-// DELETE /api/gifts/wishlists/:uuid/share — revoke the public share link
-router.delete('/wishlists/:uuid/share', async (req, res, next) => {
+// POST /api/gifts/wishlist-shares — create a share link { contact_uuids }
+router.post('/wishlist-shares', async (req, res, next) => {
   try {
-    const updated = await db('gift_wishlists')
-      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
-      .update({ share_token: null, share_token_hash: null, updated_at: db.fn.now() });
-    if (!updated) throw new AppError('Wishlist not found', 404);
+    const contactIds = await resolveShareContacts(req.tenantId, req.body.contact_uuids);
+    const token = crypto.randomBytes(24).toString('base64url');
+    const uuid = uuidv4();
+    await db.transaction(async (trx) => {
+      const [shareId] = await trx('wishlist_shares').insert({
+        uuid,
+        tenant_id: req.tenantId,
+        token,
+        token_hash: hashShareToken(token),
+        created_by: req.user.id,
+      });
+      await trx('wishlist_share_contacts').insert(contactIds.map(contact_id => ({ share_id: shareId, contact_id })));
+    });
+    res.status(201).json({ uuid, token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/gifts/wishlist-shares/:uuid — change who the link covers (same URL)
+router.put('/wishlist-shares/:uuid', async (req, res, next) => {
+  try {
+    const share = await db('wishlist_shares').where({ uuid: req.params.uuid, tenant_id: req.tenantId }).first();
+    if (!share) throw new AppError('Share not found', 404);
+    const contactIds = await resolveShareContacts(req.tenantId, req.body.contact_uuids);
+    await db.transaction(async (trx) => {
+      await trx('wishlist_share_contacts').where({ share_id: share.id }).del();
+      await trx('wishlist_share_contacts').insert(contactIds.map(contact_id => ({ share_id: share.id, contact_id })));
+      await trx('wishlist_shares').where({ id: share.id }).update({ updated_at: db.fn.now() });
+    });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/gifts/wishlist-shares/:uuid — revoke; the link stops working
+router.delete('/wishlist-shares/:uuid', async (req, res, next) => {
+  try {
+    const deleted = await db('wishlist_shares').where({ uuid: req.params.uuid, tenant_id: req.tenantId }).del();
+    if (!deleted) throw new AppError('Share not found', 404);
     res.json({ success: true });
   } catch (err) {
     next(err);

@@ -236,12 +236,12 @@ The threat model is **physical proximity, short window**. The implementation is 
 
 ## Wishlist Share Links
 
-Public read-only link per wishlist (`/w/{token}`) so relatives without an account can see what someone wants.
+Public read-only links (`/w/{token}`) so relatives without an account can see what people want. A link (`wishlist_shares`) covers an explicit set of contacts (`wishlist_share_contacts`) — one person or the whole family; people not ticked are never included, and new household members are not added automatically.
 
-- Token: 24 bytes `crypto.randomBytes` (base64url). Lookup by SHA-256 in `gift_wishlists.share_token_hash`; plaintext kept in `share_token` so members can copy the link again (same trade-off as signage).
-- Revoke (`DELETE /api/gifts/wishlists/:uuid/share`) clears both columns — the link stops working at once. A new share gets a new token.
-- Exposure: owner's first/last name and avatar, plus title, description, price, product URL and image for **open** items only. Fulfilled items are hidden so the link can't reveal what has been bought. No UUIDs, no tenant data, no orders.
-- Image proxy only serves the avatar or the uploaded image of an open item on that exact list (looked up by item id) — never an arbitrary path.
+- Token: 24 bytes `crypto.randomBytes` (base64url). Lookup by SHA-256 in `wishlist_shares.token_hash`; plaintext kept in `token` so members can copy the link again (same trade-off as signage).
+- Revoke (`DELETE /api/gifts/wishlist-shares/:uuid`) deletes the row — the link stops working at once. Editing the people keeps the URL.
+- Exposure: first/last name and avatar per person, plus title, description, price, product URL and image for **open** items on each person's default wishlist. Fulfilled items are hidden so the link can't reveal what has been bought. No UUIDs, no tenant data, no orders.
+- Image proxy only serves avatars of the shared people (by position) or the uploaded image of an open item on their lists (by item id) — never an arbitrary path.
 - Rate limit 120 req/min per IP. Subject to the global IP/country whitelist: with a whitelist active, recipients outside it cannot open the link.
 
 ## Signage Security

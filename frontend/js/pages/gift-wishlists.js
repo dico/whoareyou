@@ -12,7 +12,12 @@ export async function renderGiftWishlists() {
   content.innerHTML = `
     <div class="page-container">
       ${giftSubNav('wishlists')}
-      <h3 class="mb-3">${t('gifts.wishlists')}</h3>
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <h3 class="mb-0">${t('gifts.wishlists')}</h3>
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-auto d-none" id="wishlist-share-all">
+          <i class="bi bi-share me-1"></i>${t('gifts.share')}
+        </button>
+      </div>
       <div id="wishlists-content"><div class="loading">${t('app.loading')}</div></div>
     </div>
   `;
@@ -37,10 +42,12 @@ async function loadWishlists() {
   if (!el) return;
 
   try {
-    const [membersData, wishlistsData] = await Promise.all([
+    const [membersData, wishlistsData, sharesData] = await Promise.all([
       api.get('/auth/household').catch(() => ({ members: [] })),
       api.get('/gifts/wishlists'),
+      api.get('/gifts/wishlist-shares').catch(() => ({ shares: [] })),
     ]);
+    const sharedContacts = new Set((sharesData.shares || []).flatMap(sh => sh.contacts.map(c => c.uuid)));
 
     const members = membersData.members || [];
     const wishlists = wishlistsData.wishlists || [];
@@ -60,11 +67,11 @@ async function loadWishlists() {
       const contact = { uuid: contactUuid, first_name: m.first_name, last_name: m.last_name || '', avatar: m.avatar || null };
       const hasContact = !!m.linked_contact_uuid;
 
+      const isShared = hasContact && sharedContacts.has(m.linked_contact_uuid);
       const shareBtnHtml = defaultWl ? `
-        <button class="btn btn-sm wishlist-share-btn ${defaultWl.share_token ? 'btn-outline-primary' : 'btn-outline-secondary'}"
-          data-wishlist-uuid="${defaultWl.uuid}" data-token="${defaultWl.share_token || ''}" data-name="${esc(m.first_name)}"
-          title="${defaultWl.share_token ? t('gifts.shareActive') : t('gifts.share')}">
-          <i class="bi bi-${defaultWl.share_token ? 'link-45deg' : 'share'}"></i>
+        <button class="btn btn-sm wishlist-share-btn ${isShared ? 'btn-outline-primary' : 'btn-outline-secondary'}"
+          data-contact-uuid="${m.linked_contact_uuid}" title="${isShared ? t('gifts.shareActive') : t('gifts.share')}">
+          <i class="bi bi-${isShared ? 'link-45deg' : 'share'}"></i>
         </button>
       ` : '';
       const addBtnHtml = hasContact ? `${shareBtnHtml}
@@ -94,10 +101,19 @@ async function loadWishlists() {
       }
     }
 
+    // Share dialog: page button covers everyone, per-person button preselects one
+    const shareable = members
+      .filter(m => m.linked_contact_uuid && wlByContact.has(m.linked_contact_uuid))
+      .map(m => ({ uuid: m.linked_contact_uuid, first_name: m.first_name, last_name: m.last_name || '' }));
+    const shareAllBtn = document.getElementById('wishlist-share-all');
+    if (shareAllBtn) {
+      shareAllBtn.classList.toggle('d-none', !shareable.length);
+      shareAllBtn.onclick = () => openWishlistShareModal(shareable, null);
+    }
     el.querySelectorAll('.wishlist-share-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        openWishlistShareModal(btn);
+        openWishlistShareModal(shareable, btn.dataset.contactUuid);
       });
     });
 
@@ -315,21 +331,21 @@ function groupHeader(contact, count, actionsHtml = '') {
   `;
 }
 
-// Share dialog: create, copy or revoke the public link (/w/{token}) for one
-// wishlist. Updates the header button so the shared state is visible.
-function openWishlistShareModal(btn) {
-  const wishlistUuid = btn.dataset.wishlistUuid;
-  const name = btn.dataset.name;
+// Share dialog: lists the tenant's share links (wishlist_shares) and creates
+// or edits them by ticking people — one person and the whole family use the
+// same link type. `focusUuid` set → the new-link form starts with only that
+// person ticked and links covering them are listed first.
+function openWishlistShareModal(people, focusUuid) {
   const mid = 'wl-share-' + Date.now();
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${mid}" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">${esc(t('gifts.shareTitle', { name }))}</h5>
+            <h5 class="modal-title">${t('gifts.shareTitle')}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="${t('common.close')}"></button>
           </div>
-          <div class="modal-body" id="${mid}-body"></div>
+          <div class="modal-body" id="${mid}-body"><div class="loading">${t('app.loading')}</div></div>
         </div>
       </div>
     </div>
@@ -337,72 +353,141 @@ function openWishlistShareModal(btn) {
   const modalEl = document.getElementById(mid);
   const body = document.getElementById(`${mid}-body`);
   const modal = new bootstrap.Modal(modalEl);
-  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  let changed = false;
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    modalEl.remove();
+    if (changed) loadWishlists();
+  }, { once: true });
 
-  const setButtonState = (token) => {
-    btn.dataset.token = token || '';
-    btn.classList.toggle('btn-outline-primary', !!token);
-    btn.classList.toggle('btn-outline-secondary', !token);
-    btn.title = token ? t('gifts.shareActive') : t('gifts.share');
-    btn.innerHTML = `<i class="bi bi-${token ? 'link-45deg' : 'share'}"></i>`;
-  };
+  let shares = [];
+  let editing = null; // share uuid being edited, 'new', or null
+
+  const linkUrl = (token) => `${window.location.origin}/w/${token}`;
+  const names = (list) => list.map(c => esc(c.first_name)).join(', ');
+
+  const pickerHtml = (selected) => `
+    <div class="wl-share-picker">
+      ${people.map(p => `
+        <label class="form-check">
+          <input class="form-check-input" type="checkbox" value="${p.uuid}" ${selected.has(p.uuid) ? 'checked' : ''}>
+          <span class="form-check-label">${esc(p.first_name)} ${esc(p.last_name)}</span>
+        </label>
+      `).join('')}
+      <div class="d-flex gap-2 mt-2">
+        ${people.length > 1 ? `<button type="button" class="btn btn-link btn-sm px-0 me-auto" data-action="toggle-all">${t('gifts.shareSelectAll')}</button>` : '<span class="me-auto"></span>'}
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-action="cancel">${t('common.cancel')}</button>
+        <button type="button" class="btn btn-primary btn-sm" data-action="save">${editing === 'new' ? t('gifts.shareCreate') : t('common.save')}</button>
+      </div>
+    </div>
+  `;
+
+  const shareRowHtml = (sh) => `
+    <div class="wl-share-row" data-uuid="${sh.uuid}">
+      <div class="wl-share-row-head">
+        <i class="bi bi-${sh.contacts.length > 1 ? 'people' : 'person'} text-muted"></i>
+        <span class="wl-share-names">${names(sh.contacts) || `<span class="text-muted">${t('gifts.shareNobody')}</span>`}</span>
+        <button type="button" class="btn btn-link btn-sm" data-action="edit" title="${t('gifts.shareEdit')}"><i class="bi bi-pencil"></i></button>
+      </div>
+      ${editing === sh.uuid ? pickerHtml(new Set(sh.contacts.map(c => c.uuid))) : `
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" readonly value="${esc(linkUrl(sh.token))}" data-role="url">
+          <button type="button" class="btn btn-primary" data-action="copy"><i class="bi bi-copy me-1"></i>${t('gifts.shareCopy')}</button>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+          ${navigator.share ? `<button type="button" class="btn btn-outline-secondary btn-sm" data-action="native"><i class="bi bi-share me-1"></i>${t('gifts.shareVia')}</button>` : ''}
+          <a class="btn btn-outline-secondary btn-sm" href="/w/${sh.token}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>${t('gifts.shareOpen')}</a>
+          <button type="button" class="btn btn-link btn-sm text-danger ms-auto" data-action="revoke">${t('gifts.shareRevoke')}</button>
+        </div>
+      `}
+    </div>
+  `;
 
   const render = () => {
-    const token = btn.dataset.token;
-    if (!token) {
-      body.innerHTML = `
-        <p class="small text-muted">${t('gifts.shareHint')}</p>
-        <button type="button" class="btn btn-primary btn-sm" data-action="create">
-          <i class="bi bi-link-45deg me-1"></i>${t('gifts.shareCreate')}
-        </button>
-      `;
-      return;
-    }
-    const url = `${window.location.origin}/w/${token}`;
+    const ordered = focusUuid
+      ? [...shares].sort((a, b) => b.contacts.some(c => c.uuid === focusUuid) - a.contacts.some(c => c.uuid === focusUuid))
+      : shares;
     body.innerHTML = `
       <p class="small text-muted">${t('gifts.shareHint')}</p>
-      <div class="input-group input-group-sm mb-2">
-        <input type="text" class="form-control" readonly value="${esc(url)}" data-role="url">
-        <button type="button" class="btn btn-primary" data-action="copy"><i class="bi bi-copy me-1"></i>${t('gifts.shareCopy')}</button>
-      </div>
-      <div class="d-flex flex-wrap gap-2 align-items-center">
-        ${navigator.share ? `<button type="button" class="btn btn-outline-secondary btn-sm" data-action="native"><i class="bi bi-share me-1"></i>${t('gifts.shareVia')}</button>` : ''}
-        <a class="btn btn-outline-secondary btn-sm" href="/w/${token}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>${t('gifts.shareOpen')}</a>
-        <button type="button" class="btn btn-link btn-sm text-danger ms-auto" data-action="revoke">${t('gifts.shareRevoke')}</button>
-      </div>
+      ${ordered.map(shareRowHtml).join('')}
+      ${editing === 'new' ? `
+        <div class="wl-share-row" data-uuid="new">
+          <div class="wl-share-row-head"><strong class="small">${t('gifts.shareNew')}</strong></div>
+          ${pickerHtml(new Set(focusUuid ? [focusUuid] : people.map(p => p.uuid)))}
+        </div>
+      ` : `
+        <button type="button" class="btn btn-outline-primary btn-sm" data-action="new">
+          <i class="bi bi-plus me-1"></i>${t('gifts.shareNew')}
+        </button>
+      `}
     `;
+  };
+
+  const load = async () => {
+    ({ shares } = await api.get('/gifts/wishlist-shares'));
+    render();
   };
 
   body.addEventListener('click', async (e) => {
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
-    const url = `${window.location.origin}/w/${btn.dataset.token}`;
+    const row = actionEl.closest('.wl-share-row');
+    const share = shares.find(sh => sh.uuid === row?.dataset.uuid);
     try {
       switch (actionEl.dataset.action) {
-        case 'create': {
-          const { token } = await api.post(`/gifts/wishlists/${wishlistUuid}/share`, {});
-          setButtonState(token);
+        case 'new':
+          editing = 'new';
           render();
           break;
+        case 'edit':
+          editing = editing === share.uuid ? null : share.uuid;
+          render();
+          break;
+        case 'cancel':
+          editing = null;
+          render();
+          break;
+        case 'toggle-all': {
+          const boxes = [...row.querySelectorAll('.wl-share-picker input[type=checkbox]')];
+          const allChecked = boxes.every(b => b.checked);
+          boxes.forEach(b => { b.checked = !allChecked; });
+          break;
         }
-        case 'copy':
+        case 'save': {
+          const contactUuids = [...row.querySelectorAll('.wl-share-picker input:checked')].map(b => b.value);
+          if (!contactUuids.length) {
+            confirmDialog(t('gifts.shareSelectSomeone'), { title: t('gifts.shareTitle'), confirmText: 'OK', confirmClass: 'btn-primary' });
+            return;
+          }
+          if (editing === 'new') {
+            await api.post('/gifts/wishlist-shares', { contact_uuids: contactUuids });
+          } else {
+            await api.put(`/gifts/wishlist-shares/${share.uuid}`, { contact_uuids: contactUuids });
+          }
+          editing = null;
+          changed = true;
+          await load();
+          break;
+        }
+        case 'copy': {
+          const url = linkUrl(share.token);
           try {
             await navigator.clipboard.writeText(url);
           } catch {
-            body.querySelector('[data-role="url"]').select();
+            row.querySelector('[data-role="url"]').select();
             document.execCommand('copy');
           }
           actionEl.innerHTML = `<i class="bi bi-check-lg me-1"></i>${t('gifts.shareCopied')}`;
           setTimeout(() => { actionEl.innerHTML = `<i class="bi bi-copy me-1"></i>${t('gifts.shareCopy')}`; }, 2000);
           break;
+        }
         case 'native':
-          await navigator.share({ title: t('gifts.shareTitle', { name }), url }).catch(() => {});
+          await navigator.share({ title: t('gifts.wishlists'), url: linkUrl(share.token) }).catch(() => {});
           break;
         case 'revoke':
           if (!await confirmDialog(t('gifts.shareRevokeConfirm'), { title: t('gifts.shareRevoke'), confirmText: t('gifts.shareRevoke') })) return;
-          await api.delete(`/gifts/wishlists/${wishlistUuid}/share`);
-          setButtonState(null);
-          render();
+          await api.delete(`/gifts/wishlist-shares/${share.uuid}`);
+          changed = true;
+          await load();
           break;
       }
     } catch (err) {
@@ -414,8 +499,16 @@ function openWishlistShareModal(btn) {
     if (e.target.dataset.role === 'url') e.target.select();
   });
 
-  render();
   modal.show();
+  load().then(() => {
+    // Nothing shared for this person yet → go straight to the new-link form
+    if (focusUuid && !shares.some(sh => sh.contacts.some(c => c.uuid === focusUuid))) {
+      editing = 'new';
+      render();
+    }
+  }).catch(err => {
+    body.innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`;
+  });
 }
 
 function openWishlistItemEditModal({ wishlistUuid, itemId, title, notes, onSaved }) {

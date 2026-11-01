@@ -52,7 +52,76 @@ body {
   color: var(--color-text-secondary);
 }
 
-.wl-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.wl-avatar img,
+.wl-chip-avatar img,
+.wl-person-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Several people: sticky name bar + one section per person */
+.wl-people-nav {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  padding: var(--space-sm) 0;
+  margin-bottom: var(--space-md);
+  background: var(--color-bg);
+  scrollbar-width: none;
+}
+
+.wl-people-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 12px 4px 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.wl-chip-avatar,
+.wl-person-avatar {
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wl-chip-avatar { width: 28px; height: 28px; }
+
+.wl-person {
+  margin-bottom: var(--space-xl);
+  scroll-margin-top: 64px;
+}
+
+.wl-person-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--space-sm);
+}
+
+.wl-person-avatar { width: 40px; height: 40px; font-size: 0.85rem; background: var(--color-surface); }
+
+.wl-empty {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
 
 .wl-items {
   list-style: none;
