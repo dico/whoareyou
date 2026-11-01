@@ -42,6 +42,7 @@ System-level IP and country whitelists apply to **every** request that touches t
 - Authenticated API calls (`/api/contacts`, `/api/posts`, etc.)
 - Portal guest login and portal API (`/api/portal/*`)
 - Signage token endpoints (`/api/signage/feed/:token`, `/api/signage/media/:token`)
+- Public wishlist share links (`/api/public/wishlists/:token`)
 - File serving (`/uploads/*`)
 
 Enforcement happens in the `accessControl` middleware ([backend/src/middleware/access-control.js](../backend/src/middleware/access-control.js)), mounted globally on `/api` and `/uploads` in [backend/src/index.js](../backend/src/index.js). Health and info endpoints (`GET /api/health`, `GET /api`) are registered before the middleware so monitoring can verify uptime even when the whitelist would otherwise block.
@@ -232,6 +233,16 @@ The threat model is **physical proximity, short window**. The implementation is 
 - File paths validated against tenant ownership (contact UUID or post UUID)
 - **Portal guests**: additional check that file belongs to an accessible contact
 - **Portal thumbnail exception**: Thumbnail avatars (`photo_*_thumb.*`) are accessible to all portal guests within the same tenant — needed for comment/reaction avatars from users outside the guest's contactIds. Full-size contact photos remain restricted to contactIds.
+
+## Wishlist Share Links
+
+Public read-only link per wishlist (`/w/{token}`) so relatives without an account can see what someone wants.
+
+- Token: 24 bytes `crypto.randomBytes` (base64url). Lookup by SHA-256 in `gift_wishlists.share_token_hash`; plaintext kept in `share_token` so members can copy the link again (same trade-off as signage).
+- Revoke (`DELETE /api/gifts/wishlists/:uuid/share`) clears both columns — the link stops working at once. A new share gets a new token.
+- Exposure: owner's first/last name and avatar, plus title, description, price, product URL and image for **open** items only. Fulfilled items are hidden so the link can't reveal what has been bought. No UUIDs, no tenant data, no orders.
+- Image proxy only serves the avatar or the uploaded image of an open item on that exact list (looked up by item id) — never an arbitrary path.
+- Rate limit 120 req/min per IP. Subject to the global IP/country whitelist: with a whitelist active, recipients outside it cannot open the link.
 
 ## Signage Security
 

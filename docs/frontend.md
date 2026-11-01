@@ -117,6 +117,13 @@ The dedicated **Editor view** was removed — its job (per-post weight, image in
 
 Standalone fullscreen page — no navbar, no SPA router, no Bootstrap. Fetches `/api/signage/feed/{token}` and renders either a **slideshow** (fade transitions, configurable interval) or a **feed** (1–6 cards, horizontal or vertical). Images served via `/api/signage/media/:token?path=...` proxy. Auto-refreshes data periodically. Multi-image posts render as a CSS grid collage (2–4 images). Overlay (names, text, date, likes, comments) is configurable per screen. Image fit: `contain` (ratio preserved, black bars) or `cover` (fill screen, crop).
 
+### Public Wishlist (separate entry point)
+| Page | Route | File |
+|------|-------|------|
+| Shared wishlist | `/w/{token}` | `wishlist.html` + `js/wishlist-public.js` + `css/wishlist-public.css` |
+
+Standalone read-only page for share links created from `/gifts/wishlists` (share button per person). No navbar, SPA router or i18n bundle — the handful of strings live in the script, picked by browser language (nb/en). Fetches `/api/public/wishlists/{token}`. `noindex` via meta and `X-Robots-Tag`.
+
 ### Portal Pages
 | Page | Route | Function |
 |------|-------|----------|

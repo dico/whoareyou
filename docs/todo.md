@@ -284,7 +284,7 @@ A user should be able to see "what happened on my account" — their own login h
 ## Low Priority
 
 ### Wishlist sharing via portal
-**Status:** Not started
+**Status:** Not started. Partly covered by public share links (`/w/{token}`, migration 084) — this item is only about showing wishlists inside the portal.
 **Why:** Portal guests (grandparents, aunts, etc.) should be able to view wishlists for the children they have access to. Reuses existing portal infrastructure (`portal_guest_contacts` for access control, `portalAuthenticate` middleware). No write access — guests can only browse.
 **Plan:**
 - New portal endpoint: `GET /api/portal/wishlists` — returns wishlists for accessible contacts

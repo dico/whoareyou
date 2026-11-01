@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
+import { decodeHtmlEntities } from '../utils/html-entities.js';
 import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
 import { getLinkedContactId } from '../utils/tenant.js';
@@ -573,13 +574,13 @@ router.get('/link-preview', async (req, res, next) => {
         return res.json(result);
       }
 
-      const meta = (prop) =>
+      const meta = (prop) => decodeHtmlEntities(
         html.match(new RegExp(`<meta[^>]*property=["']${prop}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1]
-        || html.match(new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*property=["']${prop}["']`, 'i'))?.[1];
-      const metaName = (name) =>
-        html.match(new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1];
+        || html.match(new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*property=["']${prop}["']`, 'i'))?.[1]);
+      const metaName = (name) => decodeHtmlEntities(
+        html.match(new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1]);
 
-      result.title = (meta('og:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || '').replace(/\s+/g, ' ').trim();
+      result.title = (meta('og:title') || decodeHtmlEntities(html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]) || '').replace(/\s+/g, ' ').trim();
       result.description = (meta('og:description') || metaName('description') || '').replace(/\s+/g, ' ').trim();
       result.site_name = (meta('og:site_name') || new URL(url).hostname.replace(/^www\./, '')) || '';
       const ogImage = meta('og:image');

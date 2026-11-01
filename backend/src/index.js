@@ -33,6 +33,7 @@ import portalRoutes from './routes/portal.js';
 import portalAdminRoutes from './routes/portal-admin.js';
 import signageRoutes from './routes/signage.js';
 import circleRoutes from './routes/circles.js';
+import publicWishlistRoutes from './routes/public-wishlists.js';
 import { filterVisiblePosts } from './utils/visibility.js';
 
 const app = express();
@@ -172,6 +173,10 @@ app.use('/api/signage', (req, res, next) => {
     tenantScope(req, res, next);
   });
 }, signageRoutes);
+// Public wishlist share links — token-based, no auth. Image requests are one
+// per item, so the budget allows a full list plus a few reloads per minute.
+const publicWishlistLimiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
+app.use('/api/public/wishlists', publicWishlistLimiter, publicWishlistRoutes);
 app.use('/api/import', authenticate, tenantScope, importRoutes);
 const exportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 10,

@@ -1122,7 +1122,10 @@ router.get('/household', authenticate, async (req, res, next) => {
           .andOn('tenant_members.tenant_id', '=', db.raw('?', [req.user.tenantId]));
       })
       .leftJoin('contacts', 'tenant_members.linked_contact_id', 'contacts.id')
-      .where('users.is_active', true)
+      // Members without login (e.g. small children) are stored inactive with
+      // no email — they're still part of the household. Deactivated members
+      // (who have an email) stay hidden.
+      .where(q => q.where('users.is_active', true).orWhereNull('users.email'))
       .select(
         'users.uuid', 'users.first_name', 'users.last_name',
         'contacts.uuid as linked_contact_uuid',

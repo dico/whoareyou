@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db.js';
 import { AppError } from '../utils/errors.js';
+import { hashShareToken } from './public-wishlists.js';
+import { decodeHtmlEntities } from '../utils/html-entities.js';
 
 const router = Router();
 
@@ -238,7 +241,7 @@ router.get('/products/scrape', async (req, res, next) => {
         || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i)?.[1];
       const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
       result.title = ogTitle || titleTag || '';
-      result.title = result.title.replace(/\s+/g, ' ').trim();
+      result.title = decodeHtmlEntities(result.title).replace(/\s+/g, ' ').trim();
 
       // Detect bot-blocked pages and discard results
       const blockedPatterns = /security checkpoint|access denied|captcha|just a moment|cloudflare|verify you are human/i;
@@ -252,7 +255,7 @@ router.get('/products/scrape', async (req, res, next) => {
         || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1];
       // Filter out logos/favicons
       if (ogImage && !/apple-touch-icon|favicon|logo/i.test(ogImage)) {
-        result.image_url = ogImage;
+        result.image_url = decodeHtmlEntities(ogImage);
       }
 
       // Extract price
@@ -264,7 +267,7 @@ router.get('/products/scrape', async (req, res, next) => {
       const ogDesc = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1]
         || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:description["']/i)?.[1]
         || html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1];
-      if (ogDesc) result.description = ogDesc.replace(/\s+/g, ' ').trim();
+      if (ogDesc) result.description = decodeHtmlEntities(ogDesc).replace(/\s+/g, ' ').trim();
     } catch {
       // Scrape failed silently — return what we have
     }
@@ -940,7 +943,7 @@ router.get('/wishlists', async (req, res, next) => {
       .join('contacts', 'gift_wishlists.contact_id', 'contacts.id')
       .select(
         'gift_wishlists.uuid', 'gift_wishlists.name', 'gift_wishlists.is_default',
-        'gift_wishlists.visibility', 'gift_wishlists.created_at',
+        'gift_wishlists.visibility', 'gift_wishlists.created_at', 'gift_wishlists.share_token',
         'contacts.uuid as contact_uuid', 'contacts.first_name', 'contacts.last_name'
       )
       .select(db.raw('(SELECT COUNT(*) FROM gift_wishlist_items WHERE gift_wishlist_items.wishlist_id = gift_wishlists.id) as item_count'))
@@ -1011,6 +1014,39 @@ router.post('/wishlists', async (req, res, next) => {
     });
 
     res.status(201).json({ uuid });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/gifts/wishlists/:uuid/share — create (or return) the public share link token
+router.post('/wishlists/:uuid/share', async (req, res, next) => {
+  try {
+    const wishlist = await db('gift_wishlists')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId }).first();
+    if (!wishlist) throw new AppError('Wishlist not found', 404);
+    if (wishlist.share_token) return res.json({ token: wishlist.share_token });
+
+    const token = crypto.randomBytes(24).toString('base64url');
+    await db('gift_wishlists').where({ id: wishlist.id }).update({
+      share_token: token,
+      share_token_hash: hashShareToken(token),
+      updated_at: db.fn.now(),
+    });
+    res.json({ token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/gifts/wishlists/:uuid/share — revoke the public share link
+router.delete('/wishlists/:uuid/share', async (req, res, next) => {
+  try {
+    const updated = await db('gift_wishlists')
+      .where({ uuid: req.params.uuid, tenant_id: req.tenantId })
+      .update({ share_token: null, share_token_hash: null, updated_at: db.fn.now() });
+    if (!updated) throw new AppError('Wishlist not found', 404);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

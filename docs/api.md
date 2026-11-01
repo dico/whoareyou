@@ -186,6 +186,15 @@ Audit actions: `circle.create`, `circle.update`, `circle.delete`.
 ### Gifts (`/api/gifts`)
 Products (CRUD, URL scraping, images), events (CRUD, auto-fill), orders (CRUD, status lifecycle), wishlists (CRUD, items).
 
+Wishlist share links:
+- `POST /api/gifts/wishlists/:uuid/share` — create the public share token (or return the existing one) → `{ token }`. List responses include `share_token`.
+- `DELETE /api/gifts/wishlists/:uuid/share` — revoke; the old link stops working.
+
+### Public wishlists (`/api/public/wishlists`) — no auth
+- `GET /:token` — `{ wishlist: { name, first_name, last_name, avatar }, items: [{ id, title, description, url, price, image }] }`. Only open (unfulfilled) items.
+- `GET /:token/image?item=ID` or `?avatar=1` — serves the uploaded product image of an open item on this list, or the owner's avatar. External image URLs are returned as-is in `image`.
+- Rate limit: 120 req/min per IP.
+
 ### Books (`/api/books`)
 Photo book generation. Books are definitions stored in `book_jobs`; the HTML preview is rendered client-side from `/data`, and PDF is produced via browser print (`window.print()` with `@media print` CSS). No server-side PDF generation.
 
