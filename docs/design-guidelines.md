@@ -299,6 +299,19 @@ listRowHtml({
 
 **Do NOT** re-implement this layout in a new page. If the shape differs slightly, add a modifier class (e.g. `.mg-author-row` tightens padding) rather than forking the base layout.
 
+### 35. Clickable cards: one tap target
+When a card or row opens a detail modal, **the whole card opens it** — no hidden inner click zones that do something else. Truncated text (description, notes) is a one-line preview only; the full text lives in the detail modal, so don't make the preview expandable in place.
+- Only explicit controls may intercept the click: the `⋯` dropdown, real links (`<a>`), and buttons. Guard with `e.target.closest('.dropdown, a, button')`.
+- Avoid `title=""` tooltips on previews whose full text is one tap away.
+- Example: wishlist items (`.gift-card-clickable`) → product detail modal.
+
+### 36. Closing a modal must not reload the page behind it
+A modal that was only **viewed** (or cancelled) must leave the page untouched — re-rendering resets the scroll position and the user loses their place.
+- Modals track a `changed` flag and only notify the page (e.g. `document.dispatchEvent(new CustomEvent('product-updated'))`) after an actual write: save, delete, image upload, added/removed link.
+- Pages listening for such events reload with `reloadKeepingScroll(fn)` from [utils/scroll.js](../frontend/js/utils/scroll.js), which holds the page height during the re-render and restores the scroll position.
+- Don't refresh the same list twice (direct call + event) — let the event drive it.
+- Current consumers: `product-detail-modal.js`, `showProductEditModal()` → `/gifts/wishlists`, `/gifts/products`.
+
 ## i18n
 
 ### Usage

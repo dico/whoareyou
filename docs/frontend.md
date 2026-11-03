@@ -141,6 +141,7 @@ Standalone read-only page for share links created from `/gifts/wishlists` (the "
 | `utils/drop-zone.js` | `enableDropZone(el, onFiles, opts)` | Drag-and-drop + paste for files. `{ acceptDocuments: true }` for non-image files, `{ paste: false }` to ignore pasted images (e.g. a whole feed area with comment fields) |
 | `utils/datepicker.js` | Auto-init (MutationObserver), `attachDatePicker(input, overrides)` | Replaces `<input type="date">` with flatpickr. Locale-aware (dd.mm.yyyy for nb). No manual calls needed. `attachDatePicker()` is for custom UIs that need other flatpickr options (the composer date chip uses `allowInput: false` + `static: true` so it works inside a modal without the mobile keyboard). |
 | `utils/visibility.js` | `toggleVisibilityBtn()` | Shared/private pill toggle handler |
+| `utils/scroll.js` | `reloadKeepingScroll(fn)` | Background re-render without losing the scroll position (holds page height, restores `scrollY`). Use when a modal event refreshes the page behind — see [design-guidelines.md](design-guidelines.md) rule 36 |
 
 ## Patterns
 

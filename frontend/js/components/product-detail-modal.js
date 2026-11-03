@@ -22,9 +22,14 @@ export async function showProductDetailModal(productUuid) {
   `);
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
+  // Only tell the page behind to reload when this modal changed something
+  // (delete, new image). Just viewing must not re-render the page — it
+  // would lose the scroll position. Edits go through the edit modal, which
+  // sends its own event.
+  let changed = false;
   modalEl.addEventListener('hidden.bs.modal', () => {
     modalEl.remove();
-    document.dispatchEvent(new CustomEvent('product-updated'));
+    if (changed) document.dispatchEvent(new CustomEvent('product-updated'));
   }, { once: true });
   modal.show();
 
@@ -117,6 +122,7 @@ export async function showProductDetailModal(productUuid) {
       const { confirmDialog } = await import('./dialogs.js');
       if (await confirmDialog(t('gifts.deleteProductConfirm'), { title: t('gifts.deleteProduct'), confirmText: t('common.delete') })) {
         await api.delete(`/gifts/products/${productUuid}`);
+        changed = true;
         modal.hide();
       }
     });
@@ -146,6 +152,7 @@ export async function showProductDetailModal(productUuid) {
             await uploadImage(new File([blob], `drop.${ext}`, { type: blob.type }));
           } catch {
             await api.put(`/gifts/products/${productUuid}`, { image_url: imgUrl });
+            changed = true;
             updatePreview(imgUrl);
           }
         }
@@ -163,6 +170,7 @@ export async function showProductDetailModal(productUuid) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
+        changed = true;
         updatePreview(authUrl(data.image_url));
       } catch { /* silent */ }
     }

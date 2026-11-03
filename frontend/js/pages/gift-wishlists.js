@@ -6,6 +6,7 @@ import { giftSubNav } from './gifts.js';
 import { createProductPicker } from '../components/product-picker.js';
 import { showProductDetailModal } from '../components/product-detail-modal.js';
 import { giftContactLinkAttrs } from '../components/contact-gift-modal.js';
+import { reloadKeepingScroll } from '../utils/scroll.js';
 
 export async function renderGiftWishlists() {
   const content = document.getElementById('app-content');
@@ -22,8 +23,9 @@ export async function renderGiftWishlists() {
     </div>
   `;
 
-  // Reload when a product is edited from detail modal
-  const handler = () => loadWishlists();
+  // Reload when a product is edited from detail modal — keep the scroll
+  // position, the re-render briefly collapses the list
+  const handler = () => reloadKeepingScroll(loadWishlists);
   document.addEventListener('product-updated', handler);
   // Clean up on navigation (page re-render)
   const observer = new MutationObserver(() => {
@@ -196,7 +198,7 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
           <div class="gift-card-title">${esc(item.title)}</div>
           ${(() => {
             const desc = item.notes || item.product_description;
-            return desc ? `<div class="gift-card-desc text-muted" title="${esc(desc)}">${esc(desc)}</div>` : '';
+            return desc ? `<div class="gift-card-desc text-muted">${esc(desc)}</div>` : '';
           })()}
         </div>
         <div class="gift-card-end">
@@ -295,17 +297,9 @@ async function loadWishlistItems(wishlistUuid, contactUuid) {
     // Click on card opens product detail
     container.querySelectorAll('.gift-card-clickable').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.dropdown') || e.target.closest('a') || e.target.closest('.gift-card-desc')) return;
+        if (e.target.closest('.dropdown, a, button')) return;
         const productUuid = card.dataset.productUuid;
         if (productUuid) showProductDetailModal(productUuid);
-      });
-    });
-
-    // Click on description toggles expand/collapse in place
-    container.querySelectorAll('.gift-card-desc').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        el.classList.toggle('expanded');
       });
     });
   } catch (err) {

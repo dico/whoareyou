@@ -394,12 +394,7 @@ details[open] > .gift-ideas-label::before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
   margin-top: 1px;
-}
-
-.gift-card-desc.expanded {
-  white-space: normal;
 }
 
 .gift-card-end {

@@ -5,6 +5,7 @@ import { attachPriceInput, readPriceInput } from '../utils/price-input.js';
 import { authUrl } from '../utils/auth-url.js';
 import { giftSubNav } from './gifts.js';
 import { showProductDetailModal } from '../components/product-detail-modal.js';
+import { reloadKeepingScroll } from '../utils/scroll.js';
 
 export async function renderGiftProducts() {
   const content = document.getElementById('app-content');
@@ -33,7 +34,7 @@ export async function renderGiftProducts() {
   // Reload when product is updated from detail/edit modal
   const onUpdate = () => {
     if (document.getElementById('products-list')) {
-      loadProducts(document.getElementById('product-search')?.value?.trim() || '');
+      reloadKeepingScroll(() => loadProducts(document.getElementById('product-search')?.value?.trim() || ''));
     }
   };
   document.addEventListener('product-updated', onUpdate);
@@ -248,6 +249,7 @@ export async function showProductEditModal(productUuid) {
         const blob = await resp.blob();
         if (!blob.type.startsWith('image/')) {
           // Try saving URL as external image instead
+          markProductChanged(mid);
           await api.put(`/gifts/products/${productUuid}`, { image_url: imgUrl });
           const preview = document.getElementById(`${mid}-preview`);
           if (preview) preview.outerHTML = `<img src="${escapeHtml(imgUrl)}" alt="" class="product-edit-preview" id="${mid}-preview">`;
@@ -261,6 +263,7 @@ export async function showProductEditModal(productUuid) {
         dropzone.style.opacity = '';
       } catch {
         // Fetch failed (CORS) — save as external URL
+        markProductChanged(mid);
         await api.put(`/gifts/products/${productUuid}`, { image_url: imgUrl });
         const preview = document.getElementById(`${mid}-preview`);
         if (preview) preview.outerHTML = `<img src="${escapeHtml(imgUrl)}" alt="" class="product-edit-preview" id="${mid}-preview">`;
@@ -278,6 +281,7 @@ export async function showProductEditModal(productUuid) {
   document.getElementById(`${mid}-links`).addEventListener('click', async (e) => {
     const btn = e.target.closest('.product-link-delete');
     if (!btn) return;
+    markProductChanged(mid);
     await api.delete(`/gifts/products/links/${btn.dataset.linkId}`);
     btn.closest('.product-link-row').remove();
   });
@@ -289,6 +293,7 @@ export async function showProductEditModal(productUuid) {
     if (!url) return;
 
     try {
+      markProductChanged(mid);
       const { id } = await api.post(`/gifts/products/${productUuid}/links`, {
         store_name: getDomain(url), url,
       });
@@ -326,6 +331,7 @@ export async function showProductEditModal(productUuid) {
           if (selected.description) document.getElementById(`${mid}-desc`).value = meta.description;
           if (selected.price) document.getElementById(`${mid}-price`).value = formatNumber(Math.round(meta.price));
           if (selected.image_url) {
+            markProductChanged(mid);
             api.put(`/gifts/products/${productUuid}`, { image_url: meta.image_url });
             const preview = document.getElementById(`${mid}-preview`);
             if (preview) {
@@ -346,6 +352,7 @@ export async function showProductEditModal(productUuid) {
     try {
       // Use first link as product URL
       const firstLink = document.querySelector(`#${mid}-links .product-link-row a`);
+      markProductChanged(mid);
       await api.put(`/gifts/products/${productUuid}`, {
         name: document.getElementById(`${mid}-name`).value.trim(),
         description: document.getElementById(`${mid}-desc`).value.trim() || null,
@@ -371,14 +378,16 @@ export async function showProductEditModal(productUuid) {
 
   modalEl.addEventListener('hidden.bs.modal', () => {
     modalEl.remove();
-    // Refresh product list when closing edit modal
-    if (document.getElementById('products-list')) {
-      loadProducts(document.getElementById('product-search')?.value?.trim() || '');
-    }
-    // Notify other pages (wishlists, planning, etc.) that a product changed
-    document.dispatchEvent(new CustomEvent('product-updated'));
+    // Notify pages (product list, wishlists, planning …) — only if something
+    // was saved; cancelling must not re-render the page behind (scroll position).
+    if (modalEl.dataset.changed) document.dispatchEvent(new CustomEvent('product-updated'));
   }, { once: true });
   modal.show();
+}
+
+function markProductChanged(mid) {
+  const el = document.getElementById(mid);
+  if (el) el.dataset.changed = '1';
 }
 
 async function uploadProductImage(productUuid, file, mid) {
@@ -396,6 +405,7 @@ async function uploadProductImage(productUuid, file, mid) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Upload failed');
+    markProductChanged(mid);
 
     if (errorEl) errorEl.classList.add('d-none');
     const preview = document.getElementById(`${mid}-preview`);
