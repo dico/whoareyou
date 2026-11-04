@@ -103,6 +103,7 @@ export async function generateNotificationsForTenant(tenantId) {
 
   for (const ann of anniversaries) {
     const years = today.getFullYear() - new Date(ann.event_date).getFullYear();
+    if (years < 1) continue; // happened this year — nothing to commemorate yet
     for (const user of users) {
       const existing = await db('notifications')
         .where({ user_id: user.id, tenant_id: tenantId, type: 'anniversary' })

@@ -1,3 +1,4 @@
+import { anniversaryText } from './notification-text.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { db } from '../db.js';
@@ -326,10 +327,7 @@ function renderDigest(user, notifications, lang, attachments = [], memoryPosts =
 
 function renderTextLine(n) {
   if (n.type === 'birthday') return `${n.title} har bursdag i dag`;
-  if (n.type === 'anniversary') {
-    const parts = (n.body || '').split('|');
-    return `${n.title} — ${parts[1] || ''} (${parts[2] || ''} år)`;
-  }
+  if (n.type === 'anniversary') return anniversaryText(n);
   if (n.type === 'memory') {
     const parts = (n.body || '').split('|');
     const count = parseInt(parts[0], 10) || 1;

@@ -312,6 +312,14 @@ A modal that was only **viewed** (or cancelled) must leave the page untouched �
 - Don't refresh the same list twice (direct call + event) — let the event drive it.
 - Current consumers: `product-detail-modal.js`, `showProductEditModal()` → `/gifts/wishlists`, `/gifts/products`.
 
+### 37. Element IDs and JS-only menu items
+The navbar stays in the DOM on every page, so a page element with the same `id` silently loses: `getElementById()` returns the navbar element (first in the DOM), the handler lands there, and the page element gets nothing. (Real bug: contact profile «Varsler» used `btn-notifications` — the bell's id — so the menu item reloaded the page and the bell opened the contact modal.)
+- **Reserved shell IDs — never reuse:** `app`, `app-content`, `btn-logout`, `btn-mark-all-read`, `btn-notifications`, `navbar-search`, `navbar-search-results`, `notification-count`, `notification-dropdown`, `notification-list`. Check `navbar.js` / `index.html` when adding to the shell, and update this list.
+- **Prefix page IDs with the page or component:** `contact-…`, `wl-…`, `composer-…` — not generic names like `btn-edit`, `btn-save`, `search-input`. Before adding an id, grep `frontend/js` and `index.html` for it.
+- **Dynamic modals** build every id from a unique prefix: `const mid = 'name-' + Date.now()` → `${mid}-save`, `${mid}-body`. Two open modals (or a modal and the page) can then never collide.
+- **Prefer scoped lookups** for page elements: `content.querySelector('#…')` or `modalEl.querySelector('[data-action="…"]')` instead of `document.getElementById()` — a scoped lookup finds the page's own element even if the id is duplicated elsewhere.
+- **Menu items that only run JS are buttons:** `<button type="button" class="dropdown-item">`, not `<a href="#">`. If the handler is missing or attached to the wrong element, a button does nothing; `href="#"` navigates and the SPA reloads the page, hiding the real cause. Use `<a href>` only for real navigation.
+
 ## i18n
 
 ### Usage

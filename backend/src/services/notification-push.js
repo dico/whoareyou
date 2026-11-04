@@ -1,3 +1,4 @@
+import { anniversaryText, anniversaryEventType } from './notification-text.js';
 import webpush from 'web-push';
 import { db } from '../db.js';
 import { getSetting, setSetting } from '../utils/settings.js';
@@ -85,9 +86,8 @@ export function payloadFromNotification(n) {
     title = `🎂 ${n.title}`;
     body = 'har bursdag i dag';
   } else if (n.type === 'anniversary') {
-    const parts = (n.body || '').split('|');
-    title = `💝 ${n.title}`;
-    body = `${parts[1] || ''} — ${parts[2] || ''} år`;
+    title = `${anniversaryEventType(n) === 'passed_away' ? '🕯️' : '💝'} ${n.title}`;
+    body = anniversaryText(n);
   } else if (n.type === 'reminder') {
     title = `🔔 ${n.title}`;
   } else if (n.type === 'memory') {

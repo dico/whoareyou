@@ -135,7 +135,7 @@ List, mark-read, generate (birthdays, anniversaries, reminders, memories). Notif
 | Type | `body` format |
 |------|---------------|
 | `birthday` | `{contact_uuid}` |
-| `anniversary` | `{contact_uuid}\|{event_type}\|{years}` |
+| `anniversary` | `{contact_uuid}\|{event_type}\|{years}` — rendered as a per-type sentence ("Det er 12 år siden X gikk bort"): in-app via `notifications.anniversaryByType.*` in the locales, e-mail/push via [services/notification-text.js](../backend/src/services/notification-text.js) (keep in sync). Custom types fall back to `notifications.anniversary`. Not generated in the event's own year (years < 1). |
 | `reminder` | `{contact_uuid?}` |
 | `memory` | `{count}\|{thumbnail_path}\|{post_uuid}` — `title` = years ago |
 | `family_post` | `{post_uuid}\|{thumbnail_path?}` |

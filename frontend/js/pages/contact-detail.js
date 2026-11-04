@@ -27,13 +27,14 @@ export async function renderContactDetail(uuid) {
           <div class="dropdown">
             <button class="btn btn-link" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
             <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-              <li><a class="dropdown-item" href="#" id="btn-edit"><i class="bi bi-pencil me-2"></i>${t('contacts.edit')}</a></li>
-              <li><a class="dropdown-item" href="#" id="btn-toggle-fav">
+              <li><button type="button" class="dropdown-item" id="btn-edit"><i class="bi bi-pencil me-2"></i>${t('contacts.edit')}</button></li>
+              <li><button type="button" class="dropdown-item" id="btn-toggle-fav">
                 <i class="bi bi-star${contact.is_favorite ? '-fill' : ''} me-2"></i>
                 ${contact.is_favorite ? t('contacts.removeFromFavorites') : t('contacts.addToFavorites')}
-              </a></li>
+              </button></li>
+              <li><button type="button" class="dropdown-item" id="btn-contact-notifications"><i class="bi bi-bell me-2"></i>${t('notifications.contactMenu')}</button></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item text-danger" href="#" id="btn-delete"><i class="bi bi-trash me-2"></i>${t('contacts.delete')}</a></li>
+              <li><button type="button" class="dropdown-item text-danger" id="btn-delete"><i class="bi bi-trash me-2"></i>${t('contacts.delete')}</button></li>
             </ul>
           </div>
         </div>
@@ -364,6 +365,20 @@ export async function renderContactDetail(uuid) {
       e.preventDefault();
       await api.put(`/contacts/${uuid}`, { is_favorite: !contact.is_favorite });
       renderContactDetail(uuid);
+    });
+
+    document.getElementById('btn-contact-notifications').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const { openContactNotificationModal } = await import('../components/contact-notification-modal.js');
+      const primary = contact.photos.find(p => p.is_primary) || contact.photos[0];
+      openContactNotificationModal({
+        contact: {
+          uuid,
+          first_name: contact.first_name,
+          last_name: contact.last_name,
+          avatar: primary?.thumbnail_path || null,
+        },
+      });
     });
 
     document.getElementById('btn-delete').addEventListener('click', async (e) => {

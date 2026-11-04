@@ -149,10 +149,18 @@ export function renderNavbar() {
         if (n.type === 'birthday') {
           title = t('notifications.birthday', { name: n.title });
         } else if (n.type === 'anniversary') {
-          const parts = (n.body || '').split('|');
-          const eventType = parts[1] || '';
-          const years = parts[2] || '';
-          title = t('notifications.anniversary', { name: n.title, event: t('lifeEvents.types.' + eventType), years });
+          const [, eventType = '', years = ''] = (n.body || '').split('|');
+          const params = { name: n.title, years: t(years === '1' ? 'notifications.yearOne' : 'notifications.yearMany', { years }) };
+          // Per-type sentence ("Det er 12 år siden X gikk bort"); custom
+          // (user-named) types fall back to the generic template.
+          const typedKey = `notifications.anniversaryByType.${eventType}`;
+          const typeKey = `lifeEvents.types.${eventType}`;
+          title = t(typedKey, params);
+          if (title === typedKey) {
+            const label = t(typeKey);
+            title = t('notifications.anniversary', { ...params, event: label === typeKey ? eventType : label });
+          }
+          if (eventType === 'passed_away') avatarHtml = `<div class="notification-icon"><i class="bi bi-flower1"></i></div>`;
         } else if (n.type === 'memory') {
           const [count, thumb] = (n.body || '').split('|');
           const years = parseInt(n.title, 10);
