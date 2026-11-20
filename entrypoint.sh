@@ -17,7 +17,7 @@ fi
 
 echo "Running database migrations..."
 cd /app/backend
-npx knex migrate:latest
+node node_modules/knex/bin/cli.js migrate:latest
 
 echo "Starting Nginx..."
 nginx
