@@ -1490,7 +1490,7 @@ async function showLifeEventDialog(contactUuid, existingEvent, onDone) {
       const payload = {
         event_type_id: selectedTypeId,
         event_date: date,
-        description: document.getElementById(`${id}-desc`).value.trim() || undefined,
+        description: document.getElementById(`${id}-desc`).value.trim() || null, // null clears on edit
         remind_annually: document.getElementById(`${id}-remind`).checked,
         linked_contact_uuids: linkedContacts.map(c => c.uuid),
       };

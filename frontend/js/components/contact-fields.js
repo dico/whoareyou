@@ -275,7 +275,7 @@ function attachFieldHandlers(row, contactUuid) {
         const { field } = await api.put(`/contacts/${contactUuid}/fields/${fieldId}`, {
           field_type_id: fieldTypeId,
           value,
-          label: label || undefined,
+          label: label || null, // null clears; undefined would be dropped from the JSON and keep the old label
         });
 
         // Replace row

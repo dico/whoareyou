@@ -320,6 +320,12 @@ The navbar stays in the DOM on every page, so a page element with the same `id` 
 - **Prefer scoped lookups** for page elements: `content.querySelector('#…')` or `modalEl.querySelector('[data-action="…"]')` instead of `document.getElementById()` — a scoped lookup finds the page's own element even if the id is duplicated elsewhere.
 - **Menu items that only run JS are buttons:** `<button type="button" class="dropdown-item">`, not `<a href="#">`. If the handler is missing or attached to the wrong element, a button does nothing; `href="#"` navigates and the SPA reloads the page, hiding the real cause. Use `<a href>` only for real navigation.
 
+### 38. Clearing an optional field on edit: send `null`, never `undefined`
+`JSON.stringify` drops `undefined` keys, and PUT routes treat a missing key as "not changed" (`if (req.body.x !== undefined) …`). So `label: label || undefined` in an **edit** form means an emptied field is never sent and the old value comes back after save.
+- **Edit (PUT):** `field: value || null` — the backend stores `null` and the field is cleared.
+- **Create (POST):** `|| undefined` is fine (nothing to clear), but `|| null` works too — prefer it in forms shared by create and edit.
+- Fixed instances: contact field label (`contact-fields.js`), life event description (`contact-detail.js`).
+
 ## i18n
 
 ### Usage
