@@ -11,6 +11,7 @@ import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { ageAt, ageLabel } from '../utils/age.js';
+import { attachAddressPaste } from '../utils/address-paste.js';
 
 export async function renderContactDetail(uuid) {
   const content = document.getElementById('app-content');
@@ -788,6 +789,11 @@ export async function renderContactDetail(uuid) {
     document.getElementById('btn-add-address')?.addEventListener('click', () => {
       document.getElementById('address-add-form').classList.toggle('d-none');
     });
+    attachAddressPaste(
+      document.getElementById('addr-street'),
+      document.getElementById('addr-postal'),
+      document.getElementById('addr-city'),
+    );
     document.getElementById('addr-cancel')?.addEventListener('click', () => {
       document.getElementById('address-add-form').classList.add('d-none');
     });
@@ -2448,6 +2454,11 @@ async function showEditAddressDialog(contactUuid, addr, onDone) {
   document.body.insertAdjacentHTML('beforeend', html);
   const modalEl = document.getElementById(id);
   const modal = new bootstrap.Modal(modalEl);
+  attachAddressPaste(
+    modalEl.querySelector(`#${id}-street`),
+    modalEl.querySelector(`#${id}-postal`),
+    modalEl.querySelector(`#${id}-city`),
+  );
 
   document.getElementById(`${id}-form`).addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -145,6 +145,7 @@ Standalone read-only page for share links created from `/gifts/wishlists` (the "
 | `utils/datepicker.js` | Auto-init (MutationObserver), `attachDatePicker(input, overrides)` | Replaces `<input type="date">` with flatpickr. Locale-aware (dd.mm.yyyy for nb). No manual calls needed. `attachDatePicker()` is for custom UIs that need other flatpickr options (the composer date chip uses `allowInput: false` + `static: true` so it works inside a modal without the mobile keyboard). |
 | `utils/visibility.js` | `toggleVisibilityBtn()` | Shared/private pill toggle handler |
 | `utils/age.js` | `ageAt()`, `ageLabel(contact)`, `ageHtml(contact)` | The only place to show a contact's age. Stops at `deceased_date` («† 2015 · ble 96 år», flower icon) instead of counting on. Used by contact cards, group members, profile (year-only) and the family tree. Birthday notifications and «upcoming birthdays» skip deceased contacts in the backend. |
+| `utils/address-paste.js` | `parseAddress(text)`, `attachAddressPaste(street, postal, city)` | Pasting a full address («Karl Johans vei 49, 7100 Rissa», line breaks, or a trailing country) into the street field fills postal code and city. Ordinary pastes are left alone. Used by the add and edit address forms on the contact profile. |
 | `utils/scroll.js` | `reloadKeepingScroll(fn)` | Background re-render without losing the scroll position (holds page height, restores `scrollY`). Use when a modal event refreshes the page behind — see [design-guidelines.md](design-guidelines.md) rule 36 |
 
 ## Patterns
