@@ -33,6 +33,7 @@ export async function generateNotificationsForTenant(tenantId) {
     .whereNull('deleted_at')
     .whereNotNull('birth_day')
     .whereNotNull('birth_month')
+    .whereNull('deceased_date') // no "Gratulér med dagen" for people who have passed away
     .select('id', 'uuid', 'first_name', 'last_name', 'birth_day', 'birth_month', 'birth_year');
 
   for (const contact of contacts) {

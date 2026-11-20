@@ -27,6 +27,7 @@ Reusable UI building blocks. Check here before creating new patterns.
 | `visibilityPickerHtml()` / `attachVisibilityPicker()` / `visibilityIconHtml()` / `visibilityMenuItemsHtml()` / `loadMyCircles()` / `invalidateCircles()` | `visibility-picker.js` | Post visibility dropdown (Alle / Familie / Bare meg, then one entry per circle the user is in under a «Kretser» header) with a hint line per option. `attachVisibilityPicker(el).value()` returns `{ visibility, circle_uuid? }` ready to spread into the POST body. Used by the post composer. `visibilityMenuItemsHtml()` builds the same options for the post `…` menu; `visibilityIconHtml(post)` renders the header icon (circle posts show a badge with the circle name). Circles come from `GET /api/circles/mine`, cached per login session — call `invalidateCircles()` after changing circles. |
 | `renderContactFields()` | `contact-fields.js` | Contact info fields grouped by category (contact, web, social). |
 | `openContactNotificationModal({ contact, onSaved })` | `contact-notification-modal.js` | Per-contact notification overrides (follow rule / always / never per type), with a «Ingen varsler om denne personen» shortcut that sets every type to never. Used from `/settings/notifications` («Spesifikke kontakter», add + edit) and the contact profile ⋯ menu («Varsler»). `contact: null` shows a contact search first. Also exports the shared type label/icon/colour maps. |
+| `attachGroupSearch()` / `attachParentPicker()` / `openCreateGroupDialog()` / `openMoveGroupHereDialog()` | `group-picker.js` | Group hierarchy UI. Inline group search (results below the input, path shown — works inside modals), a parent-group field for forms (chip or search, `getValue()` → uuid or null), the create-group dialog (`parent` presets it, used by the list page and «Ny undergruppe»), and «Flytt eksisterende gruppe hit». Also exports `GROUP_TYPES` / `GROUP_TYPE_ICONS`. |
 | `listRowHtml()` | `list-row.js` | Standardized list row: icon/thumb + title/meta + actions. Used by book list, signage screens, MG author reassignment. Handles dropdown z-index fix once for all consumers. See [design-guidelines.md](design-guidelines.md) rule 34. |
 
 ## Pages (28 files)
@@ -38,13 +39,14 @@ Each page exports a `render*()` function called by the router in `app.js`.
 |------|-------|----------|
 | Timeline | `/`, `/timeline` | `renderTimeline(contactUuid?)` |
 | Contacts | `/contacts` | `renderContacts()` |
+| Contact Overview | `/contacts/overview` | `renderContactOverview()` — filterable table (who: group/label/name/relation/has-or-missing field…, show: own fields or fields of related people such as parents). State lives in `?v=<json>`; the contacts page link carries its filters over as plain params. Header shows «N mangler» per column. Print (`@media print`) and CSV (semicolon + BOM). Phone layout turns rows into cards. Route must stay before `/contacts/:uuid`. |
 | Contact Detail | `/contacts/:uuid` | `renderContactDetail(uuid)`. Also exports `loadGalleryInto()` for reusable photo gallery. |
 | Map | `/map` | `renderMap()` |
 | Address Detail | `/contacts/:uuid/addresses/:id` | `renderAddressDetail(uuid, id)` |
 | Memories | `/memories` | `renderMemories()` — "on this day" view, posts from same MM-DD in earlier years, grouped by year via DOM post-processing |
 | Notification Settings | `/settings/notifications` | `renderNotificationSettings()` — per-user three-layer rules: global per-type scope + three delivery channels (app, push, email), plus per-contact `always`/`never` overrides. Also includes the push-subscription flow (Enable/Test/Disable). Linked from the navbar user dropdown (accessible to all users, not admin-gated). |
-| Groups | `/groups` | `renderCompanies()` — companies, schools, clubs, teams |
-| Group Detail | `/groups/:uuid` | `renderCompanyDetail(uuid)` — members, info/timeline, photos |
+| Groups | `/groups` | `renderCompanies()` — companies, schools, clubs, teams. Browsing shows top-level groups (with subgroup count and members incl. subgroups); search and type filter list every level with its path («Åsly skole › 9A») |
+| Group Detail | `/groups/:uuid` | `renderCompanyDetail(uuid)` — breadcrumb, subgroup cards (drill down; ⋯ «Fjern fra …» moves a subgroup up a level), members, info/timeline, photos. Switch «Vis medlemmer i undergrupper» (default on, remembered in `localStorage` `groups.includeSubgroups`) toggles members, posts and gallery between all and direct. Only direct memberships are editable here; subgroup members show a badge linking to their subgroup. ⋯ menu: edit (incl. parent group), new subgroup, move an existing group here, remove from parent, delete |
 
 ### Gift Pages
 | Page | Route | Function |
@@ -142,6 +144,7 @@ Standalone read-only page for share links created from `/gifts/wishlists` (the "
 | `utils/drop-zone.js` | `enableDropZone(el, onFiles, opts)` | Drag-and-drop + paste for files. `{ acceptDocuments: true }` for non-image files, `{ paste: false }` to ignore pasted images (e.g. a whole feed area with comment fields) |
 | `utils/datepicker.js` | Auto-init (MutationObserver), `attachDatePicker(input, overrides)` | Replaces `<input type="date">` with flatpickr. Locale-aware (dd.mm.yyyy for nb). No manual calls needed. `attachDatePicker()` is for custom UIs that need other flatpickr options (the composer date chip uses `allowInput: false` + `static: true` so it works inside a modal without the mobile keyboard). |
 | `utils/visibility.js` | `toggleVisibilityBtn()` | Shared/private pill toggle handler |
+| `utils/age.js` | `ageAt()`, `ageLabel(contact)`, `ageHtml(contact)` | The only place to show a contact's age. Stops at `deceased_date` («† 2015 · ble 96 år», flower icon) instead of counting on. Used by contact cards, group members, profile (year-only) and the family tree. Birthday notifications and «upcoming birthdays» skip deceased contacts in the backend. |
 | `utils/scroll.js` | `reloadKeepingScroll(fn)` | Background re-render without losing the scroll position (holds page height, restores `scrollY`). Use when a modal event refreshes the page behind — see [design-guidelines.md](design-guidelines.md) rule 36 |
 
 ## Patterns

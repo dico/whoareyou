@@ -1,7 +1,6 @@
 import { api } from '../api/client.js';
 import { navigate } from '../app.js';
 import { t, formatDate } from '../utils/i18n.js';
-import { contactRowHtml } from '../components/contact-row.js';
 import { attachContactSearch } from '../components/contact-search.js';
 import { confirmDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
@@ -9,11 +8,13 @@ import { renderPostList } from '../components/post-list.js';
 import { openPostComposer, composerTriggerHtml, attachComposerTrigger } from '../components/post-composer.js';
 import { showPhotoViewer } from '../components/photo-viewer.js';
 import { loadGalleryInto } from './contact-detail.js';
+import { ageHtml } from '../utils/age.js';
+import {
+  GROUP_TYPES, GROUP_TYPE_ICONS as TYPE_ICONS,
+  attachParentPicker, openCreateGroupDialog, openMoveGroupHereDialog,
+} from '../components/group-picker.js';
 
-const TYPE_ICONS = {
-  company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people',
-  team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection',
-};
+const SUBGROUPS_PREF = 'groups.includeSubgroups';
 
 export async function renderCompanyDetail(uuid) {
   const content = document.getElementById('app-content');
@@ -27,6 +28,11 @@ export async function renderCompanyDetail(uuid) {
     const addMemberLabel = isCompanyType ? t('companies.addEmployee') : t('groups.addMember');
     const endLabel = isCompanyType ? t('companies.endEmployment') : t('groups.endMembership');
     const typeIcon = TYPE_ICONS[company.type] || 'bi-people';
+    const children = company.children || [];
+    const ancestors = company.ancestors || [];
+    const hasSubgroups = children.length > 0;
+    // Show subgroup members too (default on); only meaningful with subgroups
+    let includeSubgroups = hasSubgroups && readPref() !== '0';
 
     const TYPE_COLORS = {
       company: 'linear-gradient(135deg, #3498db, #2980b9)', school: 'linear-gradient(135deg, #27ae60, #2ecc71)',
@@ -35,10 +41,29 @@ export async function renderCompanyDetail(uuid) {
       other: 'linear-gradient(135deg, #7f8c8d, #95a5a6)',
     };
 
-    const hasInfo = company.org_number || company.industry || company.address || company.website || company.phone || company.email || company.notes || (company.latitude && company.longitude);
+    // One entry per person: their direct membership here (editable) and the
+    // subgroups they belong to (shown as badges when listing everyone).
+    const membersFor = (rows, all) => {
+      const byContact = new Map();
+      for (const r of rows) {
+        const isDirect = r.group_uuid === uuid;
+        if (!all && !isDirect) continue;
+        if (!byContact.has(r.uuid)) byContact.set(r.uuid, { ...r, direct: null, groups: [] });
+        const m = byContact.get(r.uuid);
+        if (isDirect) m.direct = r;
+        else if (!m.groups.some(g => g.uuid === r.group_uuid)) m.groups.push({ uuid: r.group_uuid, name: r.group_name });
+      }
+      return [...byContact.values()];
+    };
+    const allMemberCount = membersFor(currentEmployees, true).length;
 
     content.innerHTML = `
       <div class="page-container">
+        <nav class="group-breadcrumb" aria-label="${t('groups.title')}">
+          <a href="/groups" data-link>${t('groups.title')}</a>
+          ${ancestors.map(a => `<i class="bi bi-chevron-right"></i><a href="/groups/${a.uuid}" data-link>${escapeHtml(a.name)}</a>`).join('')}
+          <i class="bi bi-chevron-right"></i><span>${escapeHtml(company.name)}</span>
+        </nav>
         <div class="detail-header-wrap">
           <div class="detail-header glass-card" id="group-header">
             <div class="detail-avatar" id="group-logo-wrap" style="width:56px;height:56px;flex-shrink:0;position:relative;cursor:pointer">
@@ -51,22 +76,25 @@ export async function renderCompanyDetail(uuid) {
             </div>
             <div class="detail-header-info">
               <h3 class="mb-0">${escapeHtml(company.name)}</h3>
-              <span class="text-muted small">${t('groups.types.' + (company.type || 'other'))}${company.parent ? ` · ${t('groups.parentGroup')}: <a href="/groups/${company.parent.uuid}" data-link class="text-muted">${escapeHtml(company.parent.name)}</a>` : ''}${company.description ? ` · ${escapeHtml(company.description)}` : ''}</span>
+              <span class="text-muted small">${t('groups.types.' + (company.type || 'other'))}${company.description ? ` · ${escapeHtml(company.description)}` : ''}</span>
             </div>
             <div class="detail-header-actions">
               <div class="dropdown">
                 <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
                 <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-                  <li><a class="dropdown-item" href="#" id="btn-edit-company"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
+                  <li><button type="button" class="dropdown-item" id="group-btn-edit"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</button></li>
+                  <li><button type="button" class="dropdown-item" id="group-btn-new-sub"><i class="bi bi-plus-lg me-2"></i>${t('groups.newSubgroup')}</button></li>
+                  <li><button type="button" class="dropdown-item" id="group-btn-move-here"><i class="bi bi-box-arrow-in-down-right me-2"></i>${t('groups.moveHere')}</button></li>
+                  ${company.parent ? `<li><button type="button" class="dropdown-item" id="group-btn-move-out"><i class="bi bi-box-arrow-up-left me-2"></i>${t('groups.removeFromParent', { name: escapeHtml(company.parent.name) })}</button></li>` : ''}
                   <li><hr class="dropdown-divider"></li>
-                  <li><a class="dropdown-item text-danger" href="#" id="btn-delete-company"><i class="bi bi-trash me-2"></i>${t('common.delete')}</a></li>
+                  <li><button type="button" class="dropdown-item text-danger" id="group-btn-delete"><i class="bi bi-trash me-2"></i>${t('common.delete')}</button></li>
                 </ul>
               </div>
             </div>
           </div>
           <div class="detail-header-toolbar">
             <div class="filter-tabs" id="group-view-tabs">
-              <button class="filter-tab active" data-view="members"><i class="bi bi-people me-1"></i>${membersLabel} (${currentEmployees.length})</button>
+              <button class="filter-tab active" data-view="members"><i class="bi bi-people me-1"></i>${membersLabel} (<span id="group-member-count"></span>)</button>
               <button class="filter-tab" data-view="info"><i class="bi bi-info-circle me-1"></i>${t('common.info')}</button>
               <button class="filter-tab" data-view="gallery"><i class="bi bi-grid-3x3-gap me-1"></i>${t('groups.photos')}${photos.length ? ` (${photos.length})` : ''}</button>
             </div>
@@ -77,78 +105,44 @@ export async function renderCompanyDetail(uuid) {
         </div>
 
         <div>
-            ${company.children?.length ? `
-            <div class="detail-card glass-card mb-3">
-              <h4><i class="bi bi-diagram-3"></i> ${t('groups.childGroups')}</h4>
-              <div class="address-residents">
-                ${company.children.map(c => `
-                  <a href="/groups/${c.uuid}" data-link class="contact-row">
-                    <div class="contact-row-avatar" style="background:var(--color-text-secondary)">
-                      ${c.logo_path ? `<img src="${authUrl(c.logo_path)}" alt="">` : `<i class="bi ${TYPE_ICONS[c.type] || 'bi-people'}" style="font-size:0.8rem;color:#fff"></i>`}
+            ${hasSubgroups ? `
+            <div class="subgroup-section mb-3">
+              <div class="subgroup-section-head">
+                <span class="text-muted small"><i class="bi bi-diagram-3 me-1"></i>${t('groups.childGroups')}</span>
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" role="switch" id="group-include-subgroups" ${includeSubgroups ? 'checked' : ''}>
+                  <label class="form-check-label small" for="group-include-subgroups">${t('groups.includeSubgroups')}</label>
+                </div>
+              </div>
+              <div class="subgroup-row">
+                ${children.map(c => `
+                  <div class="subgroup-card glass-card">
+                    <a href="/groups/${c.uuid}" data-link class="subgroup-card-link">
+                      <span class="subgroup-card-avatar">
+                        ${c.logo_path ? `<img src="${authUrl(c.logo_path)}" alt="">` : `<i class="bi ${TYPE_ICONS[c.type] || 'bi-people'}"></i>`}
+                      </span>
+                      <span class="subgroup-card-info">
+                        <span class="subgroup-card-name">${escapeHtml(c.name)}</span>
+                        <span class="subgroup-card-meta">${c.member_count} <i class="bi bi-people"></i>${c.subgroup_count ? ` · <i class="bi bi-diagram-3"></i> ${c.subgroup_count}` : ''}</span>
+                      </span>
+                    </a>
+                    <div class="dropdown">
+                      <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown" aria-label="${t('groups.subgroupActions')}"><i class="bi bi-three-dots-vertical"></i></button>
+                      <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+                        <li><button type="button" class="dropdown-item group-btn-detach" data-uuid="${c.uuid}"><i class="bi bi-box-arrow-up-left me-2"></i>${t('groups.removeFromParent', { name: escapeHtml(company.name) })}</button></li>
+                      </ul>
                     </div>
-                    <div class="contact-row-info">
-                      <div class="contact-row-name">${escapeHtml(c.name)}</div>
-                      <div class="contact-row-meta">${t('groups.types.' + (c.type || 'other'))}</div>
-                    </div>
-                  </a>
+                  </div>
                 `).join('')}
+                <button type="button" class="subgroup-card subgroup-card-add" id="group-btn-add-sub">
+                  <i class="bi bi-plus-lg"></i><span>${t('groups.newSubgroup')}</span>
+                </button>
               </div>
             </div>
             ` : ''}
 
             <!-- Members view (default) -->
-            <div id="group-members">
-              ${currentEmployees.length ? `
-                <div class="contacts-list">
-                  ${currentEmployees.map(e => {
-                    const age = e.birth_year ? calcAge(e.birth_year) : null;
-                    return `
-                    <div class="contact-card" style="cursor:default">
-                      <a href="/contacts/${e.uuid}" data-link style="display:flex;align-items:center;gap:var(--space-sm);flex:1;text-decoration:none;min-width:0">
-                        <div class="contact-avatar">
-                          ${e.avatar ? `<img src="${authUrl(e.avatar)}" alt="">` : `<span>${(e.first_name[0] || '') + (e.last_name?.[0] || '')}</span>`}
-                        </div>
-                        <div class="contact-info">
-                          <div class="contact-name">${escapeHtml(e.first_name)} ${escapeHtml(e.last_name || '')}</div>
-                          <div class="contact-meta">${e.title || (age ? `<i class="bi bi-cake2"></i> ${age}` : '')}</div>
-                        </div>
-                      </a>
-                      <div class="contact-badges">
-                        <div class="dropdown">
-                          <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-                          <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
-                            <li><a class="dropdown-item btn-edit-membership" href="#" data-link-id="${e.link_id}" data-title="${escapeHtml(e.title || '')}" data-start="${e.start_date || ''}" data-end="${e.end_date || ''}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</a></li>
-                            <li><a class="dropdown-item btn-end-employment" href="#" data-link-id="${e.link_id}"><i class="bi bi-box-arrow-right me-2"></i>${endLabel}</a></li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>`;
-                  }).join('')}
-                </div>
-              ` : `
-                <div class="empty-state">
-                  <i class="bi bi-people"></i>
-                  <p>${isCompanyType ? t('companies.noEmployees') : t('groups.noMembers')}</p>
-                </div>
-              `}
-
-              ${previousEmployees.length ? `
-                <h5 class="text-muted small mt-4 mb-2"><i class="bi bi-clock-history me-1"></i>${prevMembersLabel}</h5>
-                <div class="contacts-list">
-                  ${previousEmployees.map(e => `
-                    <a href="/contacts/${e.uuid}" data-link class="contact-card">
-                      <div class="contact-avatar">
-                        ${e.avatar ? `<img src="${authUrl(e.avatar)}" alt="">` : `<span>${(e.first_name[0] || '') + (e.last_name?.[0] || '')}</span>`}
-                      </div>
-                      <div class="contact-info">
-                        <div class="contact-name">${escapeHtml(e.first_name)} ${escapeHtml(e.last_name || '')}</div>
-                        <div class="contact-meta">${[e.title, [e.start_date ? formatDate(e.start_date) : '', e.end_date ? formatDate(e.end_date) : ''].filter(Boolean).join(' — ')].filter(Boolean).join(' — ')}</div>
-                      </div>
-                    </a>
-                  `).join('')}
-                </div>
-              ` : ''}
-            </div>
+            <div id="group-members"></div>
 
             <!-- Info view (hidden) — posts + sidebar with details/map -->
             <div id="group-info-section" class="d-none">
@@ -192,86 +186,143 @@ export async function renderCompanyDetail(uuid) {
       </div>
     `;
 
+    // ── Members (direct or incl. subgroups) ──
+    function memberAvatar(e) {
+      return e.avatar ? `<img src="${authUrl(e.avatar)}" alt="">` : `<span>${(e.first_name[0] || '') + (e.last_name?.[0] || '')}</span>`;
+    }
+    function subgroupBadges(m) {
+      return m.groups.map(g => `<a href="/groups/${g.uuid}" data-link class="badge bg-light text-muted badge-sm subgroup-badge">${escapeHtml(g.name)}</a>`).join('');
+    }
+
+    function renderMembers() {
+      const current = membersFor(currentEmployees, includeSubgroups);
+      const previous = membersFor(previousEmployees, includeSubgroups)
+        .filter(p => !current.some(c => c.uuid === p.uuid));
+      document.getElementById('group-member-count').textContent = current.length;
+
+      document.getElementById('group-members').innerHTML = `
+        ${current.length ? `
+          <div class="contacts-list">
+            ${current.map(m => {
+              const d = m.direct;
+              return `
+              <div class="contact-card" style="cursor:default">
+                <a href="/contacts/${m.uuid}" data-link style="display:flex;align-items:center;gap:var(--space-sm);flex:1;text-decoration:none;min-width:0">
+                  <div class="contact-avatar">${memberAvatar(m)}</div>
+                  <div class="contact-info">
+                    <div class="contact-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name || '')}</div>
+                    <div class="contact-meta">${(d?.title ? escapeHtml(d.title) : '') || ageHtml(m)}</div>
+                  </div>
+                </a>
+                <div class="contact-badges">
+                  ${includeSubgroups ? subgroupBadges(m) : ''}
+                  ${d ? `
+                  <div class="dropdown">
+                    <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
+                      <li><button type="button" class="dropdown-item btn-edit-membership" data-link-id="${d.link_id}" data-title="${escapeHtml(d.title || '')}" data-start="${d.start_date || ''}" data-end="${d.end_date || ''}"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</button></li>
+                      <li><button type="button" class="dropdown-item btn-end-employment" data-link-id="${d.link_id}"><i class="bi bi-box-arrow-right me-2"></i>${endLabel}</button></li>
+                    </ul>
+                  </div>` : ''}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        ` : `
+          <div class="empty-state">
+            <i class="bi bi-people"></i>
+            <p>${isCompanyType ? t('companies.noEmployees') : t('groups.noMembers')}</p>
+          </div>
+        `}
+
+        ${previous.length ? `
+          <h5 class="text-muted small mt-4 mb-2"><i class="bi bi-clock-history me-1"></i>${prevMembersLabel}</h5>
+          <div class="contacts-list">
+            ${previous.map(m => {
+              const e = m.direct || m;
+              return `
+              <a href="/contacts/${m.uuid}" data-link class="contact-card">
+                <div class="contact-avatar">${memberAvatar(m)}</div>
+                <div class="contact-info">
+                  <div class="contact-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name || '')}</div>
+                  <div class="contact-meta">${[e.title ? escapeHtml(e.title) : '', [e.start_date ? formatDate(e.start_date) : '', e.end_date ? formatDate(e.end_date) : ''].filter(Boolean).join(' — ')].filter(Boolean).join(' — ')}</div>
+                </div>
+                ${includeSubgroups && m.groups.length ? `<div class="contact-badges">${m.groups.map(g => `<span class="badge bg-light text-muted badge-sm">${escapeHtml(g.name)}</span>`).join('')}</div>` : ''}
+              </a>`;
+            }).join('')}
+          </div>
+        ` : ''}
+      `;
+    }
+    renderMembers();
+
+    const membersEl = document.getElementById('group-members');
+    membersEl.addEventListener('click', async (e) => {
+      const endBtn = e.target.closest('.btn-end-employment');
+      if (endBtn) {
+        await api.put(`/companies/employees/${endBtn.dataset.linkId}`, { end_date: new Date().toISOString().split('T')[0] });
+        renderCompanyDetail(uuid);
+        return;
+      }
+      const editBtn = e.target.closest('.btn-edit-membership');
+      if (editBtn) showEditMembershipDialog(editBtn, isCompanyType, () => renderCompanyDetail(uuid));
+    });
+
+    // Toggle: everyone incl. subgroups ↔ direct members only
+    let postsLoaded = false;
+    let galleryLoaded = false;
+    document.getElementById('group-include-subgroups')?.addEventListener('change', (e) => {
+      includeSubgroups = e.target.checked;
+      writePref(includeSubgroups ? '1' : '0');
+      renderMembers();
+      if (postsLoaded) loadGroupPosts();
+      if (galleryLoaded) loadGallery();
+    });
+
     // Add employee/member
     document.getElementById('btn-add-employee').addEventListener('click', () => {
       showAddEmployeeDialog(uuid, isCompanyType, () => renderCompanyDetail(uuid));
     });
 
-    // End employment/membership
-    document.querySelectorAll('.btn-end-employment').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        await api.put(`/companies/employees/${btn.dataset.linkId}`, { end_date: new Date().toISOString().split('T')[0] });
+    // ── Hierarchy actions ──
+    const self = { uuid, name: company.name };
+    const newSub = () => openCreateGroupDialog({ parent: self, type: company.type });
+    document.getElementById('group-btn-new-sub').addEventListener('click', newSub);
+    document.getElementById('group-btn-add-sub')?.addEventListener('click', newSub);
+    document.getElementById('group-btn-move-here').addEventListener('click', () => {
+      openMoveGroupHereDialog({
+        target: self,
+        // Can't move this group or one above it under itself
+        excludeUuids: [uuid, ...ancestors.map(a => a.uuid), ...children.map(c => c.uuid)],
+        onMoved: () => renderCompanyDetail(uuid),
+      });
+    });
+    // Moving out goes up one level (to the grandparent, or top level)
+    document.getElementById('group-btn-move-out')?.addEventListener('click', async () => {
+      const grandparent = ancestors[ancestors.length - 2] || null;
+      await api.put(`/companies/${uuid}`, { parent_uuid: grandparent?.uuid || null });
+      renderCompanyDetail(uuid);
+    });
+    content.querySelectorAll('.group-btn-detach').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api.put(`/companies/${btn.dataset.uuid}`, { parent_uuid: company.parent?.uuid || null });
         renderCompanyDetail(uuid);
       });
     });
 
-    // Edit membership (title, dates)
-    document.querySelectorAll('.btn-edit-membership').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const linkId = btn.dataset.linkId;
-        const mid = 'edit-member-' + Date.now();
-        const titleLabel = isCompanyType ? t('companies.jobTitle') : t('companies.role');
-        document.body.insertAdjacentHTML('beforeend', `
-          <div class="modal fade" id="${mid}" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-              <div class="modal-content glass-card">
-                <div class="modal-header">
-                  <h5 class="modal-title">${t('common.edit')}</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                  <div class="form-floating mb-3">
-                    <input type="text" class="form-control" id="${mid}-title" value="${escapeHtml(btn.dataset.title)}">
-                    <label>${titleLabel}</label>
-                  </div>
-                  <div class="d-flex gap-2">
-                    <div class="flex-fill">
-                      <label class="form-label small text-muted">${t('common.since')}</label>
-                      <input type="date" class="form-control form-control-sm" id="${mid}-start" value="${btn.dataset.start}">
-                    </div>
-                    <div class="flex-fill">
-                      <label class="form-label small text-muted">${t('common.until')}</label>
-                      <input type="date" class="form-control form-control-sm" id="${mid}-end" value="${btn.dataset.end}">
-                    </div>
-                  </div>
-                </div>
-                <div class="modal-footer">
-                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
-                  <button type="button" class="btn btn-primary btn-sm" id="${mid}-save">${t('common.save')}</button>
-                </div>
-              </div>
-            </div>
-          </div>`);
-        const modalEl = document.getElementById(mid);
-        const modal = new bootstrap.Modal(modalEl);
-        document.getElementById(`${mid}-save`).addEventListener('click', async () => {
-          await api.put(`/companies/employees/${linkId}`, {
-            title: document.getElementById(`${mid}-title`).value.trim() || null,
-            start_date: document.getElementById(`${mid}-start`).value || null,
-            end_date: document.getElementById(`${mid}-end`).value || null,
-          });
-          modal.hide();
-          renderCompanyDetail(uuid);
-        });
-        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
-        modal.show();
-      });
-    });
-
     // Edit
-    document.getElementById('btn-edit-company').addEventListener('click', async (e) => {
-      e.preventDefault();
+    document.getElementById('group-btn-edit').addEventListener('click', () => {
       showEditCompanyDialog(uuid, company, () => renderCompanyDetail(uuid));
     });
 
-    // Delete
-    document.getElementById('btn-delete-company').addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (await confirmDialog(t('companies.deleteConfirm', { name: company.name }), { title: t('common.delete'), confirmText: t('common.delete') })) {
+    // Delete — subgroups move up a level, they are not deleted
+    document.getElementById('group-btn-delete').addEventListener('click', async () => {
+      const msg = hasSubgroups
+        ? t('groups.deleteWithSubgroupsConfirm', { name: company.name, count: children.length })
+        : t('companies.deleteConfirm', { name: company.name });
+      if (await confirmDialog(msg, { title: t('common.delete'), confirmText: t('common.delete') })) {
         await api.delete(`/companies/${uuid}`);
-        navigate('/groups');
+        navigate(company.parent ? `/groups/${company.parent.uuid}` : '/groups');
       }
     });
 
@@ -311,8 +362,6 @@ export async function renderCompanyDetail(uuid) {
     headerEl?.addEventListener('drop', (e) => { e.preventDefault(); logoWrap?.classList.remove('avatar-drag-over'); uploadLogo(e.dataTransfer.files[0]); });
 
     // View tabs (members / info / gallery)
-    let postsLoaded = false;
-    let galleryLoaded = false;
     document.getElementById('group-view-tabs')?.addEventListener('click', async (e) => {
       const tab = e.target.closest('.filter-tab');
       if (!tab) return;
@@ -356,20 +405,20 @@ export async function renderCompanyDetail(uuid) {
         reaction_count: 0,
         comment_count: 0,
       }));
-      await loadGalleryInto('group-gallery-grid', `/posts/gallery?company=${uuid}`, uuid, extraPhotos);
+      await loadGalleryInto('group-gallery-grid', `/posts/gallery?company=${uuid}${includeSubgroups ? '&subgroups=1' : ''}`, uuid, extraPhotos);
     }
 
 
     // New post → composer modal (offers "tag all members" when the group has any)
     attachComposerTrigger(document.getElementById('group-composer-trigger'), (extra) => openPostComposer({
-      company: { uuid, name: company.name, memberCount: currentEmployees.length },
+      company: { uuid, name: company.name, memberCount: allMemberCount },
       onPosted: loadGroupPosts,
       ...extra,
     }));
 
     // Load timeline (lazy — loaded on tab switch)
     async function loadGroupPosts() {
-      await renderPostList('group-posts', null, loadGroupPosts, { companyUuid: uuid });
+      await renderPostList('group-posts', null, loadGroupPosts, { companyUuid: uuid, includeSubgroups });
     }
 
     // Map is lazy-loaded when info tab is first shown
@@ -377,6 +426,56 @@ export async function renderCompanyDetail(uuid) {
   } catch (err) {
     content.innerHTML = `<div class="page-container"><div class="alert alert-danger">${err.message}</div></div>`;
   }
+}
+
+function showEditMembershipDialog(btn, isCompanyType, onDone) {
+  const linkId = btn.dataset.linkId;
+  const mid = 'edit-member-' + Date.now();
+  const titleLabel = isCompanyType ? t('companies.jobTitle') : t('companies.role');
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal fade" id="${mid}" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content glass-card">
+          <div class="modal-header">
+            <h5 class="modal-title">${t('common.edit')}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="form-floating mb-3">
+              <input type="text" class="form-control" id="${mid}-title" value="${escapeAttr(btn.dataset.title)}">
+              <label>${titleLabel}</label>
+            </div>
+            <div class="d-flex gap-2">
+              <div class="flex-fill">
+                <label class="form-label small text-muted">${t('common.since')}</label>
+                <input type="date" class="form-control form-control-sm" id="${mid}-start" value="${btn.dataset.start}">
+              </div>
+              <div class="flex-fill">
+                <label class="form-label small text-muted">${t('common.until')}</label>
+                <input type="date" class="form-control form-control-sm" id="${mid}-end" value="${btn.dataset.end}">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+            <button type="button" class="btn btn-primary btn-sm" id="${mid}-save">${t('common.save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>`);
+  const modalEl = document.getElementById(mid);
+  const modal = new bootstrap.Modal(modalEl);
+  document.getElementById(`${mid}-save`).addEventListener('click', async () => {
+    await api.put(`/companies/employees/${linkId}`, {
+      title: document.getElementById(`${mid}-title`).value.trim() || null,
+      start_date: document.getElementById(`${mid}-start`).value || null,
+      end_date: document.getElementById(`${mid}-end`).value || null,
+    });
+    modal.hide();
+    onDone?.();
+  });
+  modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+  modal.show();
 }
 
 async function showAddEmployeeDialog(companyUuid, isCompanyType, onDone) {
@@ -472,7 +571,7 @@ async function showAddEmployeeDialog(companyUuid, isCompanyType, onDone) {
 
 function showEditCompanyDialog(uuid, company, onDone) {
   const id = 'edit-co-' + Date.now();
-  const TYPES = ['company', 'school', 'club', 'team', 'association', 'class', 'other'];
+  const TYPES = GROUP_TYPES;
 
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${id}" tabindex="-1">
@@ -489,6 +588,10 @@ function showEditCompanyDialog(uuid, company, onDone) {
                 <div class="col-4"><div class="form-floating"><select class="form-select" id="${id}-type">${TYPES.map(tp => `<option value="${tp}" ${company.type === tp ? 'selected' : ''}>${t('groups.types.' + tp)}</option>`).join('')}</select><label>${t('groups.type')}</label></div></div>
               </div>
               <div class="form-floating mb-2"><textarea class="form-control" id="${id}-desc" style="height:60px" placeholder="${t('groups.descriptionPlaceholder')}">${escapeHtml(company.description || '')}</textarea><label>${t('groups.description')}</label></div>
+              <div class="mb-2">
+                <label class="form-label small text-muted">${t('groups.parentGroup')} <span class="text-muted">(${t('groups.parentNoneHint')})</span></label>
+                <div id="${id}-parent"></div>
+              </div>
               <div class="d-flex gap-2 mb-2">
                 <div class="form-floating flex-grow-1"><input type="text" class="form-control" id="${id}-org" value="${escapeAttr(company.org_number || '')}" placeholder="123456789"><label>${t('companies.orgNumber')}</label></div>
                 <button type="button" class="btn btn-outline-primary btn-sm align-self-center" id="${id}-brreg" title="${t('companies.brregLookup')}"><i class="bi bi-search"></i> Brreg</button>
@@ -514,6 +617,14 @@ function showEditCompanyDialog(uuid, company, onDone) {
   `);
   const modalEl = document.getElementById(id);
   const modal = new bootstrap.Modal(modalEl);
+  // Excludes this group and its direct subgroups; deeper loops are rejected by the backend
+  const parentPicker = attachParentPicker(document.getElementById(`${id}-parent`), {
+    value: company.parent,
+    excludeUuids: [uuid, ...(company.children || []).map(c => c.uuid)],
+  });
+  modalEl.querySelector('form').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.closest(`#${id}-parent`)) e.preventDefault();
+  });
 
   // Brreg lookup
   document.getElementById(`${id}-brreg`).addEventListener('click', async () => {
@@ -551,7 +662,9 @@ function showEditCompanyDialog(uuid, company, onDone) {
       } catch {}
     }
 
-    await api.put(`/companies/${uuid}`, {
+    try {
+      await api.put(`/companies/${uuid}`, {
+      parent_uuid: parentPicker.getValue(),
       name: document.getElementById(`${id}-name`).value,
       type: document.getElementById(`${id}-type`).value,
       description: document.getElementById(`${id}-desc`).value || null,
@@ -562,7 +675,11 @@ function showEditCompanyDialog(uuid, company, onDone) {
       phone: document.getElementById(`${id}-phone`).value || null,
       email: document.getElementById(`${id}-email`).value || null,
       notes: document.getElementById(`${id}-notes`).value || null,
-    });
+      });
+    } catch (err) {
+      confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+      return;
+    }
     modal.hide();
     if (onDone) onDone();
   });
@@ -571,8 +688,11 @@ function showEditCompanyDialog(uuid, company, onDone) {
   modal.show();
 }
 
-function calcAge(birthYear) {
-  return `${new Date().getFullYear() - birthYear} ${t('contacts.years')}`;
+function readPref() {
+  try { return localStorage.getItem(SUBGROUPS_PREF); } catch { return null; }
+}
+function writePref(v) {
+  try { localStorage.setItem(SUBGROUPS_PREF, v); } catch {}
 }
 
 function safeUrl(url) {

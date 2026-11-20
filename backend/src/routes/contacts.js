@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { db } from '../db.js';
+import { loadGroupTree, descendantIds } from '../utils/group-tree.js';
 import { AppError } from '../utils/errors.js';
 import { validateRequired } from '../utils/validation.js';
 import { config } from '../config/index.js';
@@ -73,8 +74,12 @@ router.get('/', async (req, res, next) => {
     if (req.query.company) {
       const companyRow = await db('companies').where({ uuid: req.query.company, tenant_id: req.tenantId }).first();
       if (companyRow) {
-        // company_active=true limits to current members (no end_date)
-        const memberQuery = db('contact_companies').where({ company_id: companyRow.id });
+        // company_active=true limits to current members (no end_date);
+        // company_subgroups=true also counts members of its subgroups
+        const groupIds = req.query.company_subgroups === 'true'
+          ? descendantIds(await loadGroupTree(req.tenantId), companyRow.id)
+          : [companyRow.id];
+        const memberQuery = db('contact_companies').whereIn('company_id', groupIds);
         if (req.query.company_active === 'true') memberQuery.whereNull('end_date');
         query = query.whereIn('contacts.id', memberQuery.select('contact_id'));
       }
@@ -615,6 +620,7 @@ router.get('/upcoming-birthdays/list', async (req, res, next) => {
       .whereNull('contacts.deleted_at')
       .whereNotNull('contacts.birth_day')
       .whereNotNull('contacts.birth_month')
+      .whereNull('contacts.deceased_date') // no "upcoming birthday" for people who have passed away
       .modify(filterVisibleContacts(req))
       .modify(filterSensitiveContacts(req))
       .select(

@@ -53,7 +53,7 @@ function formatLikeNames(names, count) {
 
 let currentLimit = {};
 
-export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false, companyUuid = null, endpoint = '/posts' } = {}) {
+export async function renderPostList(containerId, contactUuid, onChanged, { loadMore = false, keepLimit = false, companyUuid = null, includeSubgroups = false, endpoint = '/posts' } = {}) {
   const el = document.getElementById(containerId);
   if (!el) return;
 
@@ -65,6 +65,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
     const params = new URLSearchParams();
     if (contactUuid) params.set('contact', contactUuid);
     if (companyUuid) params.set('company', companyUuid);
+    if (companyUuid && includeSubgroups) params.set('subgroups', '1');
     params.set('limit', currentLimit[key]);
 
     const [data, circles] = await Promise.all([api.get(`${endpoint}?${params}`), loadMyCircles()]);
@@ -233,7 +234,7 @@ export async function renderPostList(containerId, contactUuid, onChanged, { load
         </button>
       `);
       el.querySelector('.load-more-btn').addEventListener('click', () => {
-        renderPostList(containerId, contactUuid, onChanged, { loadMore: true, companyUuid, endpoint });
+        renderPostList(containerId, contactUuid, onChanged, { loadMore: true, companyUuid, includeSubgroups, endpoint });
       });
     }
 

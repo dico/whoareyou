@@ -10,6 +10,7 @@ import { renderContactFields } from '../components/contact-fields.js';
 import { contactRowHtml } from '../components/contact-row.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
+import { ageAt, ageLabel } from '../utils/age.js';
 
 export async function renderContactDetail(uuid) {
   const content = document.getElementById('app-content');
@@ -62,7 +63,7 @@ export async function renderContactDetail(uuid) {
                   ${contact.birth_month && contact.birth_day
                     ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${formatBirthParts(contact.birth_day, contact.birth_month, contact.birth_year, contact.deceased_date)}</p>`
                     : contact.birth_year
-                      ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${t('contacts.bornYear', { year: contact.birth_year })} (${t('contacts.approxAge', { age: new Date().getFullYear() - contact.birth_year })})</p>`
+                      ? `<p class="detail-meta"><i class="bi bi-cake2"></i> ${t('contacts.bornYear', { year: contact.birth_year })} (${contact.deceased_date ? t('contacts.becameYears', { age: '~' + ageAt(contact.birth_year, null, null, new Date(contact.deceased_date)) }) : t('contacts.approxAge', { age: new Date().getFullYear() - contact.birth_year })})</p>`
                       : ''
                   }
                   ${contact.deceased_date ? `<p class="detail-meta text-muted"><i class="bi bi-flower1"></i> ${formatDate(contact.deceased_date, { day: 'numeric', month: 'long', year: 'numeric' })}</p>` : ''}
@@ -2115,8 +2116,9 @@ async function renderTreeContent(contactUuid, treeDepth, treeCategories, treeMod
         svg += `<text x="${avatarX + avatarR}" y="${nodeH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="10" font-weight="600" font-family="-apple-system,sans-serif">${(node.first_name[0] || '') + (node.last_name?.[0] || '')}</text>`;
       }
       svg += `<text class="tree-name" x="${textX}" y="${nodeH / 2 - 2}" text-anchor="start">${escapeHtml(name)}</text>`;
-      if (node.birth_year) {
-        svg += `<text class="tree-age" x="${textX}" y="${nodeH / 2 + 12}" text-anchor="start">${new Date().getFullYear() - node.birth_year} ${t('contacts.years')}</text>`;
+      const nodeAge = ageLabel(node);
+      if (nodeAge) {
+        svg += `<text class="tree-age" x="${textX}" y="${nodeH / 2 + 12}" text-anchor="start">${escapeHtml(nodeAge.text)}</text>`;
       }
       svg += `</g>`;
     }

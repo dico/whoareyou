@@ -45,7 +45,7 @@ All endpoints require authentication unless noted. Responses are JSON.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/` | List contacts (search, filter, sort, paginate). Filters: `label` (name), `company` (uuid) + optional `company_active=true` (current members only), `favorite`, `birth_year` |
+| GET | `/` | List contacts (search, filter, sort, paginate). Filters: `label` (name), `company` (uuid) + optional `company_active=true` (current members only) and `company_subgroups=true` (include members of subgroups — used by group tagging), `favorite`, `birth_year` |
 | GET | `/:uuid` | Contact detail with photos, fields, labels, relationships, addresses |
 | POST | `/` | Create contact |
 | PUT | `/:uuid` | Update contact |
@@ -70,13 +70,13 @@ All endpoints require authentication unless noted. Responses are JSON.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/` | Timeline (filter by contact or company, paginate) |
+| GET | `/` | Timeline (filter by contact or `company`, paginate). `subgroups=1` with `company` includes posts in its subgroups |
 | GET | `/memories` | Posts from the same MM-DD in previous years. Same shape as `/` plus `years_ago` per post and `today: { month, day }`. No pagination — returns all matching posts ordered by date desc. |
 | GET | `/geo` | Photos with GPS coordinates for map |
 | GET | `/trash` | List soft-deleted posts |
 | POST | `/restore/:uuid` | Restore soft-deleted post |
 | DELETE | `/permanent/:uuid` | Permanently delete post and files |
-| GET | `/gallery` | Photo gallery for a contact |
+| GET | `/gallery` | Photo gallery for a contact or `company` (`subgroups=1` includes subgroups) |
 | POST | `/` | Create post. `visibility` ∈ shared/family/circle/private; `circle_uuid` required for `circle` (must be a circle the user belongs to). Optional `post_date` (backdated post, validated; defaults to now) |
 | PUT | `/:uuid` | Update post (supports `about_contact_uuid` and `company_uuid` for moving between walls — mutually exclusive, setting one clears the other) |
 | PUT | `/:uuid/author` | Admin: reassign post author. Accepts `{ contact_uuid }` (any contact), `{ user_id }`, or `{ guest_id }`. Sets `author_contact_id` directly — works for contacts without user/guest accounts. |
@@ -122,6 +122,18 @@ CRUD, batch assign/remove contacts, category (group/interest).
 
 ### Companies / Groups (`/api/companies`)
 CRUD with type (company/school/club/team/association/class/other), description, parent groups. Employee/member management with titles and dates. Brreg lookup (`GET /brreg/:orgNumber`). Photo CRUD (`GET/POST /:uuid/photos`, `PUT/DELETE /photos/:id`). Label import (`POST /import-from-label`). Frontend URL: `/groups`.
+
+**Subgroups** (`companies.parent_id`, any depth — e.g. Åsly skole › 9. trinn › 9A). Tree helpers in [utils/group-tree.js](../backend/src/utils/group-tree.js) load the tenant's tree once and walk it in memory.
+- `GET /` — `top_level=1` returns only groups without a parent (the list page uses it when browsing; search/type filter cover all levels). Each row adds `subgroup_count`, `total_member_count` (distinct current members incl. all subgroups) and `path` (ancestor names, root first).
+- `GET /:uuid` — `currentEmployees`/`previousEmployees` cover the group **and all subgroups**; each row has `group_uuid`/`group_name` so the page can toggle "all" ↔ "direct only" without a new request. `company.ancestors` (breadcrumb, root → parent), `company.parent`, `company.children` (with `member_count` incl. their subgroups, `subgroup_count`).
+- `POST /` / `PUT /:uuid` — `parent_uuid` sets the parent (`null` = top level). PUT rejects loops (under itself or one of its subgroups) with 400; unknown parent → 404.
+- `DELETE /:uuid` — subgroups move up to the deleted group's parent (not deleted).
+
+### Contact overview (`/api/reports`)
+`POST /api/reports/contacts` — body `{ filters: [...], columns: [...] }`, returns `{ total, truncated, rows }` (max 2000 rows). Powers `/contacts/overview`. The client sends typed pieces, never SQL; unknown types → 400. Implemented in [routes/contact-report.js](../backend/src/routes/contact-report.js).
+- **Filters** (all AND-ed): `name`, `last_name` (`match: 'exact'` optional), `group` (`uuid`, `subgroups` default true, `former`), `label` (`id`), `birth_year` (`from`/`to`), `birth_month`, `city` (current address), `favorite`, `deceased`, `relation` (`role` = relationship type name or inverse_name, e.g. `parent`), `field` (`field` = contact field type name, or builtin `birthday`/`birth_year`/`address`/`photo`/`group`/`label`). `mode: 'missing'`/`'not'` negates.
+- **Columns**: `birthday`, `address` (primary current), `groups`, `labels`, `field` (`field`), `relation` (`role`, `fields: [...]` — fields of the related people, e.g. parents' phone).
+- Every contact in the response — including people pulled in via `relation` — passes `filterVisibleContacts` + `filterSensitiveContacts`. Relationships with `end_date` set are ignored.
 
 ### Life Events (`/api/life-events`)
 CRUD, 10 types, annual reminder opt-in, linked contacts.

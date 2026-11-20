@@ -78,7 +78,7 @@ Shared address pool (contacts share addresses via `contact_addresses`).
 | `post_comments` | Comments on posts (user or portal guest) |
 Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadata from uploaded images.
 | `post_reactions` | Emoji reactions (default ❤️) |
-| `companies` | Companies, schools, clubs, teams (groups). Fields: type, description, parent_id |
+| `companies` | Companies, schools, clubs, teams (groups). Fields: type, description, parent_id (subgroups, any depth; FK `ON DELETE SET NULL`, the delete route moves children up to the grandparent) |
 | `company_photos` | Group photos (same pattern as contact_photos) |
 | `contact_companies` | Employment links with title and dates |
 | `life_events` | 10 event types with optional annual reminders |

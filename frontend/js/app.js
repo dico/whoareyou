@@ -8,6 +8,7 @@ import { renderTimeline } from './pages/timeline.js';
 import { renderMap, destroyMap } from './pages/map.js';
 import { renderProfile } from './pages/profile.js';
 import { renderSettings } from './pages/settings.js';
+import { renderContactOverview } from './pages/contact-overview.js';
 import { renderTenantAdmin } from './pages/admin-tenant.js';
 import { renderSecurityAdmin } from './pages/admin-security.js';
 import { renderSystemAdmin } from './pages/admin-system.js';
@@ -43,6 +44,7 @@ const routes = {
   '/': () => renderTimeline(),
   '/timeline': () => renderTimeline(),
   '/contacts': () => renderContacts(),
+  '/contacts/overview': () => renderContactOverview(), // before /contacts/:uuid
   '/contacts/:uuid': (params) => renderContactDetail(params.uuid),
   '/contacts/:uuid/posts': (params) => renderTimeline(params.uuid),
   '/map': () => renderMap(),

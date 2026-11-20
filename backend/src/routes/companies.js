@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import path from 'path';
 import { db } from '../db.js';
+import { loadGroupTree, descendantIds, ancestorPath, wouldCreateCycle } from '../utils/group-tree.js';
 import { AppError } from '../utils/errors.js';
 import { processImage } from '../services/image.js';
 import { config } from '../config/index.js';
@@ -63,10 +64,14 @@ const VALID_TYPES = ['company', 'school', 'club', 'team', 'association', 'class'
 // GET /api/companies — list all companies/groups
 router.get('/', async (req, res, next) => {
   try {
-    const { search, type } = req.query;
+    const { search, type, top_level } = req.query;
 
     let query = db('companies')
       .where('companies.tenant_id', req.tenantId);
+
+    // Browsing (no search/type filter) shows only top-level groups; subgroups
+    // are reached by drilling down. Search always covers every level.
+    if (top_level === '1') query = query.whereNull('companies.parent_id');
 
     if (search) {
       const like = `%${search}%`;
@@ -92,6 +97,29 @@ router.get('/', async (req, res, next) => {
       )
       .orderBy('companies.name');
 
+    // Hierarchy info: subgroup count, members incl. subgroups, and the path
+    // ("Åsly skole › 9. trinn") so search hits show where they belong.
+    const tree = await loadGroupTree(req.tenantId);
+    const links = await db('contact_companies')
+      .where({ tenant_id: req.tenantId }).whereNull('end_date')
+      .select('company_id', 'contact_id');
+    const contactsByGroup = new Map();
+    for (const l of links) {
+      if (!contactsByGroup.has(l.company_id)) contactsByGroup.set(l.company_id, new Set());
+      contactsByGroup.get(l.company_id).add(l.contact_id);
+    }
+    for (const c of companies) {
+      c.subgroup_count = (tree.childrenOf.get(c.id) || []).length;
+      if (c.subgroup_count) {
+        const all = new Set();
+        for (const id of descendantIds(tree, c.id)) for (const cid of contactsByGroup.get(id) || []) all.add(cid);
+        c.total_member_count = all.size;
+      } else {
+        c.total_member_count = Number(c.employee_count) || 0;
+      }
+      c.path = ancestorPath(tree, c.id).map(a => a.name);
+    }
+
     res.json({ companies });
   } catch (err) {
     next(err);
@@ -106,16 +134,26 @@ router.get('/:uuid', async (req, res, next) => {
       .first();
     if (!company) throw new AppError('Company not found', 404);
 
+    // Members are returned for the group and all its subgroups, each row
+    // tagged with the group it belongs to; the page toggles between "all"
+    // and "direct only" without another request.
+    const tree = await loadGroupTree(req.tenantId);
+    const subtreeIds = descendantIds(tree, company.id);
+
     const [currentEmployees, previousEmployees] = await Promise.all([
       db('contact_companies')
         .join('contacts', 'contact_companies.contact_id', 'contacts.id')
-        .where({ 'contact_companies.company_id': company.id, 'contact_companies.tenant_id': req.tenantId })
+        .join('companies as grp', 'contact_companies.company_id', 'grp.id')
+        .whereIn('contact_companies.company_id', subtreeIds)
+        .where('contact_companies.tenant_id', req.tenantId)
         .whereNull('contacts.deleted_at')
         .modify(filterVisibleContacts(req))
         .modify(filterSensitiveContacts(req))
         .whereNull('contact_companies.end_date')
         .select(
           'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.birth_year',
+          'contacts.birth_month', 'contacts.birth_day', 'contacts.deceased_date',
+          'grp.uuid as group_uuid', 'grp.name as group_name',
           'contact_companies.id as link_id', 'contact_companies.title', 'contact_companies.start_date',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
         )
@@ -123,13 +161,17 @@ router.get('/:uuid', async (req, res, next) => {
 
       db('contact_companies')
         .join('contacts', 'contact_companies.contact_id', 'contacts.id')
-        .where({ 'contact_companies.company_id': company.id, 'contact_companies.tenant_id': req.tenantId })
+        .join('companies as grp', 'contact_companies.company_id', 'grp.id')
+        .whereIn('contact_companies.company_id', subtreeIds)
+        .where('contact_companies.tenant_id', req.tenantId)
         .whereNull('contacts.deleted_at')
         .modify(filterVisibleContacts(req))
         .modify(filterSensitiveContacts(req))
         .whereNotNull('contact_companies.end_date')
         .select(
           'contacts.uuid', 'contacts.first_name', 'contacts.last_name', 'contacts.birth_year',
+          'contacts.birth_month', 'contacts.birth_day', 'contacts.deceased_date',
+          'grp.uuid as group_uuid', 'grp.name as group_name',
           'contact_companies.id as link_id', 'contact_companies.title',
           'contact_companies.start_date', 'contact_companies.end_date',
           db.raw(`(SELECT cp.thumbnail_path FROM contact_photos cp WHERE cp.contact_id = contacts.id AND cp.is_primary = true LIMIT 1) as avatar`)
@@ -137,17 +179,26 @@ router.get('/:uuid', async (req, res, next) => {
         .orderBy('contact_companies.end_date', 'desc'),
     ]);
 
-    // Fetch parent info if exists
-    let parent = null;
-    if (company.parent_id) {
-      parent = await db('companies').where({ id: company.parent_id }).select('uuid', 'name').first();
-    }
+    // Breadcrumb (root → direct parent)
+    const ancestors = ancestorPath(tree, company.id);
+    const parent = ancestors[ancestors.length - 1] || null;
 
-    // Fetch child groups
+    // Direct subgroups with member counts incl. their own subgroups
     const children = await db('companies')
       .where({ parent_id: company.id, tenant_id: req.tenantId })
-      .select('uuid', 'name', 'type', 'logo_path')
+      .select('id', 'uuid', 'name', 'type', 'logo_path')
       .orderBy('name');
+    if (children.length) {
+      const links = await db('contact_companies')
+        .whereIn('company_id', subtreeIds).whereNull('end_date')
+        .select('company_id', 'contact_id');
+      for (const child of children) {
+        const ids = new Set(descendantIds(tree, child.id));
+        child.member_count = new Set(links.filter(l => ids.has(l.company_id)).map(l => l.contact_id)).size;
+        child.subgroup_count = (tree.childrenOf.get(child.id) || []).length;
+        delete child.id;
+      }
+    }
 
     // Fetch photos
     const photos = await db('company_photos')
@@ -173,6 +224,7 @@ router.get('/:uuid', async (req, res, next) => {
         latitude: company.latitude,
         longitude: company.longitude,
         parent,
+        ancestors,
         children,
       },
       photos,
@@ -196,7 +248,8 @@ router.post('/', async (req, res, next) => {
     let parent_id = null;
     if (req.body.parent_uuid) {
       const parent = await db('companies').where({ uuid: req.body.parent_uuid, tenant_id: req.tenantId }).first();
-      if (parent) parent_id = parent.id;
+      if (!parent) throw new AppError('Parent group not found', 404);
+      parent_id = parent.id;
     }
 
     const uuid = uuidv4();
@@ -242,16 +295,12 @@ router.put('/:uuid', async (req, res, next) => {
     if (req.body.parent_uuid !== undefined) {
       if (req.body.parent_uuid) {
         const parent = await db('companies').where({ uuid: req.body.parent_uuid, tenant_id: req.tenantId }).first();
-        if (parent && parent.id !== company.id) {
-          // Check for circular reference: walk up parent chain
-          let current = parent;
-          let circular = false;
-          while (current?.parent_id) {
-            if (current.parent_id === company.id) { circular = true; break; }
-            current = await db('companies').where({ id: current.parent_id }).first();
-          }
-          if (!circular) updates.parent_id = parent.id;
+        if (!parent) throw new AppError('Parent group not found', 404);
+        // A group can't sit under itself or under one of its own subgroups
+        if (wouldCreateCycle(await loadGroupTree(req.tenantId), company.id, parent.id)) {
+          throw new AppError('A group cannot be placed under itself or one of its subgroups', 400);
         }
+        updates.parent_id = parent.id;
       } else {
         updates.parent_id = null;
       }
@@ -296,6 +345,9 @@ router.delete('/:uuid', async (req, res, next) => {
       .first();
     if (!company) throw new AppError('Company not found', 404);
 
+    // Subgroups move up one level instead of being orphaned at the top
+    await db('companies').where({ parent_id: company.id, tenant_id: req.tenantId })
+      .update({ parent_id: company.parent_id || null });
     await db('contact_companies').where({ company_id: company.id }).del();
     await db('companies').where({ id: company.id }).del();
     res.json({ message: 'Company deleted' });

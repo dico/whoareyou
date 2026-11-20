@@ -15,7 +15,7 @@ const MAX_PER_KIND = 8;
  */
 export async function fetchTagSourceMembers({ groupUuid, labelName }) {
   const params = new URLSearchParams({ limit: '200' });
-  if (groupUuid) { params.set('company', groupUuid); params.set('company_active', 'true'); }
+  if (groupUuid) { params.set('company', groupUuid); params.set('company_active', 'true'); params.set('company_subgroups', 'true'); }
   else params.set('label', labelName);
   const { contacts } = await api.get(`/contacts?${params}`);
   return contacts
@@ -60,9 +60,10 @@ export function attachTagSourceSearch(input, results, { onSelect, onEscape }) {
       const lq = q.toLowerCase();
 
       items = [
-        ...(companies || []).filter(c => c.employee_count > 0).slice(0, MAX_PER_KIND).map(c => ({
-          kind: 'group', key: c.uuid, name: c.name, avatar: c.logo_path,
-          meta: `<i class="bi bi-people"></i> ${t('groups.types.' + (c.type || 'other'))} · ${t('posts.tagGroupMembers', { count: c.employee_count })}`,
+        // Groups include their subgroups' members (tagging «Åsly skole» tags every class)
+        ...(companies || []).filter(c => c.total_member_count > 0).slice(0, MAX_PER_KIND).map(c => ({
+          kind: 'group', key: c.uuid, name: c.path?.length ? `${c.path.join(' › ')} › ${c.name}` : c.name, avatar: c.logo_path,
+          meta: `<i class="bi bi-people"></i> ${t('groups.types.' + (c.type || 'other'))} · ${t('posts.tagGroupMembers', { count: c.total_member_count })}`,
         })),
         ...labels.filter(l => l.contact_count > 0 && l.name.toLowerCase().includes(lq)).slice(0, MAX_PER_KIND).map(l => ({
           kind: 'label', key: l.name, name: l.name, avatar: null,

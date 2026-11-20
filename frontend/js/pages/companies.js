@@ -1,14 +1,7 @@
 import { api } from '../api/client.js';
-import { navigate } from '../app.js';
 import { t } from '../utils/i18n.js';
-import { confirmDialog } from '../components/dialogs.js';
 import { authUrl } from '../utils/auth-url.js';
-
-const TYPE_ICONS = {
-  company: 'bi-building', school: 'bi-mortarboard', club: 'bi-people',
-  team: 'bi-trophy', association: 'bi-diagram-3', class: 'bi-easel', other: 'bi-collection',
-};
-const TYPES = ['company', 'school', 'club', 'team', 'association', 'class', 'other'];
+import { openCreateGroupDialog, groupPathText, GROUP_TYPES as TYPES, GROUP_TYPE_ICONS as TYPE_ICONS } from '../components/group-picker.js';
 
 export async function renderCompanies() {
   const content = document.getElementById('app-content');
@@ -33,48 +26,6 @@ export async function renderCompanies() {
       </div>
     </div>
 
-    <!-- Add group modal -->
-    <div class="modal fade" id="add-company-modal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">${t('groups.newGroup')}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <form id="add-company-form">
-            <div class="modal-body">
-              <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="new-company-name" required>
-                <label>${t('companies.name')}</label>
-              </div>
-              <div class="form-floating mb-3">
-                <select class="form-select" id="new-company-type">
-                  ${TYPES.map(tp => `<option value="${tp}">${t('groups.types.' + tp)}</option>`).join('')}
-                </select>
-                <label>${t('groups.type')}</label>
-              </div>
-              <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="new-company-industry">
-                <label>${t('companies.industry')}</label>
-              </div>
-              <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="new-company-website" placeholder="example.com">
-                <label>${t('companies.website')}</label>
-              </div>
-              <div class="mb-3">
-                <label class="form-label small text-muted">${t('groups.description')}</label>
-                <textarea class="form-control" id="new-company-desc" rows="2"></textarea>
-              </div>
-              <div id="add-company-error" class="alert alert-danger d-none"></div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
-              <button type="submit" class="btn btn-primary btn-sm">${t('contacts.create')}</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
   `;
 
   await loadCompanies();
@@ -93,27 +44,7 @@ export async function renderCompanies() {
   });
 
   document.getElementById('btn-add-company').addEventListener('click', () => {
-    new bootstrap.Modal(document.getElementById('add-company-modal')).show();
-  });
-
-  document.getElementById('add-company-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const errorEl = document.getElementById('add-company-error');
-    errorEl.classList.add('d-none');
-    try {
-      const { company } = await api.post('/companies', {
-        name: document.getElementById('new-company-name').value,
-        type: document.getElementById('new-company-type').value,
-        industry: document.getElementById('new-company-industry').value || undefined,
-        description: document.getElementById('new-company-desc').value || undefined,
-        website: (() => { let w = document.getElementById('new-company-website').value.trim(); if (w && !w.match(/^https?:\/\//)) w = 'https://' + w; return w || undefined; })(),
-      });
-      bootstrap.Modal.getInstance(document.getElementById('add-company-modal')).hide();
-      navigate(`/groups/${company.uuid}`);
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.classList.remove('d-none');
-    }
+    openCreateGroupDialog({ type: document.getElementById('type-filter')?.value || null });
   });
 }
 
@@ -127,6 +58,9 @@ async function loadCompanies() {
     const params = new URLSearchParams();
     if (typeFilter) params.set('type', typeFilter);
     if (searchFilter) params.set('search', searchFilter);
+    // Browsing shows top-level groups; search and type filter cover all levels
+    // (with the path shown) so "9A" or every "Klasse" is still one step away.
+    if (!typeFilter && !searchFilter) params.set('top_level', '1');
     const qs = params.toString() ? `?${params}` : '';
     const { companies } = await api.get(`/companies${qs}`);
 
@@ -151,11 +85,12 @@ async function loadCompanies() {
         </div>
         <div class="contact-info">
           <div class="contact-name">${escapeHtml(c.name)}</div>
-          ${c.industry ? `<div class="contact-meta">${escapeHtml(c.industry)}</div>` : ''}
-          ${c.parent_name ? `<div class="contact-meta"><i class="bi bi-arrow-return-right"></i> ${escapeHtml(c.parent_name)}</div>` : ''}
+          ${groupPathText(c) ? `<div class="contact-meta"><i class="bi bi-arrow-return-right"></i> ${escapeHtml(groupPathText(c))}</div>` : ''}
+          ${c.subgroup_count ? `<div class="contact-meta"><i class="bi bi-diagram-3"></i> ${t('groups.subgroupCount', { count: c.subgroup_count })}</div>` : ''}
+          ${!groupPathText(c) && !c.subgroup_count && c.industry ? `<div class="contact-meta">${escapeHtml(c.industry)}</div>` : ''}
         </div>
         <div class="contact-badges">
-          <span class="badge bg-light text-muted badge-sm">${c.employee_count} <i class="bi bi-people"></i></span>
+          <span class="badge bg-light text-muted badge-sm">${c.total_member_count} <i class="bi bi-people"></i></span>
           <span class="badge bg-light text-muted badge-sm">${t('groups.types.' + (c.type || 'other'))}</span>
         </div>
       </a>`;

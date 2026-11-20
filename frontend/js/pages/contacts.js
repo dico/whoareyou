@@ -4,6 +4,7 @@ import { toggleVisibilityBtn } from '../utils/visibility.js';
 import { t, formatDate } from '../utils/i18n.js';
 import { authUrl } from '../utils/auth-url.js';
 import { addContactModalHtml, initAddContactModal, showAddContactModal } from '../components/add-contact-modal.js';
+import { ageHtml } from '../utils/age.js';
 
 let currentSearch = '';
 let currentFilter = localStorage.getItem('contacts.filter') || 'all';
@@ -53,6 +54,9 @@ export async function renderContacts() {
         <button class="btn btn-outline-secondary btn-sm" id="btn-toggle-filters" title="${t('contacts.filters')}">
           <i class="bi bi-funnel"></i>
         </button>
+        <a href="/contacts/overview" data-link class="btn btn-outline-secondary btn-sm" id="btn-overview" title="${t('overview.openOverview')}">
+          <i class="bi bi-table"></i> <span class="d-none d-md-inline">${t('overview.openOverview')}</span>
+        </a>
       </div>
 
       <div class="contacts-filter-bar d-none" id="filter-bar">
@@ -177,6 +181,23 @@ export async function renderContacts() {
     loadContacts();
   });
 
+  // Overview link carries the active filters over
+  document.getElementById('btn-overview').addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const params = new URLSearchParams();
+    if (currentSearch) params.set('search', currentSearch);
+    if (currentFilter === 'favorites') params.set('favorite', '1');
+    if (currentLabel) params.set('label', currentLabel);
+    if (currentCompany) {
+      params.set('company', currentCompany);
+      const opt = document.querySelector(`#group-filter option[value="${currentCompany}"]`);
+      if (opt) params.set('company_name', opt.textContent.replace(/\s*\(\d+\)$/, ''));
+    }
+    if (currentBirthYear) params.set('birth_year', currentBirthYear);
+    navigate(`/contacts/overview${params.toString() ? `?${params}` : ''}`);
+  });
+
   // Add contact modal (shared component)
   initAddContactModal();
   document.getElementById('btn-add-contact').addEventListener('click', showAddContactModal);
@@ -222,8 +243,8 @@ async function loadContacts() {
             ${c.first_name} ${c.last_name || ''}
             ${c.nickname ? `<span class="contact-nickname">"${c.nickname}"</span>` : ''}
           </div>
-          ${c.birth_year
-            ? `<div class="contact-meta"><i class="bi bi-cake2"></i> ${calcAge(c.birth_year, c.birth_month, c.birth_day)}</div>`
+          ${c.birth_year || c.deceased_date
+            ? `<div class="contact-meta">${ageHtml(c)}</div>`
             : c.birth_month && c.birth_day
               ? `<div class="contact-meta"><i class="bi bi-cake2"></i> ${formatBirthDate(c.birth_day, c.birth_month)}</div>`
               : c.last_contacted_at
@@ -244,16 +265,6 @@ async function loadContacts() {
   } catch (err) {
     listEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
   }
-}
-
-function calcAge(birthYear, birthMonth, birthDay) {
-  const today = new Date();
-  let age = today.getFullYear() - birthYear;
-  if (birthMonth && birthDay) {
-    const m = today.getMonth() + 1 - birthMonth;
-    if (m < 0 || (m === 0 && today.getDate() < birthDay)) age--;
-  }
-  return `${age} ${t('contacts.years')}`;
 }
 
 function formatBirthDate(day, month) {

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { db } from '../db.js';
+import { loadGroupTree, descendantIds } from '../utils/group-tree.js';
 import { AppError } from '../utils/errors.js';
 import { decodeHtmlEntities } from '../utils/html-entities.js';
 import { validateRequired } from '../utils/validation.js';
@@ -15,6 +16,12 @@ import { sendPortalDigestsForTenant } from '../services/portal-notification-emai
 import { filterVisiblePosts, loadVisiblePost, resolvePostVisibility, postAudienceUserIds } from '../utils/visibility.js';
 
 const router = Router();
+
+// Group filter: the group itself, plus its subgroups when ?subgroups=1
+async function groupScopeIds(req, companyRow) {
+  if (req.query.subgroups !== '1') return [companyRow.id];
+  return descendantIds(await loadGroupTree(req.tenantId), companyRow.id);
+}
 
 // { id → { uuid, name } } for the circles referenced by circle-visibility posts.
 async function circleInfoMap(posts) {
@@ -229,7 +236,7 @@ router.get('/', async (req, res, next) => {
     if (company) {
       const companyRow = await db('companies').where({ uuid: company, tenant_id: req.tenantId }).first();
       if (companyRow) {
-        query = query.where('posts.company_id', companyRow.id);
+        query = query.whereIn('posts.company_id', await groupScopeIds(req, companyRow));
       }
     }
 
@@ -515,7 +522,7 @@ router.get('/gallery', async (req, res, next) => {
     if (company) {
       const companyRow = await db('companies').where({ uuid: company, tenant_id: req.tenantId }).first();
       if (!companyRow) throw new AppError('Company not found', 404);
-      query = query.where('posts.company_id', companyRow.id);
+      query = query.whereIn('posts.company_id', await groupScopeIds(req, companyRow));
     }
 
     const postIds = await query.select('posts.id');
