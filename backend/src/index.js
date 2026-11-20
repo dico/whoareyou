@@ -35,6 +35,7 @@ import portalAdminRoutes from './routes/portal-admin.js';
 import signageRoutes from './routes/signage.js';
 import circleRoutes from './routes/circles.js';
 import publicWishlistRoutes from './routes/public-wishlists.js';
+import apiTokenRoutes from './routes/api-tokens.js';
 import { filterVisiblePosts } from './utils/visibility.js';
 
 const app = express();
@@ -152,6 +153,7 @@ app.use('/api/reminders', authenticate, tenantScope, reminderRoutes);
 app.use('/api/notifications', authenticate, tenantScope, notificationRoutes);
 app.use('/api/gifts', authenticate, tenantScope, giftRoutes);
 app.use('/api/circles', authenticate, tenantScope, circleRoutes);
+app.use('/api/api-tokens', authenticate, tenantScope, apiTokenRoutes);
 // System routes — registration-status is public (must be before catch-all)
 app.use('/api/system', (req, res, next) => {
   if (req.path === '/registration-status' && req.method === 'GET') return next();

@@ -77,6 +77,22 @@ Enforcement happens in the `accessControl` middleware ([backend/src/middleware/a
 ### Recovery path (lockout)
 If an admin saves a whitelist that excludes their own IP, access from the same LAN or loopback still works because local IPs always pass the country check. For IP whitelist: the admin must connect from a machine on the private network (or shell into the server directly) and clear `login_ip_whitelist` in the `system_settings` table.
 
+## API tokens (AI agents)
+
+Lets the user hand an AI agent (e.g. Claude Code) temporary access to register contact data, e.g. workplaces from a LinkedIn screenshot. Usage guide: [ai-agent.md](ai-agent.md).
+
+- **Creation:** admin only, from a normal session, under Innstillinger → AI-tilgang. Token `way_` + 32 random bytes; only the SHA-256 hash is stored; plaintext shown once.
+- **Lifetime:** 1 h / 4 h / 24 h / 7 days, revocable at any time. Bound to the user and the tenant it was created in; stops working if the user is deactivated or leaves the tenant.
+- **Deny by default** ([api-token-policy.js](../backend/src/utils/api-token-policy.js)), checked in `authenticate` before any route runs:
+  - Only `/api/contacts`, `/api/companies`, `/api/addresses`, `/api/relationships`, `/api/life-events`, `/api/labels`.
+  - `read` scope → GET only; `write` → GET/POST/PUT/PATCH. **DELETE is never allowed.**
+  - Blocked even with `write`: contacts tools (trash, merge, duplicates), address merge, label batch-remove, group import-from-label, logo/photo uploads.
+  - The path is normalised before the check (decoded, lower-cased, duplicate slashes collapsed, `.`/`..` rejected) because Express matches routes case-insensitively.
+- **No sensitive data:** `req.showSensitive` is always false; `isSystemAdmin` is always false for token requests.
+- **Audit:** every request is logged (`api_token.read` / `api_token.write` with method, path, status; `api_token.denied` with reason). The user sees the log per token. Create/revoke are logged too.
+- IP/country whitelist and the global API rate limit apply as for any other request.
+- **Residual risk:** a leaked `write` token can add or overwrite contact data in the allowed areas until it expires or is revoked — keep lifetimes short. Data the agent reads is sent to the AI provider; sensitive content is excluded for that reason.
+
 ## Two-Factor Authentication
 - TOTP with QR code setup (Google Authenticator, Authy, etc.)
 - 8 backup codes (SHA-256 hashed, single use)

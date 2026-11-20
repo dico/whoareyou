@@ -128,6 +128,7 @@ CRUD with type (company/school/club/team/association/class/other), description, 
 - `GET /:uuid` — `currentEmployees`/`previousEmployees` cover the group **and all subgroups**; each row has `group_uuid`/`group_name` so the page can toggle "all" ↔ "direct only" without a new request. `company.ancestors` (breadcrumb, root → parent), `company.parent`, `company.children` (with `member_count` incl. their subgroups, `subgroup_count`).
 - `POST /` / `PUT /:uuid` — `parent_uuid` sets the parent (`null` = top level). PUT rejects loops (under itself or one of its subgroups) with 400; unknown parent → 404.
 - `DELETE /:uuid` — subgroups move up to the deleted group's parent (not deleted).
+- `POST /:uuid/employees` — `{ contact_uuid, title?, start_date?, end_date? }`; returns `link_id`. 409 if the person already has a current link (no `end_date`) or a past link with the same `start_date`. `PUT /employees/:linkId` updates `title`/`start_date`/`end_date`.
 
 ### Contact overview (`/api/reports`)
 `POST /api/reports/contacts` — body `{ filters: [...], columns: [...] }`, returns `{ total, truncated, rows }` (max 2000 rows). Powers `/contacts/overview`. The client sends typed pieces, never SQL; unknown types → 400. Implemented in [routes/contact-report.js](../backend/src/routes/contact-report.js).
@@ -194,6 +195,18 @@ Named subsets of tenant members used as a post audience (`visibility = 'circle'`
 | DELETE | `/:uuid` | Admin | Delete; the circle's posts become `private` (creator-only) |
 
 Audit actions: `circle.create`, `circle.update`, `circle.delete`.
+
+### API tokens (`/api/api-tokens`)
+Short-lived tokens for AI agents and scripts — see [ai-agent.md](ai-agent.md). Admin only, and only from a normal login session (a token can't manage tokens).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | The user's tokens in this tenant (`status`: active/expired/revoked, `last_used_at`, `request_count`) |
+| POST | `/` | Create `{ name, scope: 'read'\|'write', hours: 1\|4\|24\|168 }` → includes plaintext `token` (only time it's shown) |
+| POST | `/:uuid/revoke` | Revoke immediately |
+| GET | `/:uuid/activity` | The token's audit rows (method, path, status, denied reason) |
+
+Audit actions: `api_token.create`, `api_token.revoke`, `api_token.read`, `api_token.write`, `api_token.denied`.
 
 ### Gifts (`/api/gifts`)
 Products (CRUD, URL scraping, images), events (CRUD, auto-fill), orders (CRUD, status lifecycle), wishlists (CRUD, items).

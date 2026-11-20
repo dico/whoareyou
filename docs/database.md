@@ -116,6 +116,7 @@ Note: `post_media` includes `taken_at`, `latitude`, `longitude` for EXIF metadat
 | `gift_orders` | Gift registrations (from → to, status lifecycle) |
 | `gift_order_participants` | Multi-sender/receiver per gift. Each row has either `contact_id` OR `company_id` set (never both), so a gift can come from/go to a person or a group (e.g. "Fra jobben"). |
 | `gift_wishlists` | Wishlists per family member |
+| `api_tokens` | API tokens for AI agents: `token_hash` (SHA-256), `token_prefix`, `scope` (read/write), `expires_at`, `revoked_at`, usage (`last_used_at`, `last_used_ip`, `request_count`) — migration 087 |
 | `wishlist_shares` | Public wishlist share links (`token`, `token_hash`) — migration 086 |
 | `wishlist_share_contacts` | Which contacts a share link covers (one person or the whole family) |
 | `gift_wishlist_items` | Items in wishlists |

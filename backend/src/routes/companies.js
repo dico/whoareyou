@@ -359,7 +359,7 @@ router.delete('/:uuid', async (req, res, next) => {
 // POST /api/companies/:uuid/employees — link contact to company
 router.post('/:uuid/employees', async (req, res, next) => {
   try {
-    const { contact_uuid, title, start_date } = req.body;
+    const { contact_uuid, title, start_date, end_date } = req.body;
     if (!contact_uuid) throw new AppError('contact_uuid is required');
 
     const company = await db('companies')
@@ -373,22 +373,30 @@ router.post('/:uuid/employees', async (req, res, next) => {
       .first();
     if (!contact) throw new AppError('Contact not found', 404);
 
-    // Prevent duplicate membership
-    const existing = await db('contact_companies')
-      .where({ contact_id: contact.id, company_id: company.id })
-      .whereNull('end_date')
-      .first();
+    // Prevent duplicate membership: one current link per group, and a past
+    // period (with end_date) only once per start date.
+    const existing = end_date
+      ? await db('contact_companies')
+        .where({ contact_id: contact.id, company_id: company.id })
+        .where(q => (start_date ? q.where('start_date', start_date) : q.whereNull('start_date')))
+        .whereNotNull('end_date')
+        .first()
+      : await db('contact_companies')
+        .where({ contact_id: contact.id, company_id: company.id })
+        .whereNull('end_date')
+        .first();
     if (existing) throw new AppError('Already a member', 409);
 
-    await db('contact_companies').insert({
+    const [linkId] = await db('contact_companies').insert({
       contact_id: contact.id,
       company_id: company.id,
       tenant_id: req.tenantId,
       title: title?.trim() || null,
       start_date: start_date || null,
+      end_date: end_date || null,
     });
 
-    res.status(201).json({ message: 'Employee added' });
+    res.status(201).json({ message: 'Employee added', link_id: linkId });
   } catch (err) {
     next(err);
   }

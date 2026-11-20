@@ -78,6 +78,11 @@ export async function renderSettings() {
           <div class="settings-card-label">${t('relationships.suggestions')}</div>
           <div class="settings-card-desc">${t('settings.relationshipsCardDesc')}</div>
         </a>
+        <a href="/settings/ai-access" data-link class="settings-card glass-card">
+          <div class="settings-card-icon" style="background:rgba(175,82,222,0.1);color:#AF52DE"><i class="bi bi-robot"></i></div>
+          <div class="settings-card-label">${t('apiTokens.title')}</div>
+          <div class="settings-card-desc">${t('apiTokens.cardDesc')}</div>
+        </a>
         <a href="/admin/integrations" data-link class="settings-card glass-card">
           <div class="settings-card-icon" style="background:rgba(0,199,190,0.1);color:#00C7BE"><i class="bi bi-cloud-arrow-down"></i></div>
           <div class="settings-card-label">${t('settings.integrations')}</div>

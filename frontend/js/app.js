@@ -33,6 +33,7 @@ import { renderGiftPlanning } from './pages/gift-planning.js';
 import { renderGenerateBook } from './pages/generate-book.js';
 import { renderMemories } from './pages/memories.js';
 import { renderNotificationSettings } from './pages/settings-notifications.js';
+import { renderAiAccessSettings } from './pages/settings-ai-access.js';
 import { registerServiceWorker } from './utils/push.js';
 import { renderBookPreview } from './pages/book-preview.js';
 import { renderSignage } from './pages/admin-signage.js';
@@ -76,6 +77,7 @@ const routes = {
   '/settings/generate-book': () => renderGenerateBook(),
   '/memories': () => renderMemories(),
   '/settings/notifications': () => renderNotificationSettings(),
+  '/settings/ai-access': () => renderAiAccessSettings(),
   '/books/:uuid/preview': (params) => renderBookPreview(params.uuid),
   '/login': () => renderLogin(),
   '/reset-password': () => renderLogin(),

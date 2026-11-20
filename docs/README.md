@@ -11,6 +11,7 @@
 | [API Reference](api.md) | All REST endpoints grouped by module |
 | [Frontend Guide](frontend.md) | Components, pages, patterns, CSS architecture |
 | [Design Guidelines](design-guidelines.md) | UI/UX rules, component standards, do's and don'ts |
+| [AI agent access](ai-agent.md) | Short-lived API tokens, what an agent may do, recipes |
 | [Security](security.md) | Auth flow, tenant isolation, IP security, audit history |
 | [Integrations](integrations.md) | MomentGarden import, ipgeolocation.io, SMTP |
 | [Family Portal](portal.md) | Portal architecture, guest auth, share links |
