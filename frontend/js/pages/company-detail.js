@@ -11,7 +11,7 @@ import { loadGalleryInto } from './contact-detail.js';
 import { ageHtml } from '../utils/age.js';
 import {
   GROUP_TYPES, GROUP_TYPE_ICONS as TYPE_ICONS,
-  attachParentPicker, openCreateGroupDialog, openMoveGroupHereDialog,
+  attachParentPicker, openAddSubgroupDialog,
 } from '../components/group-picker.js';
 
 const SUBGROUPS_PREF = 'groups.includeSubgroups';
@@ -83,8 +83,7 @@ export async function renderCompanyDetail(uuid) {
                 <button class="btn btn-link btn-sm" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
                 <ul class="dropdown-menu dropdown-menu-end glass-dropdown">
                   <li><button type="button" class="dropdown-item" id="group-btn-edit"><i class="bi bi-pencil me-2"></i>${t('common.edit')}</button></li>
-                  <li><button type="button" class="dropdown-item" id="group-btn-new-sub"><i class="bi bi-plus-lg me-2"></i>${t('groups.newSubgroup')}</button></li>
-                  <li><button type="button" class="dropdown-item" id="group-btn-move-here"><i class="bi bi-box-arrow-in-down-right me-2"></i>${t('groups.moveHere')}</button></li>
+                  <li><button type="button" class="dropdown-item" id="group-btn-add-sub-menu"><i class="bi bi-diagram-3 me-2"></i>${t('groups.addSubgroup')}</button></li>
                   ${company.parent ? `<li><button type="button" class="dropdown-item" id="group-btn-move-out"><i class="bi bi-box-arrow-up-left me-2"></i>${t('groups.removeFromParent', { name: escapeHtml(company.parent.name) })}</button></li>` : ''}
                   <li><hr class="dropdown-divider"></li>
                   <li><button type="button" class="dropdown-item text-danger" id="group-btn-delete"><i class="bi bi-trash me-2"></i>${t('common.delete')}</button></li>
@@ -135,7 +134,7 @@ export async function renderCompanyDetail(uuid) {
                   </div>
                 `).join('')}
                 <button type="button" class="subgroup-card subgroup-card-add" id="group-btn-add-sub">
-                  <i class="bi bi-plus-lg"></i><span>${t('groups.newSubgroup')}</span>
+                  <i class="bi bi-plus-lg"></i><span>${t('groups.addSubgroup')}</span>
                 </button>
               </div>
             </div>
@@ -190,8 +189,12 @@ export async function renderCompanyDetail(uuid) {
     function memberAvatar(e) {
       return e.avatar ? `<img src="${authUrl(e.avatar)}" alt="">` : `<span>${(e.first_name[0] || '') + (e.last_name?.[0] || '')}</span>`;
     }
-    function subgroupBadges(m) {
-      return m.groups.map(g => `<a href="/groups/${g.uuid}" data-link class="badge bg-light text-muted badge-sm subgroup-badge">${escapeHtml(g.name)}</a>`).join('');
+    // Which subgroup(s) a member comes from — a meta line under the name, so
+    // long group names truncate instead of squeezing the name away
+    function subgroupMeta(m) {
+      if (!includeSubgroups || !m.groups.length) return '';
+      const names = m.groups.map(g => escapeHtml(g.name)).join(', ');
+      return `<div class="contact-meta member-subgroup" title="${names}"><i class="bi bi-diagram-3"></i> ${names}</div>`;
     }
 
     function renderMembers() {
@@ -211,11 +214,11 @@ export async function renderCompanyDetail(uuid) {
                   <div class="contact-avatar">${memberAvatar(m)}</div>
                   <div class="contact-info">
                     <div class="contact-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name || '')}</div>
+                    ${subgroupMeta(m)}
                     <div class="contact-meta">${(d?.title ? escapeHtml(d.title) : '') || ageHtml(m)}</div>
                   </div>
                 </a>
                 <div class="contact-badges">
-                  ${includeSubgroups ? subgroupBadges(m) : ''}
                   ${d ? `
                   <div class="dropdown">
                     <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
@@ -245,9 +248,9 @@ export async function renderCompanyDetail(uuid) {
                 <div class="contact-avatar">${memberAvatar(m)}</div>
                 <div class="contact-info">
                   <div class="contact-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name || '')}</div>
+                  ${subgroupMeta(m)}
                   <div class="contact-meta">${[e.title ? escapeHtml(e.title) : '', [e.start_date ? formatDate(e.start_date) : '', e.end_date ? formatDate(e.end_date) : ''].filter(Boolean).join(' — ')].filter(Boolean).join(' — ')}</div>
                 </div>
-                ${includeSubgroups && m.groups.length ? `<div class="contact-badges">${m.groups.map(g => `<span class="badge bg-light text-muted badge-sm">${escapeHtml(g.name)}</span>`).join('')}</div>` : ''}
               </a>`;
             }).join('')}
           </div>
@@ -286,17 +289,16 @@ export async function renderCompanyDetail(uuid) {
 
     // ── Hierarchy actions ──
     const self = { uuid, name: company.name };
-    const newSub = () => openCreateGroupDialog({ parent: self, type: company.type });
-    document.getElementById('group-btn-new-sub').addEventListener('click', newSub);
-    document.getElementById('group-btn-add-sub')?.addEventListener('click', newSub);
-    document.getElementById('group-btn-move-here').addEventListener('click', () => {
-      openMoveGroupHereDialog({
-        target: self,
-        // Can't move this group or one above it under itself
-        excludeUuids: [uuid, ...ancestors.map(a => a.uuid), ...children.map(c => c.uuid)],
-        onMoved: () => renderCompanyDetail(uuid),
-      });
+    // One dialog for both: move an existing group here, or create a new one
+    const addSub = () => openAddSubgroupDialog({
+      target: self,
+      type: company.type,
+      // Not itself, a group above it (loop), or one that's already here
+      excludeUuids: [uuid, ...ancestors.map(a => a.uuid), ...children.map(c => c.uuid)],
+      onMoved: () => renderCompanyDetail(uuid),
     });
+    document.getElementById('group-btn-add-sub-menu').addEventListener('click', addSub);
+    document.getElementById('group-btn-add-sub')?.addEventListener('click', addSub);
     // Moving out goes up one level (to the grandparent, or top level)
     document.getElementById('group-btn-move-out')?.addEventListener('click', async () => {
       const grandparent = ancestors[ancestors.length - 2] || null;

@@ -299,8 +299,12 @@
 
 .subgroup-card-add:hover { color: var(--color-primary); border-color: var(--color-primary); }
 
-.subgroup-badge { text-decoration: none; }
-.subgroup-badge:hover { color: var(--color-primary) !important; }
+/* Member card: which subgroup they come from (one line, truncated) */
+.member-subgroup {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 @media (max-width: 576px) {
   .subgroup-row { grid-template-columns: 1fr 1fr; }

@@ -485,6 +485,12 @@ input.composer-date-input::placeholder { color: inherit; opacity: 1; }
   color: var(--color-primary);
 }
 
+/* Chips without an avatar (icon or text only, e.g. the parent-group picker)
+   need real left padding — the 2px above assumes a round avatar there */
+.contact-chip:not(:has(.contact-chip-avatar)) {
+  padding-left: 10px;
+}
+
 /* "+N more" chip for posts with many tagged contacts (no avatar slot) */
 .post-contacts-more {
   padding: 2px 10px;

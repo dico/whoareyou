@@ -90,7 +90,7 @@ export function attachParentPicker(container, { value = null, excludeUuids = [] 
     if (current) {
       container.innerHTML = `
         <div class="d-flex align-items-center gap-2">
-          <span class="contact-chip"><i class="bi bi-diagram-3 me-1"></i>${esc(current.name)}
+          <span class="contact-chip"><i class="bi bi-diagram-3"></i>${esc(current.name)}
             <button type="button" class="contact-chip-remove" aria-label="${t('groups.parentClear')}">×</button>
           </span>
         </div>
@@ -207,23 +207,50 @@ export function openCreateGroupDialog({ parent = null, type = null } = {}) {
 }
 
 /**
- * Move an existing group under `target` ({ uuid, name }). `excludeUuids`
- * should hold the target and its ancestors (the backend rejects loops too).
+ * «Legg til undergruppe» under `target` ({ uuid, name }) — one dialog with
+ * two tabs: pick an existing group to move here (default), or create a new
+ * one. Text typed in the search carries over as the new group's name.
+ * `excludeUuids` should hold the target, its ancestors and current
+ * subgroups (the backend rejects loops too). Moving calls `onMoved`;
+ * creating navigates to the new group (like openCreateGroupDialog).
  */
-export function openMoveGroupHereDialog({ target, excludeUuids = [], onMoved }) {
-  const mid = 'move-group-' + Date.now();
+export function openAddSubgroupDialog({ target, excludeUuids = [], type = null, onMoved }) {
+  const mid = 'add-subgroup-' + Date.now();
   document.body.insertAdjacentHTML('beforeend', `
     <div class="modal fade" id="${mid}" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">${t('groups.moveHereTitle', { name: esc(target.name) })}</h5>
+            <h5 class="modal-title">${t('groups.addSubgroupTitle', { name: esc(target.name) })}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="${t('common.close')}"></button>
           </div>
           <div class="modal-body">
-            <p class="small text-muted">${t('groups.moveHereHint')}</p>
-            <input type="text" class="form-control mb-2" id="${mid}-search" placeholder="${t('groups.searchGroups')}" autocomplete="off">
-            <div class="contact-search-results" id="${mid}-results"></div>
+            <div class="filter-tabs mb-3" role="tablist">
+              <button type="button" class="filter-tab active" data-tab="existing"><i class="bi bi-box-arrow-in-down-right me-1"></i>${t('groups.addSubgroupExisting')}</button>
+              <button type="button" class="filter-tab" data-tab="new"><i class="bi bi-plus-lg me-1"></i>${t('groups.addSubgroupNew')}</button>
+            </div>
+            <div data-pane="existing">
+              <p class="small text-muted">${t('groups.moveHereHint')}</p>
+              <input type="text" class="form-control mb-2" id="${mid}-search" placeholder="${t('groups.searchGroups')}" autocomplete="off">
+              <div class="contact-search-results" id="${mid}-results"></div>
+            </div>
+            <form data-pane="new" class="d-none" id="${mid}-form">
+              <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="${mid}-name" required>
+                <label>${t('companies.name')}</label>
+              </div>
+              <div class="form-floating mb-3">
+                <select class="form-select" id="${mid}-type">
+                  ${GROUP_TYPES.map(tp => `<option value="${tp}" ${tp === (type || 'company') ? 'selected' : ''}>${t('groups.types.' + tp)}</option>`).join('')}
+                </select>
+                <label>${t('groups.type')}</label>
+              </div>
+              <p class="small text-muted mb-0">${t('groups.addSubgroupNewHint')}</p>
+            </form>
+          </div>
+          <div class="modal-footer d-none" id="${mid}-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">${t('common.cancel')}</button>
+            <button type="submit" form="${mid}-form" class="btn btn-primary btn-sm">${t('contacts.create')}</button>
           </div>
         </div>
       </div>
@@ -232,8 +259,31 @@ export function openMoveGroupHereDialog({ target, excludeUuids = [], onMoved }) 
   const modalEl = document.getElementById(mid);
   const modal = new bootstrap.Modal(modalEl);
   const input = document.getElementById(`${mid}-search`);
+  const nameInput = document.getElementById(`${mid}-name`);
+  const footer = document.getElementById(`${mid}-footer`);
   modalEl.addEventListener('shown.bs.modal', () => input.focus(), { once: true });
   modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+
+  const showError = async (err) => {
+    const { confirmDialog } = await import('./dialogs.js');
+    confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+  };
+
+  const switchTab = (tab) => {
+    modalEl.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    modalEl.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('d-none', p.dataset.pane !== tab));
+    footer.classList.toggle('d-none', tab !== 'new');
+    if (tab === 'new') {
+      if (!nameInput.value && input.value.trim()) nameInput.value = input.value.trim();
+      nameInput.focus();
+    } else {
+      input.focus();
+    }
+  };
+  modalEl.querySelector('.filter-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.filter-tab');
+    if (tab) switchTab(tab.dataset.tab);
+  });
 
   attachGroupSearch(input, document.getElementById(`${mid}-results`), {
     excludeUuids,
@@ -243,10 +293,24 @@ export function openMoveGroupHereDialog({ target, excludeUuids = [], onMoved }) 
         modal.hide();
         onMoved?.();
       } catch (err) {
-        const { confirmDialog } = await import('./dialogs.js');
-        confirmDialog(err.message, { title: t('common.error'), confirmText: t('common.ok'), confirmClass: 'btn-primary' });
+        showError(err);
       }
     },
+  });
+
+  document.getElementById(`${mid}-form`).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const { company } = await api.post('/companies', {
+        name: nameInput.value,
+        type: document.getElementById(`${mid}-type`).value,
+        parent_uuid: target.uuid,
+      });
+      modal.hide();
+      navigate(`/groups/${company.uuid}`);
+    } catch (err) {
+      showError(err);
+    }
   });
 
   modal.show();
